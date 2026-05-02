@@ -49,7 +49,7 @@ function requireQuizManager(req, res, next) {
  *         name: status
  *         schema:
  *           type: string
- *           enum: [draft, published, archived]
+ *           enum: [draft, published, closed]
  *       - in: query
  *         name: search
  *         schema:

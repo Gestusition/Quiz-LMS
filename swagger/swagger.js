@@ -96,7 +96,7 @@ const options = {
             username: { type: 'string' },
             email: { type: 'string' },
             role: { type: 'string', enum: ['admin', 'teacher', 'student'] },
-            status: { type: 'string', enum: ['active', 'inactive'] },
+            status: { type: 'string', enum: ['active', 'disabled'] },
             mustChangeCredentials: { type: 'integer' },
             createdAt: { type: 'string', format: 'date-time' }
           }
@@ -110,7 +110,7 @@ const options = {
             email: { type: 'string' },
             role: { type: 'string', enum: ['admin', 'teacher', 'student'] },
             password: { type: 'string' },
-            status: { type: 'string', enum: ['active', 'inactive'] },
+            status: { type: 'string', enum: ['active', 'disabled'] },
             mustChangeCredentials: { type: 'boolean' }
           }
         },
@@ -121,7 +121,7 @@ const options = {
             username: { type: 'string' },
             email: { type: 'string' },
             role: { type: 'string', enum: ['admin', 'teacher', 'student'] },
-            status: { type: 'string', enum: ['active', 'inactive'] },
+            status: { type: 'string', enum: ['active', 'disabled'] },
             mustChangeCredentials: { type: 'boolean' },
             password: { type: 'string' }
           }
@@ -149,6 +149,35 @@ const options = {
             newPassword: { type: 'string' }
           }
         },
+        PasswordResetCodeResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            userId: { type: 'integer' },
+            username: { type: 'string' },
+            name: { type: 'string' },
+            role: { type: 'string' },
+            code: { type: 'string' },
+            expiresAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        PasswordResetRequestStatus: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            userId: { type: 'integer' },
+            requestedUsername: { type: 'string' },
+            status: { type: 'string' },
+            expiresAt: { type: 'string', format: 'date-time' },
+            createdAt: { type: 'string', format: 'date-time' },
+            issuedAt: { type: 'string', format: 'date-time', nullable: true },
+            name: { type: 'string' },
+            username: { type: 'string' },
+            email: { type: 'string' },
+            role: { type: 'string' },
+            userStatus: { type: 'string' }
+          }
+        },
         ChangeCredentialsRequest: {
           type: 'object',
           required: ['username', 'currentPassword', 'newPassword'],
@@ -165,7 +194,7 @@ const options = {
             code: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
-            visibility: { type: 'string', enum: ['public', 'private'] },
+            visibility: { type: 'string', enum: ['private', 'published', 'archived'] },
             startDate: { type: 'string', format: 'date-time', nullable: true },
             endDate: { type: 'string', format: 'date-time', nullable: true },
             createdBy: { type: 'integer' },
@@ -183,7 +212,7 @@ const options = {
             code: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
-            visibility: { type: 'string', enum: ['public', 'private'] },
+            visibility: { type: 'string', enum: ['private', 'published', 'archived'] },
             startDate: { type: 'string', format: 'date-time', nullable: true },
             endDate: { type: 'string', format: 'date-time', nullable: true }
           }
@@ -194,7 +223,7 @@ const options = {
             code: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
-            visibility: { type: 'string', enum: ['public', 'private'] },
+            visibility: { type: 'string', enum: ['private', 'published', 'archived'] },
             startDate: { type: 'string', format: 'date-time', nullable: true },
             endDate: { type: 'string', format: 'date-time', nullable: true }
           }
@@ -206,7 +235,7 @@ const options = {
             courseId: { type: 'integer' },
             userId: { type: 'integer' },
             role: { type: 'string', enum: ['teacher', 'student'] },
-            status: { type: 'string', enum: ['active', 'dropped'] },
+            status: { type: 'string', enum: ['active', 'suspended'] },
             enrolledAt: { type: 'string', format: 'date-time' }
           }
         },
@@ -214,12 +243,14 @@ const options = {
           type: 'object',
           properties: {
             enrollmentId: { type: 'integer' },
-            userId: { type: 'integer' },
+            courseRole: { type: 'string', enum: ['teacher', 'student'] },
+            enrollmentStatus: { type: 'string', enum: ['active', 'suspended'] },
+            enrolledAt: { type: 'string', format: 'date-time' },
+            id: { type: 'integer' },
             name: { type: 'string' },
             email: { type: 'string' },
-            role: { type: 'string', enum: ['teacher', 'student'] },
-            status: { type: 'string', enum: ['active', 'dropped'] },
-            enrolledAt: { type: 'string', format: 'date-time' }
+            role: { type: 'string', enum: ['admin', 'teacher', 'student'] },
+            status: { type: 'string', enum: ['active', 'disabled'] }
           }
         },
         CreateEnrollmentRequest: {
@@ -234,7 +265,7 @@ const options = {
           type: 'object',
           required: ['status'],
           properties: {
-            status: { type: 'string', enum: ['active', 'dropped'] }
+            status: { type: 'string', enum: ['active', 'suspended'] }
           }
         },
         Announcement: {
@@ -263,7 +294,7 @@ const options = {
             id: { type: 'integer' },
             courseId: { type: 'integer' },
             title: { type: 'string' },
-            type: { type: 'string' },
+            type: { type: 'string', enum: ['link', 'file', 'page'] },
             url: { type: 'string' },
             description: { type: 'string' },
             createdBy: { type: 'integer' },
@@ -276,7 +307,7 @@ const options = {
           required: ['title', 'url'],
           properties: {
             title: { type: 'string' },
-            type: { type: 'string' },
+            type: { type: 'string', enum: ['link', 'file', 'page'] },
             url: { type: 'string' },
             description: { type: 'string' }
           }
@@ -300,13 +331,22 @@ const options = {
               items: {
                 type: 'object',
                 properties: {
-                  userId: { type: 'integer' },
+                  id: { type: 'integer' },
                   name: { type: 'string' },
                   email: { type: 'string' },
-                  scores: {
-                    type: 'object',
-                    additionalProperties: { type: 'number' },
-                    description: 'Key is quizId, value is the score'
+                  average: { type: 'number' },
+                  quizzes: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        quizId: { type: 'integer' },
+                        quizTitle: { type: 'string' },
+                        percentage: { type: 'number' },
+                        score: { type: 'number' },
+                        maxScore: { type: 'number' }
+                      }
+                    }
                   }
                 }
               }
@@ -392,7 +432,7 @@ const options = {
             courseId: { type: 'integer' },
             title: { type: 'string' },
             description: { type: 'string' },
-            status: { type: 'string', enum: ['draft', 'published', 'archived'] },
+            status: { type: 'string', enum: ['draft', 'published', 'closed'] },
             openAt: { type: 'string', format: 'date-time', nullable: true },
             closeAt: { type: 'string', format: 'date-time', nullable: true },
             timeLimitMinutes: { type: 'integer', nullable: true },
@@ -416,7 +456,7 @@ const options = {
             courseId: { type: 'integer' },
             title: { type: 'string' },
             description: { type: 'string' },
-            status: { type: 'string', enum: ['draft', 'published', 'archived'] },
+            status: { type: 'string', enum: ['draft', 'published', 'closed'] },
             openAt: { type: 'string', format: 'date-time', nullable: true },
             closeAt: { type: 'string', format: 'date-time', nullable: true },
             timeLimitMinutes: { type: 'integer', nullable: true },
@@ -430,7 +470,7 @@ const options = {
           properties: {
             title: { type: 'string' },
             description: { type: 'string' },
-            status: { type: 'string', enum: ['draft', 'published', 'archived'] },
+            status: { type: 'string', enum: ['draft', 'published', 'closed'] },
             openAt: { type: 'string', format: 'date-time', nullable: true },
             closeAt: { type: 'string', format: 'date-time', nullable: true },
             timeLimitMinutes: { type: 'integer', nullable: true },

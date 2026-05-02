@@ -57,7 +57,7 @@ function contentCourseId(table, id) {
  *         name: visibility
  *         schema:
  *           type: string
- *           enum: [public, private]
+ *           enum: [private, published, archived]
  *         description: Filter by visibility
  *     responses:
  *       200:
@@ -136,7 +136,7 @@ router.post('/', requireRole(['admin', 'teacher']), (req, res) => {
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Enrollment'
+ *               $ref: '#/components/schemas/Participant'
  *       400:
  *         $ref: '#/components/responses/400BadRequest'
  *       403:
@@ -337,7 +337,7 @@ router.get('/:courseId/participants', requireCourseAccess, (req, res) => {
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Enrollment'
+ *               $ref: '#/components/schemas/Participant'
  *       400:
  *         $ref: '#/components/responses/400BadRequest'
  *       403:

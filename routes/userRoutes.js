@@ -61,7 +61,7 @@ router.get('/', (req, res) => {
  *             schema:
  *               type: array
  *               items:
- *                 type: object
+ *                 $ref: '#/components/schemas/PasswordResetRequestStatus'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
@@ -231,12 +231,7 @@ router.put('/:id/password', validateId, (req, res) => {
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 code:
- *                   type: string
- *                 user:
- *                   $ref: '#/components/schemas/User'
+ *               $ref: '#/components/schemas/PasswordResetCodeResponse'
  *       400:
  *         $ref: '#/components/responses/400BadRequest'
  *       404:
