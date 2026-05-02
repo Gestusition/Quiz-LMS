@@ -21,9 +21,10 @@ class QuestionService {
   getAll(filters = {}) {
     const db = getDatabase();
     let query = `
-      SELECT q.*, c.name as categoryName
+      SELECT q.*, c.name as categoryName, c.courseId, courses.title as courseTitle
       FROM questions q
       LEFT JOIN categories c ON c.id = q.categoryId
+      LEFT JOIN courses ON courses.id = c.courseId
       WHERE 1=1
     `;
     const params = [];
@@ -31,6 +32,16 @@ class QuestionService {
     if (filters.categoryId) {
       query += ' AND q.categoryId = ?';
       params.push(filters.categoryId);
+    }
+    if (filters.courseId) {
+      query += ' AND c.courseId = ?';
+      params.push(filters.courseId);
+    }
+    if (filters.user && filters.user.role !== 'admin') {
+      query += ` AND c.courseId IN (
+        SELECT courseId FROM enrollments WHERE userId = ? AND status = 'active'
+      )`;
+      params.push(filters.user.id);
     }
     if (filters.difficulty && VALID_DIFFICULTIES.includes(filters.difficulty)) {
       query += ' AND q.difficulty = ?';
@@ -62,9 +73,10 @@ class QuestionService {
   getById(id) {
     const db = getDatabase();
     const question = db.prepare(`
-      SELECT q.*, c.name as categoryName
+      SELECT q.*, c.name as categoryName, c.courseId, courses.title as courseTitle
       FROM questions q
       LEFT JOIN categories c ON c.id = q.categoryId
+      LEFT JOIN courses ON courses.id = c.courseId
       WHERE q.id = ?
     `).get(id);
 
@@ -86,12 +98,28 @@ class QuestionService {
    */
   getRandom(opts = {}) {
     const db = getDatabase();
-    let query = 'SELECT q.*, c.name as categoryName FROM questions q LEFT JOIN categories c ON c.id = q.categoryId WHERE 1=1';
+    let query = `
+      SELECT q.*, c.name as categoryName, c.courseId, courses.title as courseTitle
+      FROM questions q
+      LEFT JOIN categories c ON c.id = q.categoryId
+      LEFT JOIN courses ON courses.id = c.courseId
+      WHERE 1=1
+    `;
     const params = [];
 
     if (opts.categoryId) {
       query += ' AND q.categoryId = ?';
       params.push(opts.categoryId);
+    }
+    if (opts.courseId) {
+      query += ' AND c.courseId = ?';
+      params.push(opts.courseId);
+    }
+    if (opts.user && opts.user.role !== 'admin') {
+      query += ` AND c.courseId IN (
+        SELECT courseId FROM enrollments WHERE userId = ? AND status = 'active'
+      )`;
+      params.push(opts.user.id);
     }
     if (opts.difficulty && VALID_DIFFICULTIES.includes(opts.difficulty)) {
       query += ' AND q.difficulty = ?';
@@ -127,14 +155,16 @@ class QuestionService {
     }
 
     const result = db.prepare(
-      'INSERT INTO questions (categoryId, text, type, options, correctAnswer, difficulty) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO questions (categoryId, text, type, options, correctAnswer, difficulty, points, createdBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       data.categoryId,
       data.text.trim(),
       data.type,
       JSON.stringify(data.options || []),
       String(data.correctAnswer).trim(),
-      data.difficulty || 'MEDIUM'
+      data.difficulty || 'MEDIUM',
+      data.points || 1,
+      data.createdBy || null
     );
 
     return this.getById(result.lastInsertRowid);
@@ -160,7 +190,8 @@ class QuestionService {
       type: data.type !== undefined ? data.type : existing.type,
       options: data.options !== undefined ? data.options : JSON.parse(existing.options || '[]'),
       correctAnswer: data.correctAnswer !== undefined ? data.correctAnswer : existing.correctAnswer,
-      difficulty: data.difficulty !== undefined ? data.difficulty : existing.difficulty
+      difficulty: data.difficulty !== undefined ? data.difficulty : existing.difficulty,
+      points: data.points !== undefined ? data.points : existing.points
     };
 
     this._validate(merged);
@@ -172,7 +203,7 @@ class QuestionService {
     }
 
     db.prepare(
-      'UPDATE questions SET categoryId = ?, text = ?, type = ?, options = ?, correctAnswer = ?, difficulty = ? WHERE id = ?'
+      'UPDATE questions SET categoryId = ?, text = ?, type = ?, options = ?, correctAnswer = ?, difficulty = ?, points = ? WHERE id = ?'
     ).run(
       merged.categoryId,
       merged.text.trim(),
@@ -180,6 +211,7 @@ class QuestionService {
       JSON.stringify(merged.options || []),
       String(merged.correctAnswer).trim(),
       merged.difficulty,
+      merged.points || 1,
       id
     );
 
@@ -227,6 +259,10 @@ class QuestionService {
     }
     if (data.difficulty && !VALID_DIFFICULTIES.includes(data.difficulty)) {
       throw new Error(`Difficulty must be one of: ${VALID_DIFFICULTIES.join(', ')}.`);
+    }
+    const points = Number(data.points || 1);
+    if (!Number.isFinite(points) || points <= 0 || points > 100) {
+      throw new Error('Question points must be between 0 and 100.');
     }
 
     // Type-specific validation

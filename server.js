@@ -3,8 +3,12 @@ const cors = require('cors');
 const path = require('path');
 const { initDatabase, seedDatabase } = require('./database/db');
 const { setupSwagger } = require('./swagger/swagger');
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const courseRoutes = require('./routes/courseRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const questionRoutes = require('./routes/questionRoutes');
+const quizRoutes = require('./routes/quizRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,8 +22,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/courses', courseRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/questions', questionRoutes);
+app.use('/api/quizzes', quizRoutes);
 
 // Swagger API Documentation
 setupSwagger(app);

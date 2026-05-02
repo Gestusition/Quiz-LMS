@@ -7,7 +7,7 @@ const options = {
     info: {
       title: 'Quiz Manager API',
       version: '1.0.0',
-      description: 'RESTful API for managing quiz categories and questions. Supports full CRUD operations with filtering, search, and random quiz generation.',
+      description: 'RESTful API for a role-based quiz LMS. Supports secure auth, users, courses, enrollments, question bank CRUD, quiz publishing, attempts, grading, and course content.',
       contact: {
         name: 'Quiz Manager'
       }
@@ -18,9 +18,22 @@ const options = {
         description: 'Development server'
       }
     ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer'
+        }
+      }
+    },
+    security: [{ bearerAuth: [] }],
     tags: [
-      { name: 'Categories', description: 'Category management endpoints' },
-      { name: 'Questions', description: 'Question management endpoints' }
+      { name: 'Auth', description: 'Login, logout, and current user endpoints' },
+      { name: 'Users', description: 'Admin user management endpoints' },
+      { name: 'Courses', description: 'Course, enrollment, content, and gradebook endpoints' },
+      { name: 'Quizzes', description: 'Quiz publishing, attempts, and grading endpoints' },
+      { name: 'Categories', description: 'Question category management endpoints' },
+      { name: 'Questions', description: 'Question bank endpoints' }
     ]
   },
   apis: ['./routes/*.js']

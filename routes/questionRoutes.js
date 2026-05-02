@@ -1,7 +1,44 @@
 const express = require('express');
 const router = express.Router();
 const questionService = require('../services/questionService');
+const categoryService = require('../services/categoryService');
 const { validateId, requireFields, sanitizeStrings } = require('../middleware/validation');
+const { requireAuth, requireRole, canManageCourse } = require('../middleware/auth');
+
+router.use(requireAuth);
+
+function ensureQuestionManager(req, res, question) {
+  if (!question) {
+    res.status(404).json({ error: 'Question not found.' });
+    return false;
+  }
+  if (!question.courseId && req.user.role !== 'admin') {
+    res.status(403).json({ error: 'Teacher or admin course access required.' });
+    return false;
+  }
+  if (question.courseId && !canManageCourse(req.user, question.courseId)) {
+    res.status(403).json({ error: 'Teacher or admin course access required.' });
+    return false;
+  }
+  return true;
+}
+
+function ensureCategoryManager(req, res, categoryId) {
+  const category = categoryService.getById(categoryId);
+  if (!category) {
+    res.status(400).json({ error: 'Category not found.' });
+    return false;
+  }
+  if (!category.courseId && req.user.role !== 'admin') {
+    res.status(403).json({ error: 'Teacher course category required.' });
+    return false;
+  }
+  if (category.courseId && !canManageCourse(req.user, category.courseId)) {
+    res.status(403).json({ error: 'Teacher or admin course access required.' });
+    return false;
+  }
+  return true;
+}
 
 /**
  * @swagger
@@ -95,13 +132,15 @@ const { validateId, requireFields, sanitizeStrings } = require('../middleware/va
  *               items:
  *                 $ref: '#/components/schemas/Question'
  */
-router.get('/', (req, res) => {
+router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     const filters = {
       categoryId: req.query.categoryId ? parseInt(req.query.categoryId) : undefined,
+      courseId: req.query.courseId ? parseInt(req.query.courseId) : undefined,
       difficulty: req.query.difficulty,
       type: req.query.type,
-      search: req.query.search
+      search: req.query.search,
+      user: req.user
     };
     const questions = questionService.getAll(filters);
     res.json(questions);
@@ -138,12 +177,14 @@ router.get('/', (req, res) => {
  *       200:
  *         description: Random questions
  */
-router.get('/random', (req, res) => {
+router.get('/random', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     const opts = {
       categoryId: req.query.categoryId ? parseInt(req.query.categoryId) : undefined,
+      courseId: req.query.courseId ? parseInt(req.query.courseId) : undefined,
       difficulty: req.query.difficulty,
-      limit: req.query.limit
+      limit: req.query.limit,
+      user: req.user
     };
     const questions = questionService.getRandom(opts);
     res.json(questions);
@@ -170,12 +211,10 @@ router.get('/random', (req, res) => {
  *       404:
  *         description: Question not found
  */
-router.get('/:id', validateId, (req, res) => {
+router.get('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
     const question = questionService.getById(req.params.id);
-    if (!question) {
-      return res.status(404).json({ error: 'Question not found.' });
-    }
+    if (!ensureQuestionManager(req, res, question)) return;
     res.json(question);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -222,10 +261,12 @@ router.get('/:id', validateId, (req, res) => {
  *       400:
  *         description: Validation error
  */
-router.post('/', requireFields(['categoryId', 'text', 'type', 'correctAnswer']), sanitizeStrings(['text', 'correctAnswer']), (req, res) => {
+router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId', 'text', 'type', 'correctAnswer']), sanitizeStrings(['text', 'correctAnswer']), (req, res) => {
   try {
     // Ensure categoryId is a number
     req.body.categoryId = parseInt(req.body.categoryId);
+    if (!ensureCategoryManager(req, res, req.body.categoryId)) return;
+    req.body.createdBy = req.user.id;
     const question = questionService.create(req.body);
     res.status(201).json(question);
   } catch (err) {
@@ -276,10 +317,13 @@ router.post('/', requireFields(['categoryId', 'text', 'type', 'correctAnswer']),
  *       404:
  *         description: Question not found
  */
-router.put('/:id', validateId, sanitizeStrings(['text', 'correctAnswer']), (req, res) => {
+router.put('/:id', requireRole(['admin', 'teacher']), validateId, sanitizeStrings(['text', 'correctAnswer']), (req, res) => {
   try {
+    const existing = questionService.getById(req.params.id);
+    if (!ensureQuestionManager(req, res, existing)) return;
     if (req.body.categoryId !== undefined) {
       req.body.categoryId = parseInt(req.body.categoryId);
+      if (!ensureCategoryManager(req, res, req.body.categoryId)) return;
     }
     const question = questionService.update(req.params.id, req.body);
     res.json(question);
@@ -309,8 +353,10 @@ router.put('/:id', validateId, sanitizeStrings(['text', 'correctAnswer']), (req,
  *       404:
  *         description: Question not found
  */
-router.delete('/:id', validateId, (req, res) => {
+router.delete('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
+    const existing = questionService.getById(req.params.id);
+    if (!ensureQuestionManager(req, res, existing)) return;
     questionService.delete(req.params.id);
     res.json({ message: 'Question deleted successfully.' });
   } catch (err) {

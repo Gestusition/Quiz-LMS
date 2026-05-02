@@ -2,6 +2,37 @@ const express = require('express');
 const router = express.Router();
 const categoryService = require('../services/categoryService');
 const { validateId, requireFields, sanitizeStrings } = require('../middleware/validation');
+const { requireAuth, requireRole, canAccessCourse, canManageCourse } = require('../middleware/auth');
+
+router.use(requireAuth);
+
+function ensureCategoryAccess(req, res, category) {
+  if (!category) {
+    res.status(404).json({ error: 'Category not found.' });
+    return false;
+  }
+  if (category.courseId && !canAccessCourse(req.user, category.courseId)) {
+    res.status(403).json({ error: 'Course access required.' });
+    return false;
+  }
+  return true;
+}
+
+function ensureCategoryManager(req, res, category) {
+  if (!category) {
+    res.status(404).json({ error: 'Category not found.' });
+    return false;
+  }
+  if (!category.courseId && req.user.role !== 'admin') {
+    res.status(403).json({ error: 'Teacher or admin course access required.' });
+    return false;
+  }
+  if (category.courseId && !canManageCourse(req.user, category.courseId)) {
+    res.status(403).json({ error: 'Teacher or admin course access required.' });
+    return false;
+  }
+  return true;
+}
 
 /**
  * @swagger
@@ -53,7 +84,10 @@ const { validateId, requireFields, sanitizeStrings } = require('../middleware/va
  */
 router.get('/', (req, res) => {
   try {
-    const categories = categoryService.getAll();
+    const categories = categoryService.getAll({
+      courseId: req.query.courseId ? Number(req.query.courseId) : undefined,
+      user: req.user
+    });
     res.json(categories);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -86,9 +120,7 @@ router.get('/', (req, res) => {
 router.get('/:id', validateId, (req, res) => {
   try {
     const category = categoryService.getById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ error: 'Category not found.' });
-    }
+    if (!ensureCategoryAccess(req, res, category)) return;
     res.json(category);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -120,8 +152,11 @@ router.get('/:id', validateId, (req, res) => {
  *       400:
  *         description: Validation error
  */
-router.post('/', requireFields(['name']), sanitizeStrings(['name', 'description']), (req, res) => {
+router.post('/', requireRole(['admin', 'teacher']), requireFields(['name']), sanitizeStrings(['name', 'description']), (req, res) => {
   try {
+    if (req.user.role === 'teacher' && !canManageCourse(req.user, Number(req.body.courseId))) {
+      return res.status(403).json({ error: 'Teacher course access required.' });
+    }
     const category = categoryService.create(req.body);
     res.status(201).json(category);
   } catch (err) {
@@ -162,6 +197,11 @@ router.post('/', requireFields(['name']), sanitizeStrings(['name', 'description'
  */
 router.put('/:id', validateId, sanitizeStrings(['name', 'description']), (req, res) => {
   try {
+    const existing = categoryService.getById(req.params.id);
+    if (!ensureCategoryManager(req, res, existing)) return;
+    if (req.body.courseId && !canManageCourse(req.user, Number(req.body.courseId))) {
+      return res.status(403).json({ error: 'Teacher or admin course access required.' });
+    }
     const category = categoryService.update(req.params.id, req.body);
     res.json(category);
   } catch (err) {
@@ -192,6 +232,8 @@ router.put('/:id', validateId, sanitizeStrings(['name', 'description']), (req, r
  */
 router.delete('/:id', validateId, (req, res) => {
   try {
+    const existing = categoryService.getById(req.params.id);
+    if (!ensureCategoryManager(req, res, existing)) return;
     categoryService.delete(req.params.id);
     res.json({ message: 'Category deleted successfully.' });
   } catch (err) {

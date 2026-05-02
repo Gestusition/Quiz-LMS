@@ -1,14 +1,14 @@
 {
   "name": "quiz-web",
   "version": "1.0.0",
-  "description": "A web-based quiz management application with full CRUD operations, RESTful API, and interactive frontend.",
+  "description": "A role-based quiz LMS with secure accounts, course management, quiz attempts, REST API, and vanilla JavaScript SPA.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
     "test": "jest --verbose --forceExit"
   },
-  "keywords": ["quiz", "education", "crud", "rest-api", "express"],
+  "keywords": ["quiz", "lms", "education", "crud", "rest-api", "express"],
   "author": "",
   "license": "ISC",
   "dependencies": {

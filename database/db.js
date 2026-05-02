@@ -1,28 +1,81 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
+const { hashPassword } = require('../utils/security');
 
 let db;
 
-/**
- * Initialize the SQLite database and create tables if they don't exist.
- * @param {string} [dbPath] - Optional path to the database file. Defaults to quiz.db in project root.
- * @returns {DatabaseSync} The database instance.
- */
 function initDatabase(dbPath) {
   const resolvedPath = dbPath || path.join(__dirname, '..', 'quiz.db');
   db = new DatabaseSync(resolvedPath);
 
-  // Enable WAL mode for better performance
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
+  db.exec('PRAGMA busy_timeout = 5000');
 
-  // Create tables
+  createTables();
+  migrateExistingTables();
+
+  return db;
+}
+
+function createTables() {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL CHECK(role IN ('admin', 'teacher', 'student')),
+      passwordHash TEXT NOT NULL,
+      passwordSalt TEXT NOT NULL,
+      passwordAlgorithm TEXT NOT NULL DEFAULT 'scrypt+salt+spice',
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'disabled')),
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      tokenHash TEXT NOT NULL UNIQUE,
+      expiresAt TEXT NOT NULL,
+      createdAt TEXT DEFAULT (datetime('now')),
+      lastSeenAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS courses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      visibility TEXT NOT NULL DEFAULT 'private' CHECK(visibility IN ('private', 'published', 'archived')),
+      startDate TEXT DEFAULT '',
+      endDate TEXT DEFAULT '',
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS enrollments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('teacher', 'student')),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'suspended')),
+      createdAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(courseId, userId, role),
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER,
       name TEXT NOT NULL UNIQUE,
       description TEXT DEFAULT '',
-      createdAt TEXT DEFAULT (datetime('now'))
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS questions (
@@ -33,18 +86,111 @@ function initDatabase(dbPath) {
       options TEXT DEFAULT '[]',
       correctAnswer TEXT NOT NULL,
       difficulty TEXT NOT NULL DEFAULT 'MEDIUM' CHECK(difficulty IN ('EASY', 'MEDIUM', 'HARD')),
+      points REAL NOT NULL DEFAULT 1,
+      createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE
+      FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE,
+      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS quizzes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'closed')),
+      openAt TEXT DEFAULT '',
+      closeAt TEXT DEFAULT '',
+      timeLimitMinutes INTEGER NOT NULL DEFAULT 0,
+      attemptsAllowed INTEGER NOT NULL DEFAULT 1,
+      shuffleQuestions INTEGER NOT NULL DEFAULT 0,
+      showCorrectAnswers INTEGER NOT NULL DEFAULT 1,
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
+      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS quiz_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quizId INTEGER NOT NULL,
+      questionId INTEGER NOT NULL,
+      points REAL NOT NULL DEFAULT 1,
+      position INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(quizId, questionId),
+      FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE,
+      FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS quiz_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quizId INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      attemptNumber INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'submitted')),
+      startedAt TEXT DEFAULT (datetime('now')),
+      submittedAt TEXT DEFAULT '',
+      score REAL NOT NULL DEFAULT 0,
+      maxScore REAL NOT NULL DEFAULT 0,
+      percentage REAL NOT NULL DEFAULT 0,
+      timeSpentSeconds INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(quizId, userId, attemptNumber),
+      FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS attempt_answers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      attemptId INTEGER NOT NULL,
+      questionId INTEGER NOT NULL,
+      answer TEXT DEFAULT '',
+      isCorrect INTEGER NOT NULL DEFAULT 0,
+      pointsAwarded REAL NOT NULL DEFAULT 0,
+      UNIQUE(attemptId, questionId),
+      FOREIGN KEY (attemptId) REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+      FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
+      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS resources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'link' CHECK(type IN ('link', 'file', 'page')),
+      url TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
+      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
     );
   `);
-
-  return db;
 }
 
-/**
- * Get the current database instance.
- * @returns {DatabaseSync} The database instance.
- */
+function migrateExistingTables() {
+  ensureColumn('categories', 'courseId', 'courseId INTEGER');
+  ensureColumn('questions', 'points', 'points REAL NOT NULL DEFAULT 1');
+  ensureColumn('questions', 'createdBy', 'createdBy INTEGER');
+}
+
+function ensureColumn(tableName, columnName, columnSql) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  if (!columns.some(column => column.name === columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnSql}`);
+  }
+}
+
 function getDatabase() {
   if (!db) {
     throw new Error('Database not initialized. Call initDatabase() first.');
@@ -52,9 +198,6 @@ function getDatabase() {
   return db;
 }
 
-/**
- * Close the database connection.
- */
 function closeDatabase() {
   if (db) {
     db.close();
@@ -62,77 +205,221 @@ function closeDatabase() {
   }
 }
 
-/**
- * Seed the database with sample data if tables are empty.
- */
 function seedDatabase() {
   const database = getDatabase();
 
+  const userCount = database.prepare('SELECT COUNT(*) as count FROM users').get().count;
+  if (userCount === 0) {
+    seedUsers(database);
+  }
+
+  const courseCount = database.prepare('SELECT COUNT(*) as count FROM courses').get().count;
+  if (courseCount === 0) {
+    seedLmsData(database);
+  }
+
   const categoryCount = database.prepare('SELECT COUNT(*) as count FROM categories').get().count;
-  if (categoryCount > 0) return;
+  if (categoryCount === 0) {
+    seedQuestionBank(database);
+  } else {
+    attachLegacyDataToDemoCourse(database);
+  }
+
+  ensureDemoQuiz(database);
+}
+
+function seedUsers(database) {
+  const insertUser = database.prepare(`
+    INSERT INTO users (name, email, role, passwordHash, passwordSalt, passwordAlgorithm)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  [
+    ['Admin User', 'admin@example.com', 'admin', 'Admin123!'],
+    ['Teacher User', 'teacher@example.com', 'teacher', 'Teacher123!'],
+    ['Student User', 'student@example.com', 'student', 'Student123!']
+  ].forEach(([name, email, role, password]) => {
+    const hashed = hashPassword(password);
+    insertUser.run(
+      name,
+      email,
+      role,
+      hashed.passwordHash,
+      hashed.passwordSalt,
+      hashed.passwordAlgorithm
+    );
+  });
+}
+
+function seedLmsData(database) {
+  const admin = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('admin');
+  const teacher = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('teacher');
+  const student = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('student');
+
+  const course = database.prepare(`
+    INSERT INTO courses (code, title, description, visibility, createdBy)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    'WEB101',
+    'Web Programming Fundamentals',
+    'Demo course with quiz, resources, announcements, and a gradebook.',
+    'published',
+    admin ? admin.id : null
+  );
+
+  const courseId = Number(course.lastInsertRowid);
+  if (teacher) {
+    database.prepare('INSERT INTO enrollments (courseId, userId, role) VALUES (?, ?, ?)')
+      .run(courseId, teacher.id, 'teacher');
+  }
+  if (student) {
+    database.prepare('INSERT INTO enrollments (courseId, userId, role) VALUES (?, ?, ?)')
+      .run(courseId, student.id, 'student');
+  }
+
+  if (teacher) {
+    database.prepare(`
+      INSERT INTO announcements (courseId, title, body, createdBy)
+      VALUES (?, ?, ?, ?)
+    `).run(courseId, 'Welcome to WEB101', 'Read the resources and complete the first quiz.', teacher.id);
+
+    database.prepare(`
+      INSERT INTO resources (courseId, title, type, url, description, createdBy)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(courseId, 'Course syllabus', 'page', '', 'Weekly topics, assessment policy, and quiz rules.', teacher.id);
+  }
+}
+
+function seedQuestionBank(database) {
+  const demoCourse = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+  const teacher = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('teacher');
+  const courseId = demoCourse ? demoCourse.id : null;
+  const teacherId = teacher ? teacher.id : null;
 
   const insertCategory = database.prepare(
-    'INSERT INTO categories (name, description) VALUES (?, ?)'
+    'INSERT INTO categories (courseId, name, description) VALUES (?, ?, ?)'
   );
-  const insertQuestion = database.prepare(
-    'INSERT INTO questions (categoryId, text, type, options, correctAnswer, difficulty) VALUES (?, ?, ?, ?, ?, ?)'
-  );
+  const insertQuestion = database.prepare(`
+    INSERT INTO questions (categoryId, text, type, options, correctAnswer, difficulty, points, createdBy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
 
-  const seedTransaction = () => {
-    // Seed categories
-    insertCategory.run('JavaScript', 'Questions about JavaScript programming language fundamentals');
-    insertCategory.run('HTML & CSS', 'Questions about web markup and styling');
-    insertCategory.run('Databases', 'Questions about database concepts and SQL');
-    insertCategory.run('General Knowledge', 'General programming and computer science questions');
-
-    // Seed questions — JavaScript (categoryId: 1)
-    insertQuestion.run(1, 'Which keyword is used to declare a constant in JavaScript?', 'MC',
-      JSON.stringify(['var', 'let', 'const', 'define']), '2', 'EASY');
-    insertQuestion.run(1, 'JavaScript is a statically typed language.', 'TF',
-      '[]', 'false', 'EASY');
-    insertQuestion.run(1, 'The method used to parse a JSON string in JavaScript is JSON._____.', 'FB',
-      '[]', 'parse', 'MEDIUM');
-    insertQuestion.run(1, 'What does the "===" operator check in JavaScript?', 'MC',
-      JSON.stringify(['Value only', 'Type only', 'Value and type', 'Reference']), '2', 'MEDIUM');
-    insertQuestion.run(1, 'Which array method creates a new array with elements that pass a test?', 'MC',
-      JSON.stringify(['map', 'filter', 'reduce', 'forEach']), '1', 'MEDIUM');
-
-    // Seed questions — HTML & CSS (categoryId: 2)
-    insertQuestion.run(2, 'HTML stands for HyperText Markup Language.', 'TF',
-      '[]', 'true', 'EASY');
-    insertQuestion.run(2, 'Which CSS property is used to change the background color?', 'MC',
-      JSON.stringify(['color', 'bgcolor', 'background-color', 'background']), '2', 'EASY');
-    insertQuestion.run(2, 'The CSS property used to make text bold is font-_____.', 'FB',
-      '[]', 'weight', 'EASY');
-    insertQuestion.run(2, 'Which HTML element is used for the largest heading?', 'MC',
-      JSON.stringify(['h6', 'heading', 'h1', 'head']), '2', 'EASY');
-
-    // Seed questions — Databases (categoryId: 3)
-    insertQuestion.run(3, 'SQL stands for Structured _____ Language.', 'FB',
-      '[]', 'Query', 'EASY');
-    insertQuestion.run(3, 'Which SQL command is used to retrieve data from a database?', 'MC',
-      JSON.stringify(['GET', 'FETCH', 'SELECT', 'RETRIEVE']), '2', 'EASY');
-    insertQuestion.run(3, 'A primary key can contain NULL values.', 'TF',
-      '[]', 'false', 'MEDIUM');
-    insertQuestion.run(3, 'Which SQL clause is used to filter results?', 'MC',
-      JSON.stringify(['FILTER', 'WHERE', 'HAVING', 'CONDITION']), '1', 'MEDIUM');
-
-    // Seed questions — General Knowledge (categoryId: 4)
-    insertQuestion.run(4, 'What does API stand for?', 'MC',
-      JSON.stringify(['Application Programming Interface', 'Applied Programming Integration', 'Application Process Integration', 'Automated Programming Interface']),
-      '0', 'EASY');
-    insertQuestion.run(4, 'Git is a version control system.', 'TF',
-      '[]', 'true', 'EASY');
-    insertQuestion.run(4, 'The design pattern where a class has only one instance is called _____.', 'FB',
-      '[]', 'Singleton', 'HARD');
-  };
-
-  db.exec('BEGIN TRANSACTION');
+  database.exec('BEGIN TRANSACTION');
   try {
-    seedTransaction();
-    db.exec('COMMIT');
+    const categories = {
+      javascript: Number(insertCategory.run(courseId, 'JavaScript', 'Questions about JavaScript programming language fundamentals').lastInsertRowid),
+      html: Number(insertCategory.run(courseId, 'HTML & CSS', 'Questions about web markup and styling').lastInsertRowid),
+      databases: Number(insertCategory.run(courseId, 'Databases', 'Questions about database concepts and SQL').lastInsertRowid),
+      general: Number(insertCategory.run(courseId, 'General Knowledge', 'General programming and computer science questions').lastInsertRowid)
+    };
+
+    const seededQuestionIds = [];
+    const addQuestion = (...args) => {
+      const result = insertQuestion.run(...args);
+      seededQuestionIds.push(Number(result.lastInsertRowid));
+    };
+
+    addQuestion(categories.javascript, 'Which keyword is used to declare a constant in JavaScript?', 'MC',
+      JSON.stringify(['var', 'let', 'const', 'define']), '2', 'EASY', 1, teacherId);
+    addQuestion(categories.javascript, 'JavaScript is a statically typed language.', 'TF',
+      '[]', 'false', 'EASY', 1, teacherId);
+    addQuestion(categories.javascript, 'The method used to parse a JSON string in JavaScript is JSON._____.', 'FB',
+      '[]', 'parse', 'MEDIUM', 1, teacherId);
+    addQuestion(categories.javascript, 'What does the "===" operator check in JavaScript?', 'MC',
+      JSON.stringify(['Value only', 'Type only', 'Value and type', 'Reference']), '2', 'MEDIUM', 1, teacherId);
+    addQuestion(categories.javascript, 'Which array method creates a new array with elements that pass a test?', 'MC',
+      JSON.stringify(['map', 'filter', 'reduce', 'forEach']), '1', 'MEDIUM', 1, teacherId);
+    addQuestion(categories.html, 'HTML stands for HyperText Markup Language.', 'TF',
+      '[]', 'true', 'EASY', 1, teacherId);
+    addQuestion(categories.html, 'Which CSS property is used to change the background color?', 'MC',
+      JSON.stringify(['color', 'bgcolor', 'background-color', 'background']), '2', 'EASY', 1, teacherId);
+    addQuestion(categories.html, 'The CSS property used to make text bold is font-_____.', 'FB',
+      '[]', 'weight', 'EASY', 1, teacherId);
+    addQuestion(categories.html, 'Which HTML element is used for the largest heading?', 'MC',
+      JSON.stringify(['h6', 'heading', 'h1', 'head']), '2', 'EASY', 1, teacherId);
+    addQuestion(categories.databases, 'SQL stands for Structured _____ Language.', 'FB',
+      '[]', 'Query', 'EASY', 1, teacherId);
+    addQuestion(categories.databases, 'Which SQL command is used to retrieve data from a database?', 'MC',
+      JSON.stringify(['GET', 'FETCH', 'SELECT', 'RETRIEVE']), '2', 'EASY', 1, teacherId);
+    addQuestion(categories.databases, 'A primary key can contain NULL values.', 'TF',
+      '[]', 'false', 'MEDIUM', 1, teacherId);
+    addQuestion(categories.databases, 'Which SQL clause is used to filter results?', 'MC',
+      JSON.stringify(['FILTER', 'WHERE', 'HAVING', 'CONDITION']), '1', 'MEDIUM', 1, teacherId);
+    addQuestion(categories.general, 'What does API stand for?', 'MC',
+      JSON.stringify(['Application Programming Interface', 'Applied Programming Integration', 'Application Process Integration', 'Automated Programming Interface']),
+      '0', 'EASY', 1, teacherId);
+    addQuestion(categories.general, 'Git is a version control system.', 'TF',
+      '[]', 'true', 'EASY', 1, teacherId);
+    addQuestion(categories.general, 'The design pattern where a class has only one instance is called _____.', 'FB',
+      '[]', 'Singleton', 'HARD', 1, teacherId);
+
+    const quiz = database.prepare(`
+      INSERT INTO quizzes (courseId, title, description, status, attemptsAllowed, shuffleQuestions, createdBy)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(courseId, 'Programming Basics Quiz', 'A short quiz generated from the seed question bank.', 'published', 3, 1, teacherId);
+    const quizId = Number(quiz.lastInsertRowid);
+    const addQuizQuestion = database.prepare(
+      'INSERT INTO quiz_questions (quizId, questionId, points, position) VALUES (?, ?, ?, ?)'
+    );
+    [0, 1, 3, 6, 10].forEach((questionIndex, index) => {
+      addQuizQuestion.run(quizId, seededQuestionIds[questionIndex], 1, index + 1);
+    });
+
+    database.exec('COMMIT');
   } catch (e) {
-    db.exec('ROLLBACK');
+    database.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+function attachLegacyDataToDemoCourse(database) {
+  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+  if (!course) return;
+
+  database.prepare('UPDATE categories SET courseId = ? WHERE courseId IS NULL').run(course.id);
+}
+
+function ensureDemoQuiz(database) {
+  const quizCount = database.prepare('SELECT COUNT(*) as count FROM quizzes').get().count;
+  if (quizCount > 0) return;
+
+  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+  const teacher = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('teacher');
+  if (!course) return;
+
+  const questions = database.prepare(`
+    SELECT q.id
+    FROM questions q
+    JOIN categories c ON c.id = q.categoryId
+    WHERE c.courseId = ?
+    ORDER BY q.id ASC
+    LIMIT 5
+  `).all(course.id);
+  if (questions.length === 0) return;
+
+  database.exec('BEGIN TRANSACTION');
+  try {
+    const quiz = database.prepare(`
+      INSERT INTO quizzes (courseId, title, description, status, attemptsAllowed, shuffleQuestions, createdBy)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      course.id,
+      'Programming Basics Quiz',
+      'A short quiz generated from the course question bank.',
+      'published',
+      3,
+      1,
+      teacher ? teacher.id : null
+    );
+
+    const insert = database.prepare(`
+      INSERT INTO quiz_questions (quizId, questionId, points, position)
+      VALUES (?, ?, ?, ?)
+    `);
+    questions.forEach((question, index) => insert.run(quiz.lastInsertRowid, question.id, 1, index + 1));
+    database.exec('COMMIT');
+  } catch (e) {
+    database.exec('ROLLBACK');
     throw e;
   }
 }

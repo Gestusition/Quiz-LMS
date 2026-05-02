@@ -10,15 +10,30 @@ class CategoryService {
    * Get all categories.
    * @returns {Array} List of all categories.
    */
-  getAll() {
+  getAll(filters = {}) {
     const db = getDatabase();
-    const categories = db.prepare(`
-      SELECT c.*, COUNT(q.id) as questionCount
+    let query = `
+      SELECT c.*, courses.title as courseTitle, COUNT(q.id) as questionCount
       FROM categories c
+      LEFT JOIN courses ON courses.id = c.courseId
       LEFT JOIN questions q ON q.categoryId = c.id
-      GROUP BY c.id
-      ORDER BY c.name ASC
-    `).all();
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (filters.courseId) {
+      query += ' AND c.courseId = ?';
+      params.push(filters.courseId);
+    }
+    if (filters.user && filters.user.role !== 'admin') {
+      query += ` AND c.courseId IN (
+        SELECT courseId FROM enrollments WHERE userId = ? AND status = 'active'
+      )`;
+      params.push(filters.user.id);
+    }
+
+    query += ' GROUP BY c.id ORDER BY c.name ASC';
+    const categories = db.prepare(query).all(...params);
     return categories;
   }
 
@@ -30,8 +45,9 @@ class CategoryService {
   getById(id) {
     const db = getDatabase();
     const category = db.prepare(`
-      SELECT c.*, COUNT(q.id) as questionCount
+      SELECT c.*, courses.title as courseTitle, COUNT(q.id) as questionCount
       FROM categories c
+      LEFT JOIN courses ON courses.id = c.courseId
       LEFT JOIN questions q ON q.categoryId = c.id
       WHERE c.id = ?
       GROUP BY c.id
@@ -48,7 +64,7 @@ class CategoryService {
    * @throws {Error} If validation fails or name already exists.
    */
   create(data) {
-    const { name, description } = data;
+    const { name, description, courseId } = data;
 
     // Validation
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -60,6 +76,13 @@ class CategoryService {
 
     const db = getDatabase();
 
+    if (courseId !== undefined && courseId !== null && courseId !== '') {
+      const course = db.prepare('SELECT id FROM courses WHERE id = ?').get(courseId);
+      if (!course) {
+        throw new Error('Course not found.');
+      }
+    }
+
     // Check for duplicate name
     const existing = db.prepare('SELECT id FROM categories WHERE LOWER(name) = LOWER(?)').get(name.trim());
     if (existing) {
@@ -67,8 +90,8 @@ class CategoryService {
     }
 
     const result = db.prepare(
-      'INSERT INTO categories (name, description) VALUES (?, ?)'
-    ).run(name.trim(), (description || '').trim());
+      'INSERT INTO categories (courseId, name, description) VALUES (?, ?, ?)'
+    ).run(courseId || null, name.trim(), (description || '').trim());
 
     return this.getById(result.lastInsertRowid);
   }
@@ -92,6 +115,7 @@ class CategoryService {
 
     const name = data.name !== undefined ? data.name : existing.name;
     const description = data.description !== undefined ? data.description : existing.description;
+    const courseId = data.courseId !== undefined ? data.courseId : existing.courseId;
 
     // Validation
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -100,6 +124,12 @@ class CategoryService {
     if (name.trim().length > 100) {
       throw new Error('Category name must be 100 characters or less.');
     }
+    if (courseId !== undefined && courseId !== null && courseId !== '') {
+      const course = db.prepare('SELECT id FROM courses WHERE id = ?').get(courseId);
+      if (!course) {
+        throw new Error('Course not found.');
+      }
+    }
 
     // Check for duplicate name (exclude current)
     const duplicate = db.prepare('SELECT id FROM categories WHERE LOWER(name) = LOWER(?) AND id != ?').get(name.trim(), id);
@@ -107,8 +137,8 @@ class CategoryService {
       throw new Error('A category with this name already exists.');
     }
 
-    db.prepare('UPDATE categories SET name = ?, description = ? WHERE id = ?')
-      .run(name.trim(), (description || '').trim(), id);
+    db.prepare('UPDATE categories SET courseId = ?, name = ?, description = ? WHERE id = ?')
+      .run(courseId || null, name.trim(), (description || '').trim(), id);
 
     return this.getById(id);
   }

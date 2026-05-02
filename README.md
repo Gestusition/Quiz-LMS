@@ -1,175 +1,158 @@
-# Quiz Manager 📝
+# Quiz LMS
 
-A full-stack web application for managing quiz categories, questions, and taking interactive quizzes. Built with Node.js, Express, SQLite, and Vanilla JavaScript.
+A vanilla JavaScript, Express, and SQLite learning management system focused on secure quiz delivery. It keeps the SAD project requirements intact: SPA frontend, REST API, full CRUD, validation, service-layer business logic, unit tests, Swagger documentation, and Git-friendly structure.
 
 ## Features
 
-- **Full CRUD Operations** — Create, read, update, and delete both categories and questions
-- **RESTful API** — Clean REST endpoints with proper HTTP methods and status codes
-- **Interactive Frontend** — Single-page application (SPA) with hash-based routing
-- **Quiz Mode** — Take randomized quizzes filtered by category and difficulty
-- **Search & Filter** — Find questions by text, category, difficulty, or type
-- **Swagger API Docs** — Interactive API documentation at `/api-docs`
-- **Input Validation** — Both frontend and backend validation
-- **Unit Tests** — Jest tests for all business logic
+- Role-based accounts: `admin`, `teacher`, and `student`
+- Password hashing with per-user salt plus application-level spice via `PASSWORD_SPICE`
+- Session-token login/logout with server-side session storage
+- Course CRUD, enrollment, participants, announcements, and resources
+- Teacher/admin question bank with categories, difficulty, points, and question types
+- Quiz publishing with attempts allowed, shuffle flag, time limit field, and answer visibility setting
+- Student quiz attempts with server-side grading and hidden correct answers during the attempt
+- Gradebook per course for teachers/admins
+- SQLite WAL mode for concurrent local access
+- Swagger UI at `/api-docs`
+- Jest unit tests for business logic
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Frontend | Vanilla HTML, CSS, JavaScript (SPA) |
+| --- | --- |
+| Frontend | Vanilla HTML, CSS, JavaScript SPA |
 | Backend | Node.js + Express |
-| Database | SQLite (via better-sqlite3) |
+| Database | SQLite through `node:sqlite` |
 | API Docs | Swagger UI + swagger-jsdoc |
 | Testing | Jest |
 
-## Project Structure
+## Setup
 
-```
-quiz-web/
-├── server.js                 # Express entry point
-├── database/
-│   └── db.js                 # SQLite initialization & seed data
-├── services/
-│   ├── categoryService.js    # Category business logic
-│   └── questionService.js    # Question business logic
-├── routes/
-│   ├── categoryRoutes.js     # /api/categories endpoints
-│   └── questionRoutes.js     # /api/questions endpoints
-├── middleware/
-│   └── validation.js         # Input validation middleware
-├── swagger/
-│   └── swagger.js            # Swagger/OpenAPI configuration
-├── tests/
-│   ├── category.test.js      # Category service unit tests
-│   └── question.test.js      # Question service unit tests
-├── public/                   # Frontend (served as static files)
-│   ├── index.html
-│   ├── css/style.css
-│   └── js/
-│       ├── api.js            # API client (fetch wrapper)
-│       ├── app.js            # SPA router & dashboard/quiz logic
-│       ├── categories.js     # Categories page UI
-│       └── questions.js      # Questions page UI
-├── package.json
-└── README.md
+```bash
+npm install
+npm run dev
 ```
 
-## Setup & Installation
+Open:
 
-### Prerequisites
-- **Node.js** v18 or higher
-- **npm** (comes with Node.js)
+- App: `http://localhost:3000`
+- Swagger: `http://localhost:3000/api-docs`
 
-### Steps
+The database is created automatically as `quiz.db`. Runtime database files are ignored by Git.
 
-1. **Navigate to the project directory:**
-   ```bash
-   cd quiz-web
-   ```
+## Default Accounts
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+These accounts are seeded on first run:
 
-3. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@example.com` | `Admin123!` |
+| Teacher | `teacher@example.com` | `Teacher123!` |
+| Student | `student@example.com` | `Student123!` |
 
-4. **Open in browser:**
-   - Application: [http://localhost:3000](http://localhost:3000)
-   - Swagger API Docs: [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
+For production-like use, set a strong secret before first run:
 
-The database file (`quiz.db`) is created automatically on first run with sample seed data.
+```bash
+$env:PASSWORD_SPICE="replace-with-a-long-random-secret"
+npm run dev
+```
 
-## Running Tests
+Changing `PASSWORD_SPICE` after users are created invalidates existing password hashes, which is expected for a pepper/spice secret.
+
+## Scripts
 
 ```bash
 npm test
+npm start
 ```
 
-This runs Jest unit tests for the category and question services. Tests cover:
-- All CRUD operations
-- Input validation and edge cases
-- Filtering and search
-- Error handling
+`npm test` runs the service-layer tests. Current coverage includes category CRUD, question CRUD/validation, seeded auth login, invalid-password rejection, and server-side quiz attempt grading.
 
-## API Endpoints
+## API Overview
 
-### Categories
+Authentication:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/categories` | List all categories |
-| GET | `/api/categories/:id` | Get a category by ID |
-| POST | `/api/categories` | Create a category |
-| PUT | `/api/categories/:id` | Update a category |
-| DELETE | `/api/categories/:id` | Delete a category (cascades to questions) |
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
 
-### Questions
+Users:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/questions` | List all questions (supports query filters) |
-| GET | `/api/questions/random` | Get random questions for a quiz |
-| GET | `/api/questions/:id` | Get a question by ID |
-| POST | `/api/questions` | Create a question |
-| PUT | `/api/questions/:id` | Update a question |
-| DELETE | `/api/questions/:id` | Delete a question |
+- `GET /api/users`
+- `POST /api/users`
+- `PUT /api/users/:id`
+- `DELETE /api/users/:id`
 
-### Query Parameters for GET /api/questions
+Courses:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `categoryId` | integer | Filter by category |
-| `difficulty` | string | `EASY`, `MEDIUM`, or `HARD` |
-| `type` | string | `MC`, `TF`, or `FB` |
-| `search` | string | Search in question text |
+- `GET /api/courses`
+- `POST /api/courses`
+- `GET /api/courses/:id`
+- `PUT /api/courses/:id`
+- `DELETE /api/courses/:id`
+- `GET /api/courses/:id/participants`
+- `POST /api/courses/:id/enrollments`
+- `GET /api/courses/:id/announcements`
+- `POST /api/courses/:id/announcements`
+- `GET /api/courses/:id/resources`
+- `POST /api/courses/:id/resources`
+- `GET /api/courses/:id/gradebook`
 
-### Example: Create a Question
+Question Bank:
 
-```bash
-curl -X POST http://localhost:3000/api/questions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "categoryId": 1,
-    "text": "What is the capital of Turkey?",
-    "type": "MC",
-    "options": ["Istanbul", "Ankara", "Izmir", "Antalya"],
-    "correctAnswer": "1",
-    "difficulty": "EASY"
-  }'
+- `GET /api/categories`
+- `POST /api/categories`
+- `PUT /api/categories/:id`
+- `DELETE /api/categories/:id`
+- `GET /api/questions`
+- `POST /api/questions`
+- `PUT /api/questions/:id`
+- `DELETE /api/questions/:id`
+
+Quizzes:
+
+- `GET /api/quizzes`
+- `POST /api/quizzes`
+- `GET /api/quizzes/:id`
+- `PUT /api/quizzes/:id`
+- `PUT /api/quizzes/:id/questions`
+- `POST /api/quizzes/:id/attempts`
+- `GET /api/quizzes/:id/attempts`
+- `GET /api/quizzes/attempts/:id`
+- `POST /api/quizzes/attempts/:id/submit`
+
+Authenticated API requests use:
+
+```http
+Authorization: Bearer <session-token>
 ```
 
-## API Documentation (Swagger)
+## Project Structure
 
-Interactive API documentation is available at:
+```text
+quiz-web/
+├── database/db.js
+├── middleware/
+│   ├── auth.js
+│   └── validation.js
+├── routes/
+│   ├── authRoutes.js
+│   ├── courseRoutes.js
+│   ├── quizRoutes.js
+│   ├── userRoutes.js
+│   ├── categoryRoutes.js
+│   └── questionRoutes.js
+├── services/
+│   ├── authService.js
+│   ├── contentService.js
+│   ├── courseService.js
+│   ├── quizService.js
+│   ├── categoryService.js
+│   └── questionService.js
+├── public/
+│   ├── index.html
+│   ├── css/style.css
+│   └── js/
+├── tests/
+└── server.js
 ```
-http://localhost:3000/api-docs
-```
-
-You can explore all endpoints, view request/response schemas, and test the API directly from the browser.
-
-## Data Model
-
-### Category
-| Field | Type | Description |
-|-------|------|-------------|
-| id | INTEGER | Primary key (auto-increment) |
-| name | TEXT | Unique category name |
-| description | TEXT | Category description |
-| createdAt | TEXT | Creation timestamp |
-
-### Question
-| Field | Type | Description |
-|-------|------|-------------|
-| id | INTEGER | Primary key (auto-increment) |
-| categoryId | INTEGER | Foreign key → categories(id) |
-| text | TEXT | Question text |
-| type | TEXT | `MC` / `TF` / `FB` |
-| options | TEXT | JSON array (for MC) |
-| correctAnswer | TEXT | Correct answer |
-| difficulty | TEXT | `EASY` / `MEDIUM` / `HARD` |
-| createdAt | TEXT | Creation timestamp |
