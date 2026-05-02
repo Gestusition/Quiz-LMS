@@ -44,7 +44,8 @@ const API = {
     return data;
   },
 
-  login(email, password) { return this.request('/auth/login', { method: 'POST', body: { email, password } }); },
+  login(identifier, password) { return this.request('/auth/login', { method: 'POST', body: { identifier, password } }); },
+  changeCredentials(data) { return this.request('/auth/change-credentials', { method: 'POST', body: data }); },
   logout() { return this.request('/auth/logout', { method: 'POST' }); },
   me() { return this.request('/auth/me'); },
 

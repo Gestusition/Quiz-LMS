@@ -34,6 +34,19 @@ const App = {
       return;
     }
 
+    if (this.user.mustChangeCredentials) {
+      links.innerHTML = '<span class="nav-link active">Credential update required</span>';
+      navUser.innerHTML = `
+        <div class="user-chip">
+          <span>${this.esc(this.user.username || this.user.name)}</span>
+          <small>${this.esc(this.user.role)}</small>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btn-logout">Logout</button>
+      `;
+      document.getElementById('btn-logout').addEventListener('click', () => this.logout());
+      return;
+    }
+
     const items = [
       ['#/', 'Dashboard'],
       ['#/courses', 'Courses'],
@@ -71,6 +84,10 @@ const App = {
       this.renderLogin();
       return;
     }
+    if (this.user.mustChangeCredentials) {
+      this.renderCredentialChange();
+      return;
+    }
 
     const hash = location.hash || '#/';
     const parts = hash.replace('#/', '').split('/').filter(Boolean);
@@ -101,8 +118,8 @@ const App = {
           </div>
           <form id="login-form" class="stack">
             <label class="form-field">
-              <span>Email</span>
-              <input class="form-input" id="login-email" type="email" value="admin@example.com" autocomplete="username" required>
+              <span>Username or email</span>
+              <input class="form-input" id="login-identifier" type="text" value="admin" autocomplete="username" required>
             </label>
             <label class="form-field">
               <span>Password</span>
@@ -111,9 +128,9 @@ const App = {
             <button class="btn btn-primary full" type="submit">Sign in</button>
           </form>
           <div class="demo-logins">
-            <button data-email="admin@example.com" data-password="Admin123!">Admin</button>
-            <button data-email="teacher@example.com" data-password="Teacher123!">Teacher</button>
-            <button data-email="student@example.com" data-password="Student123!">Student</button>
+            <button data-identifier="admin" data-password="Admin123!">Admin</button>
+            <button data-identifier="teacher" data-password="Teacher123!">Teacher</button>
+            <button data-identifier="student" data-password="Student123!">Student</button>
           </div>
         </div>
       </section>
@@ -122,7 +139,7 @@ const App = {
     document.getElementById('login-form').addEventListener('submit', event => this.login(event));
     document.querySelectorAll('.demo-logins button').forEach(button => {
       button.addEventListener('click', () => {
-        document.getElementById('login-email').value = button.dataset.email;
+        document.getElementById('login-identifier').value = button.dataset.identifier;
         document.getElementById('login-password').value = button.dataset.password;
       });
     });
@@ -132,15 +149,19 @@ const App = {
     event.preventDefault();
     try {
       const session = await API.login(
-        document.getElementById('login-email').value,
+        document.getElementById('login-identifier').value,
         document.getElementById('login-password').value
       );
       API.setSession(session);
       this.user = session.user;
       document.body.classList.remove('login-page');
       this.renderShell();
-      location.hash = '#/';
-      await this.renderDashboard();
+      if (this.user.mustChangeCredentials) {
+        this.renderCredentialChange();
+      } else {
+        location.hash = '#/';
+        await this.renderDashboard();
+      }
       this.toast('Signed in successfully.', 'success');
     } catch (err) {
       this.toast(err.message, 'error');
@@ -154,6 +175,56 @@ const App = {
     this.renderShell();
     location.hash = '#/';
     this.renderLogin();
+  },
+
+  renderCredentialChange() {
+    document.body.classList.remove('login-page');
+    this.setApp(`
+      <section class="panel credential-panel">
+        <header class="panel-header">
+          <div>
+            <h2>Change default admin credentials</h2>
+            <p>The default username and password must be replaced before this account can continue.</p>
+          </div>
+        </header>
+        <form id="credential-form" class="stack">
+          <label class="form-field">
+            <span>Current username</span>
+            <input class="form-input" value="${this.esc(this.user.username || '')}" disabled>
+          </label>
+          ${this.input('new-username', 'New username', '', 'text', 'e.g. school-admin')}
+          ${this.input('current-password', 'Current password', '', 'password')}
+          ${this.input('new-password', 'New password', '', 'password')}
+          ${this.input('confirm-password', 'Confirm new password', '', 'password')}
+          <button class="btn btn-primary full" type="submit">Update credentials</button>
+        </form>
+      </section>
+    `);
+
+    document.getElementById('credential-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const newPassword = value('new-password');
+      if (newPassword !== value('confirm-password')) {
+        this.toast('New password confirmation does not match.', 'error');
+        return;
+      }
+
+      try {
+        const user = await API.changeCredentials({
+          username: value('new-username'),
+          currentPassword: value('current-password'),
+          newPassword
+        });
+        this.user = user;
+        localStorage.setItem('quiz_lms_user', JSON.stringify(user));
+        this.renderShell();
+        location.hash = '#/';
+        await this.renderDashboard();
+        this.toast('Credentials updated.', 'success');
+      } catch (err) {
+        this.toast(err.message, 'error');
+      }
+    });
   },
 
   async renderDashboard() {
@@ -413,10 +484,11 @@ const App = {
         <section class="panel">
           <div class="table-wrap">
             <table class="table">
-              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
               <tbody>${users.map(user => `
                 <tr>
                   <td>${this.esc(user.name)}</td>
+                  <td>${this.esc(user.username)}</td>
                   <td>${this.esc(user.email)}</td>
                   <td><span class="role-badge">${this.esc(user.role)}</span></td>
                   <td>${this.esc(user.status)}</td>
@@ -820,11 +892,12 @@ const App = {
 
   async showUserForm(id) {
     const user = id ? (await API.getUsers()).find(item => item.id === id) : {
-      name: '', email: '', role: 'student', status: 'active'
+      name: '', username: '', email: '', role: 'student', status: 'active'
     };
     this.openModal(id ? 'Edit user' : 'New user', `
       <form id="user-form" class="stack">
         ${this.input('user-name', 'Name', user.name)}
+        ${this.input('user-username', 'Username', user.username)}
         ${this.input('user-email', 'Email', user.email, 'email')}
         <label class="form-field"><span>Role</span><select class="form-select" id="user-role">${['admin', 'teacher', 'student'].map(role => `<option value="${role}" ${user.role === role ? 'selected' : ''}>${role}</option>`).join('')}</select></label>
         <label class="form-field"><span>Status</span><select class="form-select" id="user-status">${['active', 'disabled'].map(status => `<option value="${status}" ${user.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
@@ -836,6 +909,7 @@ const App = {
       event.preventDefault();
       const data = {
         name: value('user-name'),
+        username: value('user-username'),
         email: value('user-email'),
         role: value('user-role'),
         status: value('user-status')

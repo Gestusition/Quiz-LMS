@@ -73,11 +73,13 @@ function createTables() {
     CREATE TABLE IF NOT EXISTS identity.users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      username TEXT UNIQUE,
       email TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL CHECK(role IN ('admin', 'teacher', 'student')),
       passwordHash TEXT NOT NULL,
       passwordSalt TEXT NOT NULL,
       passwordAlgorithm TEXT NOT NULL DEFAULT 'scrypt+salt+spice',
+      mustChangeCredentials INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'disabled')),
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now'))
@@ -218,9 +220,12 @@ function createTables() {
 }
 
 function migrateExistingTables() {
+  ensureColumn('identity', 'users', 'username', 'username TEXT');
+  ensureColumn('identity', 'users', 'mustChangeCredentials', 'mustChangeCredentials INTEGER NOT NULL DEFAULT 0');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
   ensureColumn('assessment', 'questions', 'points', 'points REAL NOT NULL DEFAULT 1');
   ensureColumn('assessment', 'questions', 'createdBy', 'createdBy INTEGER');
+  normalizeUserIdentityState();
 }
 
 function ensureColumn(schema, tableName, columnName, columnSql) {
@@ -257,9 +262,53 @@ function migrateLegacySingleDatabase(dbPath) {
     copyLegacyTable('assessment', 'attempt_answers');
     copyLegacyTable('content', 'announcements');
     copyLegacyTable('content', 'resources');
+    normalizeUserIdentityState();
   } finally {
     db.exec('DETACH DATABASE legacy');
   }
+}
+
+function normalizeUserIdentityState() {
+  const users = db.prepare('SELECT id, name, email, username, role FROM users ORDER BY id ASC').all();
+  const used = new Set(users.map(user => String(user.username || '').toLowerCase()).filter(Boolean));
+  const updateUsername = db.prepare('UPDATE users SET username = ?, updatedAt = datetime(\'now\') WHERE id = ?');
+
+  users.forEach(user => {
+    if (user.username) return;
+
+    const preferred = user.role === 'admin' && String(user.email).toLowerCase() === 'admin@example.com'
+      ? 'admin'
+      : usernameFromUser(user);
+    const username = uniqueUsername(preferred, used);
+    used.add(username.toLowerCase());
+    updateUsername.run(username, user.id);
+  });
+
+  db.prepare(`
+    UPDATE users
+    SET mustChangeCredentials = 1
+    WHERE role = 'admin'
+      AND LOWER(email) = LOWER('admin@example.com')
+      AND LOWER(username) = LOWER('admin')
+  `).run();
+}
+
+function usernameFromUser(user) {
+  const emailPrefix = String(user.email || '').split('@')[0];
+  const source = emailPrefix || user.name || `user${user.id}`;
+  const username = source.toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 32);
+  return username.length >= 3 ? username : `user${user.id}`;
+}
+
+function uniqueUsername(preferred, used) {
+  const base = preferred || 'user';
+  let candidate = base;
+  let suffix = 1;
+  while (used.has(candidate.toLowerCase())) {
+    candidate = `${base.slice(0, 28)}${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
 }
 
 function tableExists(schema, tableName) {
@@ -331,23 +380,25 @@ function seedDatabase() {
 
 function seedUsers(database) {
   const insertUser = database.prepare(`
-    INSERT INTO users (name, email, role, passwordHash, passwordSalt, passwordAlgorithm)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO users (name, username, email, role, passwordHash, passwordSalt, passwordAlgorithm, mustChangeCredentials)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   [
-    ['Admin User', 'admin@example.com', 'admin', 'Admin123!'],
-    ['Teacher User', 'teacher@example.com', 'teacher', 'Teacher123!'],
-    ['Student User', 'student@example.com', 'student', 'Student123!']
-  ].forEach(([name, email, role, password]) => {
+    ['Admin User', 'admin', 'admin@example.com', 'admin', 'Admin123!', 1],
+    ['Teacher User', 'teacher', 'teacher@example.com', 'teacher', 'Teacher123!', 0],
+    ['Student User', 'student', 'student@example.com', 'student', 'Student123!', 0]
+  ].forEach(([name, username, email, role, password, mustChangeCredentials]) => {
     const hashed = hashPassword(password);
     insertUser.run(
       name,
+      username,
       email,
       role,
       hashed.passwordHash,
       hashed.passwordSalt,
-      hashed.passwordAlgorithm
+      hashed.passwordAlgorithm,
+      mustChangeCredentials
     );
   });
 }

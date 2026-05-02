@@ -52,13 +52,15 @@ If an old single-file `quiz.db` exists, the app attempts a one-time copy into th
 
 ## Default Accounts
 
-These accounts are seeded on first run:
+These accounts are seeded on first run. Login accepts either username or email.
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@example.com` | `Admin123!` |
-| Teacher | `teacher@example.com` | `Teacher123!` |
-| Student | `student@example.com` | `Student123!` |
+| Role | Username | Email | Password | First-login action |
+| --- | --- | --- | --- | --- |
+| Admin | `admin` | `admin@example.com` | `Admin123!` | Must change username and password |
+| Teacher | `teacher` | `teacher@example.com` | `Teacher123!` | None |
+| Student | `student` | `student@example.com` | `Student123!` | None |
+
+The default admin can authenticate, but every protected endpoint is blocked until `POST /api/auth/change-credentials` replaces both the default username and password.
 
 For production-like use, set a strong secret before first run:
 
@@ -83,6 +85,7 @@ npm start
 Authentication:
 
 - `POST /api/auth/login`
+- `POST /api/auth/change-credentials`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 

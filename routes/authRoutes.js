@@ -7,15 +7,25 @@ const { requireAuth } = require('../middleware/auth');
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Login with email and password
+ *     summary: Login with username/email and password
  *     tags: [Auth]
  */
 router.post('/login', (req, res) => {
   try {
-    const session = authService.login(req.body.email, req.body.password);
+    const identifier = req.body.username || req.body.email || req.body.identifier;
+    const session = authService.login(identifier, req.body.password);
     res.json(session);
   } catch (err) {
     res.status(401).json({ error: err.message });
+  }
+});
+
+router.post('/change-credentials', requireAuth, (req, res) => {
+  try {
+    const user = authService.changeOwnCredentials(req.user.id, req.authToken, req.body);
+    res.json(user);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

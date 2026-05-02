@@ -17,7 +17,19 @@ function requireAuth(req, res, next) {
 
   req.authToken = token;
   req.user = user;
+
+  if (user.mustChangeCredentials && !isCredentialRotationRoute(req)) {
+    return res.status(403).json({
+      code: 'CREDENTIAL_CHANGE_REQUIRED',
+      error: 'You must change the default username and password before continuing.'
+    });
+  }
   next();
+}
+
+function isCredentialRotationRoute(req) {
+  if (req.baseUrl !== '/api/auth') return false;
+  return ['/me', '/logout', '/change-credentials'].includes(req.path);
 }
 
 function requireRole(roles) {

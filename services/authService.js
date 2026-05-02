@@ -15,21 +15,26 @@ function publicUser(user) {
   return {
     id: user.id,
     name: user.name,
+    username: user.username,
     email: user.email,
     role: user.role,
     status: user.status,
+    mustChangeCredentials: !!user.mustChangeCredentials,
     createdAt: user.createdAt
   };
 }
 
 class AuthService {
-  login(email, password) {
-    if (!email || !password) {
-      throw new Error('Email and password are required.');
+  login(identifier, password) {
+    if (!identifier || !password) {
+      throw new Error('Username/email and password are required.');
     }
 
     const db = getDatabase();
-    const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(String(email).trim());
+    const user = db.prepare(`
+      SELECT * FROM users
+      WHERE LOWER(email) = LOWER(?) OR LOWER(username) = LOWER(?)
+    `).get(String(identifier).trim(), String(identifier).trim());
 
     if (!user || user.status !== 'active') {
       throw new Error('Invalid email or password.');
@@ -94,18 +99,25 @@ class AuthService {
       throw new Error('A user with this email already exists.');
     }
 
+    const duplicateUsername = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(payload.username);
+    if (duplicateUsername) {
+      throw new Error('A user with this username already exists.');
+    }
+
     const hashed = hashPassword(payload.password);
     const result = db.prepare(`
-      INSERT INTO users (name, email, role, passwordHash, passwordSalt, passwordAlgorithm, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (name, username, email, role, passwordHash, passwordSalt, passwordAlgorithm, status, mustChangeCredentials)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       payload.name,
+      payload.username,
       payload.email,
       payload.role,
       hashed.passwordHash,
       hashed.passwordSalt,
       hashed.passwordAlgorithm,
-      payload.status
+      payload.status,
+      payload.mustChangeCredentials ? 1 : 0
     );
 
     return this.getUserById(result.lastInsertRowid);
@@ -115,6 +127,7 @@ class AuthService {
     const db = getDatabase();
     let query = `
       SELECT id, name, email, role, status, createdAt
+      , username, mustChangeCredentials
       FROM users
       WHERE 1=1
     `;
@@ -125,8 +138,8 @@ class AuthService {
       params.push(filters.role);
     }
     if (filters.search) {
-      query += ' AND (name LIKE ? OR email LIKE ?)';
-      params.push(`%${filters.search}%`, `%${filters.search}%`);
+      query += ' AND (name LIKE ? OR email LIKE ? OR username LIKE ?)';
+      params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`);
     }
 
     query += ' ORDER BY role ASC, name ASC';
@@ -136,7 +149,7 @@ class AuthService {
   getUserById(id) {
     const db = getDatabase();
     const user = db.prepare(`
-      SELECT id, name, email, role, status, createdAt
+      SELECT id, name, username, email, role, status, mustChangeCredentials, createdAt
       FROM users
       WHERE id = ?
     `).get(id);
@@ -152,9 +165,13 @@ class AuthService {
 
     const payload = this.validateUserPayload({
       name: data.name !== undefined ? data.name : existing.name,
+      username: data.username !== undefined ? data.username : existing.username,
       email: data.email !== undefined ? data.email : existing.email,
       role: data.role !== undefined ? data.role : existing.role,
       status: data.status !== undefined ? data.status : existing.status,
+      mustChangeCredentials: data.mustChangeCredentials !== undefined
+        ? data.mustChangeCredentials
+        : !!existing.mustChangeCredentials,
       password: data.password
     }, false);
 
@@ -163,14 +180,28 @@ class AuthService {
     if (duplicate) {
       throw new Error('A user with this email already exists.');
     }
+    const duplicateUsername = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?')
+      .get(payload.username, id);
+    if (duplicateUsername) {
+      throw new Error('A user with this username already exists.');
+    }
 
     db.exec('BEGIN TRANSACTION');
     try {
       db.prepare(`
         UPDATE users
-        SET name = ?, email = ?, role = ?, status = ?, updatedAt = ?
+        SET name = ?, username = ?, email = ?, role = ?, status = ?, mustChangeCredentials = ?, updatedAt = ?
         WHERE id = ?
-      `).run(payload.name, payload.email, payload.role, payload.status, nowIso(), id);
+      `).run(
+        payload.name,
+        payload.username,
+        payload.email,
+        payload.role,
+        payload.status,
+        payload.mustChangeCredentials ? 1 : 0,
+        nowIso(),
+        id
+      );
 
       if (payload.password) {
         const hashed = hashPassword(payload.password);
@@ -189,6 +220,63 @@ class AuthService {
     }
 
     return this.getUserById(id);
+  }
+
+  changeOwnCredentials(userId, token, data) {
+    const db = getDatabase();
+    const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!existing || existing.status !== 'active') {
+      throw new Error('User not found.');
+    }
+
+    const username = this.validateUsername(data.username);
+    const currentPassword = String(data.currentPassword || '');
+    const newPassword = String(data.newPassword || '');
+
+    if (!verifyPassword(currentPassword, existing.passwordSalt, existing.passwordHash)) {
+      throw new Error('Current password is incorrect.');
+    }
+    if (username.toLowerCase() === String(existing.username || '').toLowerCase()) {
+      throw new Error('New username must be different from the current username.');
+    }
+    if (verifyPassword(newPassword, existing.passwordSalt, existing.passwordHash)) {
+      throw new Error('New password must be different from the current password.');
+    }
+
+    this.validatePassword(newPassword);
+
+    const duplicateUsername = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?')
+      .get(username, userId);
+    if (duplicateUsername) {
+      throw new Error('A user with this username already exists.');
+    }
+
+    const hashed = hashPassword(newPassword);
+    db.exec('BEGIN TRANSACTION');
+    try {
+      db.prepare(`
+        UPDATE users
+        SET username = ?, passwordHash = ?, passwordSalt = ?, passwordAlgorithm = ?,
+          mustChangeCredentials = 0, updatedAt = ?
+        WHERE id = ?
+      `).run(
+        username,
+        hashed.passwordHash,
+        hashed.passwordSalt,
+        hashed.passwordAlgorithm,
+        nowIso(),
+        userId
+      );
+
+      const currentTokenHash = hashSessionToken(token);
+      db.prepare('DELETE FROM sessions WHERE userId = ? AND tokenHash != ?').run(userId, currentTokenHash);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+
+    return this.getUserById(userId);
   }
 
   deleteUser(id) {
@@ -218,9 +306,11 @@ class AuthService {
 
   validateUserPayload(data, requirePassword) {
     const name = String(data.name || '').trim();
+    const username = this.validateUsername(data.username || usernameFromEmail(data.email));
     const email = String(data.email || '').trim().toLowerCase();
     const role = String(data.role || '').trim();
     const status = data.status ? String(data.status).trim() : 'active';
+    const mustChangeCredentials = !!data.mustChangeCredentials;
     const password = data.password !== undefined ? String(data.password) : undefined;
 
     if (!name || name.length > 120) {
@@ -236,16 +326,33 @@ class AuthService {
       throw new Error('Status must be active or disabled.');
     }
     if (requirePassword || password) {
-      if (!password || password.length < 8 || password.length > 128) {
-        throw new Error('Password must be between 8 and 128 characters.');
-      }
-      if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-        throw new Error('Password must include uppercase, lowercase, and number characters.');
-      }
+      this.validatePassword(password);
     }
 
-    return { name, email, role, status, password };
+    return { name, username, email, role, status, mustChangeCredentials, password };
   }
+
+  validateUsername(value) {
+    const username = String(value || '').trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      throw new Error('Username must be 3-32 characters and use only letters, numbers, dots, underscores, or hyphens.');
+    }
+    return username;
+  }
+
+  validatePassword(password) {
+    if (!password || password.length < 8 || password.length > 128) {
+      throw new Error('Password must be between 8 and 128 characters.');
+    }
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      throw new Error('Password must include uppercase, lowercase, and number characters.');
+    }
+  }
+}
+
+function usernameFromEmail(email) {
+  const username = String(email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  return username || '';
 }
 
 module.exports = new AuthService();

@@ -3,6 +3,8 @@ const fs = require('fs');
 const { initDatabase, seedDatabase, closeDatabase, getDatabaseFiles, resolveDatabaseFiles } = require('../database/db');
 const authService = require('../services/authService');
 const quizService = require('../services/quizService');
+const request = require('supertest');
+const app = require('../server');
 
 const TEST_DB = path.join(__dirname, 'test_auth_quiz.db');
 
@@ -37,14 +39,38 @@ describe('Auth and quiz attempt flow', () => {
   });
 
   test('logs in seeded role accounts with salted and spiced password hashes', () => {
-    const admin = authService.login('admin@example.com', 'Admin123!');
+    const admin = authService.login('admin', 'Admin123!');
     const teacher = authService.login('teacher@example.com', 'Teacher123!');
     const student = authService.login('student@example.com', 'Student123!');
 
     expect(admin.user.role).toBe('admin');
+    expect(admin.user.username).toBe('admin');
+    expect(admin.user.mustChangeCredentials).toBe(true);
     expect(teacher.user.role).toBe('teacher');
     expect(student.user.role).toBe('student');
     expect(student.token).toBeTruthy();
+  });
+
+  test('blocks default admin from using the app until username and password are changed', async () => {
+    const session = authService.login('admin', 'Admin123!');
+
+    await request(app)
+      .get('/api/courses')
+      .set('Authorization', `Bearer ${session.token}`)
+      .expect(403)
+      .expect(response => {
+        expect(response.body.code).toBe('CREDENTIAL_CHANGE_REQUIRED');
+      });
+
+    const user = authService.changeOwnCredentials(session.user.id, session.token, {
+      username: 'primary-admin',
+      currentPassword: 'Admin123!',
+      newPassword: 'BetterAdmin123!'
+    });
+
+    expect(user.username).toBe('primary-admin');
+    expect(Boolean(user.mustChangeCredentials)).toBe(false);
+    expect(authService.login('primary-admin', 'BetterAdmin123!').user.role).toBe('admin');
   });
 
   test('rejects invalid passwords', () => {
