@@ -8,11 +8,13 @@ const API = {
   setSession(session) {
     localStorage.setItem('quiz_lms_token', session.token);
     localStorage.setItem('quiz_lms_user', JSON.stringify(session.user));
+    document.cookie = `auth_token=${session.token}; path=/; max-age=${7 * 24 * 3600}; SameSite=Strict`;
   },
 
   clearSession() {
     localStorage.removeItem('quiz_lms_token');
     localStorage.removeItem('quiz_lms_user');
+    document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Strict';
   },
 
   cachedUser() {

@@ -57,7 +57,7 @@ const App = {
 
     links.innerHTML = items.map(([href, label]) =>
       `<a class="nav-link" href="${href}" data-href="${href}">${label}</a>`
-    ).join('') + '<a class="nav-link" href="/api-docs" target="_blank">API Docs</a>';
+    ).join('') + (this.user.role === 'admin' ? '<a class="nav-link" href="/api-docs" target="_blank">API Docs</a>' : '');
 
     navUser.innerHTML = `
       <div class="user-chip">

@@ -4,7 +4,14 @@ const { getDatabase } = require('../database/db');
 function getBearerToken(req) {
   const header = req.headers.authorization || '';
   if (header.startsWith('Bearer ')) return header.slice(7).trim();
-  return req.headers['x-session-token'] || '';
+  if (req.headers['x-session-token']) return req.headers['x-session-token'];
+  
+  if (req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)auth_token=([^;]*)/);
+    if (match) return match[1];
+  }
+  
+  return req.query.token || '';
 }
 
 function requireAuth(req, res, next) {

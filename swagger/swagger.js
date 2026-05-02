@@ -1,5 +1,6 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 const options = {
   definition: {
@@ -46,13 +47,13 @@ const swaggerSpec = swaggerJsdoc(options);
  * @param {import('express').Application} app - The Express application.
  */
 function setupSwagger(app) {
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  app.use('/api-docs', requireAuth, requireRole('admin'), swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'Quiz Manager API Docs'
   }));
 
   // Serve raw JSON spec
-  app.get('/api-docs.json', (req, res) => {
+  app.get('/api-docs.json', requireAuth, requireRole('admin'), (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(swaggerSpec);
   });
