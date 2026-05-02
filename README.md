@@ -12,6 +12,7 @@ A vanilla JavaScript, Express, and SQLite learning management system focused on 
 - Quiz publishing with attempts allowed, shuffle flag, time limit field, and answer visibility setting
 - Student quiz attempts with server-side grading and hidden correct answers during the attempt
 - Gradebook per course for teachers/admins
+- Multi-database SQLite layout with one file per bounded context
 - SQLite WAL mode for concurrent local access
 - Swagger UI at `/api-docs`
 - Jest unit tests for business logic
@@ -38,7 +39,16 @@ Open:
 - App: `http://localhost:3000`
 - Swagger: `http://localhost:3000/api-docs`
 
-The database is created automatically as `quiz.db`. Runtime database files are ignored by Git.
+The databases are created automatically under `data/`:
+
+| File | Responsibility |
+| --- | --- |
+| `data/quiz.identity.sqlite` | Users, salted password hashes, and sessions |
+| `data/quiz.learning.sqlite` | Courses, enrollments, and question categories |
+| `data/quiz.assessment.sqlite` | Questions, quizzes, attempts, answers, and grades |
+| `data/quiz.content.sqlite` | Announcements and resources |
+
+If an old single-file `quiz.db` exists, the app attempts a one-time copy into the split databases before seeding missing demo data. Runtime database files are ignored by Git.
 
 ## Default Accounts
 
@@ -132,6 +142,7 @@ Authorization: Bearer <session-token>
 ```text
 quiz-web/
 ├── database/db.js
+├── data/                     # Local runtime SQLite files, ignored by Git
 ├── middleware/
 │   ├── auth.js
 │   └── validation.js

@@ -1,19 +1,27 @@
-const { initDatabase, closeDatabase } = require('../database/db');
+const { initDatabase, closeDatabase, resolveDatabaseFiles } = require('../database/db');
 const categoryService = require('../services/categoryService');
 const path = require('path');
 const fs = require('fs');
 
 const TEST_DB = path.join(__dirname, 'test_categories.db');
 
+function removeDbFiles() {
+  const files = Object.values(resolveDatabaseFiles(TEST_DB));
+  files.forEach(file => {
+    [file, `${file}-shm`, `${file}-wal`].forEach(candidate => {
+      if (fs.existsSync(candidate)) fs.unlinkSync(candidate);
+    });
+  });
+}
+
 beforeAll(() => {
-  // Remove old test db if exists
-  if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
+  removeDbFiles();
   initDatabase(TEST_DB);
 });
 
 afterAll(() => {
   closeDatabase();
-  if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
+  removeDbFiles();
 });
 
 describe('CategoryService', () => {

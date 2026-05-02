@@ -122,12 +122,16 @@ dist
 *.db
 *.sqlite
 *.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
 *.db-shm
 *.db-wal
 *.db-journal
 quiz.db
 quiz.db-shm
 quiz.db-wal
+data/
 
 # Ignored PDFs
 SAD_Requirements (2).pdf

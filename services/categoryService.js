@@ -157,7 +157,15 @@ class CategoryService {
       throw new Error('Category not found.');
     }
 
-    db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+    db.exec('BEGIN TRANSACTION');
+    try {
+      db.prepare('DELETE FROM questions WHERE categoryId = ?').run(id);
+      db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
     return true;
   }
 }

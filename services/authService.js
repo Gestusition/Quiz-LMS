@@ -198,7 +198,21 @@ class AuthService {
       throw new Error('User not found.');
     }
 
-    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    db.exec('BEGIN TRANSACTION');
+    try {
+      db.prepare('DELETE FROM enrollments WHERE userId = ?').run(id);
+      db.prepare('DELETE FROM quiz_attempts WHERE userId = ?').run(id);
+      db.prepare('UPDATE courses SET createdBy = NULL WHERE createdBy = ?').run(id);
+      db.prepare('UPDATE questions SET createdBy = NULL WHERE createdBy = ?').run(id);
+      db.prepare('UPDATE quizzes SET createdBy = NULL WHERE createdBy = ?').run(id);
+      db.prepare('UPDATE announcements SET createdBy = NULL WHERE createdBy = ?').run(id);
+      db.prepare('UPDATE resources SET createdBy = NULL WHERE createdBy = ?').run(id);
+      db.prepare('DELETE FROM users WHERE id = ?').run(id);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
     return true;
   }
 

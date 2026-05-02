@@ -1,4 +1,4 @@
-const { initDatabase, closeDatabase } = require('../database/db');
+const { initDatabase, closeDatabase, resolveDatabaseFiles } = require('../database/db');
 const categoryService = require('../services/categoryService');
 const questionService = require('../services/questionService');
 const path = require('path');
@@ -8,8 +8,17 @@ const TEST_DB = path.join(__dirname, 'test_questions.db');
 
 let testCategoryId;
 
+function removeDbFiles() {
+  const files = Object.values(resolveDatabaseFiles(TEST_DB));
+  files.forEach(file => {
+    [file, `${file}-shm`, `${file}-wal`].forEach(candidate => {
+      if (fs.existsSync(candidate)) fs.unlinkSync(candidate);
+    });
+  });
+}
+
 beforeAll(() => {
-  if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
+  removeDbFiles();
   initDatabase(TEST_DB);
 
   // Create a test category for questions
@@ -19,7 +28,7 @@ beforeAll(() => {
 
 afterAll(() => {
   closeDatabase();
-  if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
+  removeDbFiles();
 });
 
 describe('QuestionService', () => {
@@ -163,6 +172,11 @@ describe('QuestionService', () => {
     const result = questionService.delete(fbId);
     expect(result).toBe(true);
     expect(questionService.getById(fbId)).toBeNull();
+  });
+
+  test('should delete related questions when a category is deleted', () => {
+    categoryService.delete(testCategoryId);
+    expect(questionService.getAll()).toHaveLength(0);
   });
 
   test('should throw when deleting non-existent question', () => {

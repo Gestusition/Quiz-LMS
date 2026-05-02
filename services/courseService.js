@@ -135,7 +135,24 @@ class CourseService {
       throw new Error('Course not found.');
     }
 
-    db.prepare('DELETE FROM courses WHERE id = ?').run(id);
+    const categories = db.prepare('SELECT id FROM categories WHERE courseId = ?').all(id);
+    const categoryIds = categories.map(category => category.id);
+
+    db.exec('BEGIN TRANSACTION');
+    try {
+      if (categoryIds.length > 0) {
+        const placeholders = categoryIds.map(() => '?').join(',');
+        db.prepare(`DELETE FROM questions WHERE categoryId IN (${placeholders})`).run(...categoryIds);
+      }
+      db.prepare('DELETE FROM quizzes WHERE courseId = ?').run(id);
+      db.prepare('DELETE FROM announcements WHERE courseId = ?').run(id);
+      db.prepare('DELETE FROM resources WHERE courseId = ?').run(id);
+      db.prepare('DELETE FROM courses WHERE id = ?').run(id);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
     return true;
   }
 

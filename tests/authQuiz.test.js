@@ -1,14 +1,17 @@
 const path = require('path');
 const fs = require('fs');
-const { initDatabase, seedDatabase, closeDatabase } = require('../database/db');
+const { initDatabase, seedDatabase, closeDatabase, getDatabaseFiles, resolveDatabaseFiles } = require('../database/db');
 const authService = require('../services/authService');
 const quizService = require('../services/quizService');
 
 const TEST_DB = path.join(__dirname, 'test_auth_quiz.db');
 
 function removeDbFiles() {
-  [TEST_DB, `${TEST_DB}-shm`, `${TEST_DB}-wal`].forEach(file => {
-    if (fs.existsSync(file)) fs.unlinkSync(file);
+  const files = Object.values(resolveDatabaseFiles(TEST_DB));
+  files.forEach(file => {
+    [file, `${file}-shm`, `${file}-wal`].forEach(candidate => {
+      if (fs.existsSync(candidate)) fs.unlinkSync(candidate);
+    });
   });
 }
 
@@ -24,6 +27,15 @@ afterAll(() => {
 });
 
 describe('Auth and quiz attempt flow', () => {
+  test('uses separate SQLite files for each bounded context', () => {
+    const files = getDatabaseFiles();
+    expect(Object.keys(files)).toEqual(expect.arrayContaining(['identity', 'learning', 'assessment', 'content']));
+    expect(fs.existsSync(files.identity)).toBe(true);
+    expect(fs.existsSync(files.learning)).toBe(true);
+    expect(fs.existsSync(files.assessment)).toBe(true);
+    expect(fs.existsSync(files.content)).toBe(true);
+  });
+
   test('logs in seeded role accounts with salted and spiced password hashes', () => {
     const admin = authService.login('admin@example.com', 'Admin123!');
     const teacher = authService.login('teacher@example.com', 'Teacher123!');

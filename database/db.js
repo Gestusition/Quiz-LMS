@@ -1,26 +1,76 @@
 const { DatabaseSync } = require('node:sqlite');
+const fs = require('fs');
 const path = require('path');
 const { hashPassword } = require('../utils/security');
 
+const DATABASE_CONTEXTS = {
+  identity: 'Users, password hashes, and sessions',
+  learning: 'Courses, enrollments, and question categories',
+  assessment: 'Questions, quizzes, attempts, and grades',
+  content: 'Announcements and learning resources'
+};
+
 let db;
+let activeFiles;
 
 function initDatabase(dbPath) {
-  const resolvedPath = dbPath || path.join(__dirname, '..', 'quiz.db');
-  db = new DatabaseSync(resolvedPath);
+  activeFiles = resolveDatabaseFiles(dbPath);
+  ensureDatabaseDirectory(activeFiles);
 
-  db.exec('PRAGMA journal_mode = WAL');
+  db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
 
+  attachContextDatabases(activeFiles);
   createTables();
   migrateExistingTables();
+  migrateLegacySingleDatabase(dbPath);
 
   return db;
 }
 
+function resolveDatabaseFiles(dbPath) {
+  if (dbPath) {
+    const dir = path.dirname(dbPath);
+    const ext = path.extname(dbPath);
+    const base = path.basename(dbPath, ext);
+    return {
+      identity: path.join(dir, `${base}.identity.sqlite`),
+      learning: path.join(dir, `${base}.learning.sqlite`),
+      assessment: path.join(dir, `${base}.assessment.sqlite`),
+      content: path.join(dir, `${base}.content.sqlite`),
+      legacy: dbPath
+    };
+  }
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  return {
+    identity: path.join(dataDir, 'quiz.identity.sqlite'),
+    learning: path.join(dataDir, 'quiz.learning.sqlite'),
+    assessment: path.join(dataDir, 'quiz.assessment.sqlite'),
+    content: path.join(dataDir, 'quiz.content.sqlite'),
+    legacy: path.join(__dirname, '..', 'quiz.db')
+  };
+}
+
+function ensureDatabaseDirectory(files) {
+  Object.entries(files)
+    .filter(([name]) => name !== 'legacy')
+    .forEach(([, filePath]) => {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    });
+}
+
+function attachContextDatabases(files) {
+  Object.keys(DATABASE_CONTEXTS).forEach(schema => {
+    db.exec(`ATTACH DATABASE '${escapeSqlPath(files[schema])}' AS ${schema}`);
+    db.exec(`PRAGMA ${schema}.journal_mode = WAL`);
+  });
+}
+
 function createTables() {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS identity.users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
@@ -33,7 +83,7 @@ function createTables() {
       updatedAt TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS sessions (
+    CREATE TABLE IF NOT EXISTS identity.sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,
       tokenHash TEXT NOT NULL UNIQUE,
@@ -43,7 +93,7 @@ function createTables() {
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS courses (
+    CREATE TABLE IF NOT EXISTS learning.courses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT NOT NULL UNIQUE,
       title TEXT NOT NULL,
@@ -53,11 +103,10 @@ function createTables() {
       endDate TEXT DEFAULT '',
       createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
-      updatedAt TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+      updatedAt TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS enrollments (
+    CREATE TABLE IF NOT EXISTS learning.enrollments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER NOT NULL,
       userId INTEGER NOT NULL,
@@ -65,11 +114,10 @@ function createTables() {
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'suspended')),
       createdAt TEXT DEFAULT (datetime('now')),
       UNIQUE(courseId, userId, role),
-      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS categories (
+    CREATE TABLE IF NOT EXISTS learning.categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER,
       name TEXT NOT NULL UNIQUE,
@@ -78,7 +126,7 @@ function createTables() {
       FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE SET NULL
     );
 
-    CREATE TABLE IF NOT EXISTS questions (
+    CREATE TABLE IF NOT EXISTS assessment.questions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       categoryId INTEGER NOT NULL,
       text TEXT NOT NULL,
@@ -88,12 +136,10 @@ function createTables() {
       difficulty TEXT NOT NULL DEFAULT 'MEDIUM' CHECK(difficulty IN ('EASY', 'MEDIUM', 'HARD')),
       points REAL NOT NULL DEFAULT 1,
       createdBy INTEGER,
-      createdAt TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE,
-      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+      createdAt TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS quizzes (
+    CREATE TABLE IF NOT EXISTS assessment.quizzes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER NOT NULL,
       title TEXT NOT NULL,
@@ -107,12 +153,10 @@ function createTables() {
       showCorrectAnswers INTEGER NOT NULL DEFAULT 1,
       createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
-      updatedAt TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
-      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+      updatedAt TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS quiz_questions (
+    CREATE TABLE IF NOT EXISTS assessment.quiz_questions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       quizId INTEGER NOT NULL,
       questionId INTEGER NOT NULL,
@@ -123,7 +167,7 @@ function createTables() {
       FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS quiz_attempts (
+    CREATE TABLE IF NOT EXISTS assessment.quiz_attempts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       quizId INTEGER NOT NULL,
       userId INTEGER NOT NULL,
@@ -136,11 +180,10 @@ function createTables() {
       percentage REAL NOT NULL DEFAULT 0,
       timeSpentSeconds INTEGER NOT NULL DEFAULT 0,
       UNIQUE(quizId, userId, attemptNumber),
-      FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE,
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS attempt_answers (
+    CREATE TABLE IF NOT EXISTS assessment.attempt_answers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       attemptId INTEGER NOT NULL,
       questionId INTEGER NOT NULL,
@@ -152,18 +195,16 @@ function createTables() {
       FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS announcements (
+    CREATE TABLE IF NOT EXISTS content.announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER NOT NULL,
       title TEXT NOT NULL,
       body TEXT NOT NULL,
       createdBy INTEGER,
-      createdAt TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
-      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+      createdAt TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS resources (
+    CREATE TABLE IF NOT EXISTS content.resources (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER NOT NULL,
       title TEXT NOT NULL,
@@ -171,24 +212,79 @@ function createTables() {
       url TEXT DEFAULT '',
       description TEXT DEFAULT '',
       createdBy INTEGER,
-      createdAt TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
-      FOREIGN KEY (createdBy) REFERENCES users(id) ON DELETE SET NULL
+      createdAt TEXT DEFAULT (datetime('now'))
     );
   `);
 }
 
 function migrateExistingTables() {
-  ensureColumn('categories', 'courseId', 'courseId INTEGER');
-  ensureColumn('questions', 'points', 'points REAL NOT NULL DEFAULT 1');
-  ensureColumn('questions', 'createdBy', 'createdBy INTEGER');
+  ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
+  ensureColumn('assessment', 'questions', 'points', 'points REAL NOT NULL DEFAULT 1');
+  ensureColumn('assessment', 'questions', 'createdBy', 'createdBy INTEGER');
 }
 
-function ensureColumn(tableName, columnName, columnSql) {
-  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+function ensureColumn(schema, tableName, columnName, columnSql) {
+  const columns = db.prepare(`PRAGMA ${schema}.table_info(${tableName})`).all();
   if (!columns.some(column => column.name === columnName)) {
-    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnSql}`);
+    db.exec(`ALTER TABLE ${schema}.${tableName} ADD COLUMN ${columnSql}`);
   }
+}
+
+function migrateLegacySingleDatabase(dbPath) {
+  const legacyPath = activeFiles.legacy;
+  if (!legacyPath || !fs.existsSync(legacyPath)) return;
+
+  const splitFiles = Object.keys(DATABASE_CONTEXTS).map(schema => path.resolve(activeFiles[schema]));
+  if (splitFiles.includes(path.resolve(legacyPath))) return;
+
+  db.exec(`ATTACH DATABASE '${escapeSqlPath(legacyPath)}' AS legacy`);
+  try {
+    const legacyHasAnyTable = [
+      'users', 'courses', 'categories', 'questions', 'quizzes'
+    ].some(tableName => tableExists('legacy', tableName));
+
+    if (!legacyHasAnyTable) return;
+
+    copyLegacyTable('identity', 'users');
+    copyLegacyTable('identity', 'sessions');
+    copyLegacyTable('learning', 'courses');
+    copyLegacyTable('learning', 'enrollments');
+    copyLegacyTable('learning', 'categories');
+    copyLegacyTable('assessment', 'questions');
+    copyLegacyTable('assessment', 'quizzes');
+    copyLegacyTable('assessment', 'quiz_questions');
+    copyLegacyTable('assessment', 'quiz_attempts');
+    copyLegacyTable('assessment', 'attempt_answers');
+    copyLegacyTable('content', 'announcements');
+    copyLegacyTable('content', 'resources');
+  } finally {
+    db.exec('DETACH DATABASE legacy');
+  }
+}
+
+function tableExists(schema, tableName) {
+  const row = db.prepare(`
+    SELECT name FROM ${schema}.sqlite_master
+    WHERE type = 'table' AND name = ?
+  `).get(tableName);
+  return !!row;
+}
+
+function copyLegacyTable(targetSchema, tableName) {
+  if (!tableExists('legacy', tableName)) return;
+
+  const targetColumns = db.prepare(`PRAGMA ${targetSchema}.table_info(${tableName})`).all()
+    .map(column => column.name);
+  const sourceColumns = db.prepare(`PRAGMA legacy.table_info(${tableName})`).all()
+    .map(column => column.name);
+  const columns = targetColumns.filter(column => sourceColumns.includes(column));
+  if (columns.length === 0) return;
+
+  const columnList = columns.join(', ');
+  db.exec(`
+    INSERT OR IGNORE INTO ${targetSchema}.${tableName} (${columnList})
+    SELECT ${columnList} FROM legacy.${tableName}
+  `);
 }
 
 function getDatabase() {
@@ -198,10 +294,15 @@ function getDatabase() {
   return db;
 }
 
+function getDatabaseFiles() {
+  return activeFiles ? { ...activeFiles } : resolveDatabaseFiles();
+}
+
 function closeDatabase() {
   if (db) {
     db.close();
     db = undefined;
+    activeFiles = undefined;
   }
 }
 
@@ -424,4 +525,16 @@ function ensureDemoQuiz(database) {
   }
 }
 
-module.exports = { initDatabase, getDatabase, closeDatabase, seedDatabase };
+function escapeSqlPath(filePath) {
+  return filePath.replace(/'/g, "''");
+}
+
+module.exports = {
+  DATABASE_CONTEXTS,
+  closeDatabase,
+  getDatabase,
+  getDatabaseFiles,
+  initDatabase,
+  resolveDatabaseFiles,
+  seedDatabase
+};
