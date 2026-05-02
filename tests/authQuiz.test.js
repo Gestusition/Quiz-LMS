@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { initDatabase, seedDatabase, closeDatabase, getDatabaseFiles, resolveDatabaseFiles } = require('../database/db');
+const { initDatabase, seedDatabase, closeDatabase, getDatabase, getDatabaseFiles, resolveDatabaseFiles } = require('../database/db');
 const authService = require('../services/authService');
 const quizService = require('../services/quizService');
 const request = require('supertest');
@@ -31,11 +31,29 @@ afterAll(() => {
 describe('Auth and quiz attempt flow', () => {
   test('uses separate SQLite files for each bounded context', () => {
     const files = getDatabaseFiles();
-    expect(Object.keys(files)).toEqual(expect.arrayContaining(['identity', 'learning', 'assessment', 'content']));
-    expect(fs.existsSync(files.identity)).toBe(true);
+    expect(Object.keys(files)).toEqual(expect.arrayContaining([
+      'users',
+      'admin',
+      'teacher',
+      'student',
+      'learning',
+      'assessment',
+      'content'
+    ]));
+    expect(fs.existsSync(files.users)).toBe(true);
+    expect(fs.existsSync(files.admin)).toBe(true);
+    expect(fs.existsSync(files.teacher)).toBe(true);
+    expect(fs.existsSync(files.student)).toBe(true);
     expect(fs.existsSync(files.learning)).toBe(true);
     expect(fs.existsSync(files.assessment)).toBe(true);
     expect(fs.existsSync(files.content)).toBe(true);
+  });
+
+  test('seeds role-specific profile databases for admin, teacher, and student', () => {
+    const db = getDatabase();
+    expect(db.prepare('SELECT COUNT(*) as count FROM admin_profiles').get().count).toBeGreaterThanOrEqual(1);
+    expect(db.prepare('SELECT COUNT(*) as count FROM teacher_profiles').get().count).toBeGreaterThanOrEqual(1);
+    expect(db.prepare('SELECT COUNT(*) as count FROM student_profiles').get().count).toBeGreaterThanOrEqual(1);
   });
 
   test('logs in seeded role accounts with salted and spiced password hashes', () => {

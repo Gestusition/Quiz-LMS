@@ -43,12 +43,15 @@ The databases are created automatically under `data/`:
 
 | File | Responsibility |
 | --- | --- |
-| `data/quiz.identity.sqlite` | Users, salted password hashes, and sessions |
+| `data/quiz.users.sqlite` | All users, salted password hashes, and sessions |
+| `data/quiz.admin.sqlite` | Admin-only profile records |
+| `data/quiz.teacher.sqlite` | Teacher-only profile records |
+| `data/quiz.student.sqlite` | Student-only profile records |
 | `data/quiz.learning.sqlite` | Courses, enrollments, and question categories |
 | `data/quiz.assessment.sqlite` | Questions, quizzes, attempts, answers, and grades |
 | `data/quiz.content.sqlite` | Announcements and resources |
 
-If an old single-file `quiz.db` exists, the app attempts a one-time copy into the split databases before seeding missing demo data. Runtime database files are ignored by Git.
+If an old single-file `quiz.db` or older `data/quiz.identity.sqlite` exists, the app attempts a one-time copy into the split databases before seeding missing demo data. Runtime database files are ignored by Git.
 
 ## Default Accounts
 

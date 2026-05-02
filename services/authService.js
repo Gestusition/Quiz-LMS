@@ -119,6 +119,7 @@ class AuthService {
       payload.status,
       payload.mustChangeCredentials ? 1 : 0
     );
+    this.syncRoleProfile(result.lastInsertRowid, payload);
 
     return this.getUserById(result.lastInsertRowid);
   }
@@ -212,6 +213,7 @@ class AuthService {
         `).run(hashed.passwordHash, hashed.passwordSalt, hashed.passwordAlgorithm, nowIso(), id);
         db.prepare('DELETE FROM sessions WHERE userId = ?').run(id);
       }
+      this.syncRoleProfile(id, payload);
 
       db.exec('COMMIT');
     } catch (e) {
@@ -270,6 +272,8 @@ class AuthService {
 
       const currentTokenHash = hashSessionToken(token);
       db.prepare('DELETE FROM sessions WHERE userId = ? AND tokenHash != ?').run(userId, currentTokenHash);
+      db.prepare('UPDATE admin_profiles SET lastCredentialRotationAt = ?, updatedAt = ? WHERE userId = ?')
+        .run(nowIso(), nowIso(), userId);
       db.exec('COMMIT');
     } catch (e) {
       db.exec('ROLLBACK');
@@ -295,6 +299,9 @@ class AuthService {
       db.prepare('UPDATE quizzes SET createdBy = NULL WHERE createdBy = ?').run(id);
       db.prepare('UPDATE announcements SET createdBy = NULL WHERE createdBy = ?').run(id);
       db.prepare('UPDATE resources SET createdBy = NULL WHERE createdBy = ?').run(id);
+      db.prepare('DELETE FROM admin_profiles WHERE userId = ?').run(id);
+      db.prepare('DELETE FROM teacher_profiles WHERE userId = ?').run(id);
+      db.prepare('DELETE FROM student_profiles WHERE userId = ?').run(id);
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
       db.exec('COMMIT');
     } catch (e) {
@@ -346,6 +353,30 @@ class AuthService {
     }
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
       throw new Error('Password must include uppercase, lowercase, and number characters.');
+    }
+  }
+
+  syncRoleProfile(userId, payload) {
+    const db = getDatabase();
+    db.prepare('DELETE FROM admin_profiles WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM teacher_profiles WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM student_profiles WHERE userId = ?').run(userId);
+
+    if (payload.role === 'admin') {
+      db.prepare(`
+        INSERT INTO admin_profiles (userId, displayName, securityNotes)
+        VALUES (?, ?, ?)
+      `).run(userId, payload.name, payload.mustChangeCredentials ? 'Credential rotation required.' : '');
+    } else if (payload.role === 'teacher') {
+      db.prepare(`
+        INSERT INTO teacher_profiles (userId, displayName, department)
+        VALUES (?, ?, ?)
+      `).run(userId, payload.name, 'General');
+    } else if (payload.role === 'student') {
+      db.prepare(`
+        INSERT INTO student_profiles (userId, displayName, studentNumber)
+        VALUES (?, ?, ?)
+      `).run(userId, payload.name, `STU-${String(userId).padStart(4, '0')}`);
     }
   }
 }

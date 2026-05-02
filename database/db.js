@@ -4,7 +4,10 @@ const path = require('path');
 const { hashPassword } = require('../utils/security');
 
 const DATABASE_CONTEXTS = {
-  identity: 'Users, password hashes, and sessions',
+  users: 'All users, password hashes, and sessions',
+  admin: 'Admin-only account profile data',
+  teacher: 'Teacher-only account profile data',
+  student: 'Student-only account profile data',
   learning: 'Courses, enrollments, and question categories',
   assessment: 'Questions, quizzes, attempts, and grades',
   content: 'Announcements and learning resources'
@@ -35,27 +38,35 @@ function resolveDatabaseFiles(dbPath) {
     const ext = path.extname(dbPath);
     const base = path.basename(dbPath, ext);
     return {
-      identity: path.join(dir, `${base}.identity.sqlite`),
+      users: path.join(dir, `${base}.users.sqlite`),
+      admin: path.join(dir, `${base}.admin.sqlite`),
+      teacher: path.join(dir, `${base}.teacher.sqlite`),
+      student: path.join(dir, `${base}.student.sqlite`),
       learning: path.join(dir, `${base}.learning.sqlite`),
       assessment: path.join(dir, `${base}.assessment.sqlite`),
       content: path.join(dir, `${base}.content.sqlite`),
+      legacyIdentity: path.join(dir, `${base}.identity.sqlite`),
       legacy: dbPath
     };
   }
 
   const dataDir = path.join(__dirname, '..', 'data');
   return {
-    identity: path.join(dataDir, 'quiz.identity.sqlite'),
+    users: path.join(dataDir, 'quiz.users.sqlite'),
+    admin: path.join(dataDir, 'quiz.admin.sqlite'),
+    teacher: path.join(dataDir, 'quiz.teacher.sqlite'),
+    student: path.join(dataDir, 'quiz.student.sqlite'),
     learning: path.join(dataDir, 'quiz.learning.sqlite'),
     assessment: path.join(dataDir, 'quiz.assessment.sqlite'),
     content: path.join(dataDir, 'quiz.content.sqlite'),
+    legacyIdentity: path.join(dataDir, 'quiz.identity.sqlite'),
     legacy: path.join(__dirname, '..', 'quiz.db')
   };
 }
 
 function ensureDatabaseDirectory(files) {
   Object.entries(files)
-    .filter(([name]) => name !== 'legacy')
+    .filter(([name]) => !['legacy', 'legacyIdentity'].includes(name))
     .forEach(([, filePath]) => {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
     });
@@ -70,7 +81,7 @@ function attachContextDatabases(files) {
 
 function createTables() {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS identity.users (
+    CREATE TABLE IF NOT EXISTS users.users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       username TEXT UNIQUE,
@@ -85,7 +96,7 @@ function createTables() {
       updatedAt TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS identity.sessions (
+    CREATE TABLE IF NOT EXISTS users.sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,
       tokenHash TEXT NOT NULL UNIQUE,
@@ -93,6 +104,36 @@ function createTables() {
       createdAt TEXT DEFAULT (datetime('now')),
       lastSeenAt TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS admin.admin_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL UNIQUE,
+      displayName TEXT DEFAULT '',
+      securityNotes TEXT DEFAULT '',
+      lastCredentialRotationAt TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS teacher.teacher_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL UNIQUE,
+      displayName TEXT DEFAULT '',
+      department TEXT DEFAULT '',
+      officeHours TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS student.student_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL UNIQUE,
+      displayName TEXT DEFAULT '',
+      studentNumber TEXT DEFAULT '',
+      cohort TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS learning.courses (
@@ -220,12 +261,13 @@ function createTables() {
 }
 
 function migrateExistingTables() {
-  ensureColumn('identity', 'users', 'username', 'username TEXT');
-  ensureColumn('identity', 'users', 'mustChangeCredentials', 'mustChangeCredentials INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'users', 'username', 'username TEXT');
+  ensureColumn('users', 'users', 'mustChangeCredentials', 'mustChangeCredentials INTEGER NOT NULL DEFAULT 0');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
   ensureColumn('assessment', 'questions', 'points', 'points REAL NOT NULL DEFAULT 1');
   ensureColumn('assessment', 'questions', 'createdBy', 'createdBy INTEGER');
   normalizeUserIdentityState();
+  migrateLegacyIdentityDatabase();
 }
 
 function ensureColumn(schema, tableName, columnName, columnSql) {
@@ -250,8 +292,8 @@ function migrateLegacySingleDatabase(dbPath) {
 
     if (!legacyHasAnyTable) return;
 
-    copyLegacyTable('identity', 'users');
-    copyLegacyTable('identity', 'sessions');
+    copyLegacyTable('users', 'users');
+    copyLegacyTable('users', 'sessions');
     copyLegacyTable('learning', 'courses');
     copyLegacyTable('learning', 'enrollments');
     copyLegacyTable('learning', 'categories');
@@ -265,6 +307,21 @@ function migrateLegacySingleDatabase(dbPath) {
     normalizeUserIdentityState();
   } finally {
     db.exec('DETACH DATABASE legacy');
+  }
+}
+
+function migrateLegacyIdentityDatabase() {
+  const legacyIdentityPath = activeFiles.legacyIdentity;
+  if (!legacyIdentityPath || !fs.existsSync(legacyIdentityPath)) return;
+  if (path.resolve(legacyIdentityPath) === path.resolve(activeFiles.users)) return;
+
+  db.exec(`ATTACH DATABASE '${escapeSqlPath(legacyIdentityPath)}' AS legacy_identity`);
+  try {
+    copyTable('legacy_identity', 'users', 'users');
+    copyTable('legacy_identity', 'users', 'sessions');
+    normalizeUserIdentityState();
+  } finally {
+    db.exec('DETACH DATABASE legacy_identity');
   }
 }
 
@@ -320,11 +377,15 @@ function tableExists(schema, tableName) {
 }
 
 function copyLegacyTable(targetSchema, tableName) {
-  if (!tableExists('legacy', tableName)) return;
+  copyTable('legacy', targetSchema, tableName);
+}
+
+function copyTable(sourceSchema, targetSchema, tableName) {
+  if (!tableExists(sourceSchema, tableName)) return;
 
   const targetColumns = db.prepare(`PRAGMA ${targetSchema}.table_info(${tableName})`).all()
     .map(column => column.name);
-  const sourceColumns = db.prepare(`PRAGMA legacy.table_info(${tableName})`).all()
+  const sourceColumns = db.prepare(`PRAGMA ${sourceSchema}.table_info(${tableName})`).all()
     .map(column => column.name);
   const columns = targetColumns.filter(column => sourceColumns.includes(column));
   if (columns.length === 0) return;
@@ -332,7 +393,7 @@ function copyLegacyTable(targetSchema, tableName) {
   const columnList = columns.join(', ');
   db.exec(`
     INSERT OR IGNORE INTO ${targetSchema}.${tableName} (${columnList})
-    SELECT ${columnList} FROM legacy.${tableName}
+    SELECT ${columnList} FROM ${sourceSchema}.${tableName}
   `);
 }
 
@@ -362,6 +423,7 @@ function seedDatabase() {
   if (userCount === 0) {
     seedUsers(database);
   }
+  ensureRoleProfiles(database);
 
   const courseCount = database.prepare('SELECT COUNT(*) as count FROM courses').get().count;
   if (courseCount === 0) {
@@ -400,6 +462,36 @@ function seedUsers(database) {
       hashed.passwordAlgorithm,
       mustChangeCredentials
     );
+  });
+
+  ensureRoleProfiles(database);
+}
+
+function ensureRoleProfiles(database) {
+  const users = database.prepare('SELECT id, name, username, role FROM users').all();
+  const statements = {
+    admin: database.prepare(`
+      INSERT OR IGNORE INTO admin_profiles (userId, displayName, securityNotes)
+      VALUES (?, ?, ?)
+    `),
+    teacher: database.prepare(`
+      INSERT OR IGNORE INTO teacher_profiles (userId, displayName, department)
+      VALUES (?, ?, ?)
+    `),
+    student: database.prepare(`
+      INSERT OR IGNORE INTO student_profiles (userId, displayName, studentNumber)
+      VALUES (?, ?, ?)
+    `)
+  };
+
+  users.forEach(user => {
+    if (user.role === 'admin') {
+      statements.admin.run(user.id, user.name, 'Default admin must rotate username and password on first login.');
+    } else if (user.role === 'teacher') {
+      statements.teacher.run(user.id, user.name, 'General');
+    } else if (user.role === 'student') {
+      statements.student.run(user.id, user.name, `STU-${String(user.id).padStart(4, '0')}`);
+    }
   });
 }
 

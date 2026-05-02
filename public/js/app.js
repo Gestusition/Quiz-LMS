@@ -123,14 +123,14 @@ const App = {
             </label>
             <label class="form-field">
               <span>Password</span>
-              <input class="form-input" id="login-password" type="password" value="Admin123!" autocomplete="current-password" required>
+              <input class="form-input" id="login-password" type="password" autocomplete="current-password" required>
             </label>
             <button class="btn btn-primary full" type="submit">Sign in</button>
           </form>
           <div class="demo-logins">
-            <button data-identifier="admin" data-password="Admin123!">Admin</button>
-            <button data-identifier="teacher" data-password="Teacher123!">Teacher</button>
-            <button data-identifier="student" data-password="Student123!">Student</button>
+            <button data-identifier="admin">Admin</button>
+            <button data-identifier="teacher">Teacher</button>
+            <button data-identifier="student">Student</button>
           </div>
         </div>
       </section>
@@ -140,7 +140,8 @@ const App = {
     document.querySelectorAll('.demo-logins button').forEach(button => {
       button.addEventListener('click', () => {
         document.getElementById('login-identifier').value = button.dataset.identifier;
-        document.getElementById('login-password').value = button.dataset.password;
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-password').focus();
       });
     });
   },
