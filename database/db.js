@@ -4,7 +4,7 @@ const path = require('path');
 const { hashPassword } = require('../utils/security');
 
 const DATABASE_CONTEXTS = {
-  users: 'All users, password hashes, and sessions',
+  users: 'All users, password hashes, sessions, and reset requests',
   admin: 'Admin-only account profile data',
   teacher: 'Teacher-only account profile data',
   student: 'Student-only account profile data',
@@ -103,6 +103,19 @@ function createTables() {
       expiresAt TEXT NOT NULL,
       createdAt TEXT DEFAULT (datetime('now')),
       lastSeenAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS users.password_reset_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      requestedUsername TEXT NOT NULL,
+      codeHash TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'requested' CHECK(status IN ('requested', 'issued', 'used', 'expired')),
+      expiresAt TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      issuedAt TEXT DEFAULT '',
+      usedAt TEXT DEFAULT '',
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
     );
 

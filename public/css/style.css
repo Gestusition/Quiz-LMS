@@ -142,22 +142,23 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .login-brand h1 { margin: 0; font-size: 1.55rem; }
 .login-brand p { margin: 2px 0 0; color: var(--muted); font-size: 0.92rem; }
 
-.demo-logins {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+.login-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 14px;
 }
 
-.demo-logins button {
-  border: 1px solid var(--line);
-  background: var(--surface-strong);
-  border-radius: 6px;
-  padding: 8px;
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
   cursor: pointer;
-  color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
+  padding: 0;
 }
+
+.link-button:hover { color: var(--primary-dark); }
 
 .page-header {
   display: flex;
@@ -236,6 +237,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 .panel { padding: 16px; }
+.panel + .panel { margin-top: 16px; }
 .credential-panel {
   max-width: 560px;
   margin: 48px auto 0;
@@ -333,6 +335,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 .toolbar .form-input { max-width: 360px; }
+.user-toolbar .form-select { max-width: 180px; }
 
 .btn {
   border: 1px solid transparent;
@@ -391,6 +394,23 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .form-textarea {
   min-height: 96px;
   resize: vertical;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.reset-code {
+  padding: 16px;
+  border: 1px dashed var(--primary);
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: center;
 }
 
 .form-grid {
@@ -603,6 +623,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .page-header { align-items: flex-start; flex-direction: column; }
   .toolbar { flex-direction: column; }
   .toolbar .form-input { max-width: none; }
+  .user-toolbar .form-select { max-width: none; }
+  .login-actions { flex-direction: column; align-items: flex-start; }
   .list-row, .result-panel { align-items: flex-start; flex-direction: column; }
-  .demo-logins { grid-template-columns: 1fr; }
 }

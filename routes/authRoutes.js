@@ -20,6 +20,23 @@ router.post('/login', (req, res) => {
   }
 });
 
+router.post('/password-reset/request', (req, res) => {
+  try {
+    const identifier = req.body.username || req.body.identifier;
+    res.json(authService.requestPasswordReset(identifier));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/password-reset/complete', (req, res) => {
+  try {
+    res.json(authService.completePasswordReset(req.body));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/change-credentials', requireAuth, (req, res) => {
   try {
     const user = authService.changeOwnCredentials(req.user.id, req.authToken, req.body);

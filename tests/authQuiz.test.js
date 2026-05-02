@@ -127,6 +127,49 @@ describe('Auth and quiz attempt flow', () => {
     expect(() => authService.login('student@example.com', 'wrong-password')).toThrow('Invalid email or password');
   });
 
+  test('lets admins issue one-time reset codes without storing plaintext codes', () => {
+    const db = getDatabase();
+    const requestResult = authService.requestPasswordReset('teacher');
+    expect(requestResult.message).toMatch(/admin reset request/);
+
+    const pendingRequests = authService.getPasswordResetRequests();
+    expect(pendingRequests.some(request => request.username === 'teacher' && request.status === 'requested')).toBe(true);
+
+    const teacher = db.prepare('SELECT id FROM users WHERE username = ?').get('teacher');
+    const issued = authService.issuePasswordResetCode(teacher.id);
+    expect(issued.code).toMatch(/^[0-9A-F]{8}$/);
+
+    const stored = db.prepare(`
+      SELECT codeHash
+      FROM password_reset_codes
+      WHERE userId = ? AND status = 'issued'
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(teacher.id);
+    expect(stored.codeHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(stored.codeHash).not.toBe(issued.code);
+
+    expect(() => authService.completePasswordReset({
+      username: 'teacher',
+      code: '00000000',
+      newPassword: 'TeacherReset123!'
+    })).toThrow('Invalid or expired reset code');
+
+    const completed = authService.completePasswordReset({
+      username: 'teacher',
+      code: issued.code,
+      newPassword: 'TeacherReset123!'
+    });
+    expect(completed.message).toMatch(/Password updated/);
+    expect(authService.login('teacher', 'TeacherReset123!').user.role).toBe('teacher');
+    expect(() => authService.login('teacher', 'Teacher123!')).toThrow('Invalid email or password');
+    expect(() => authService.completePasswordReset({
+      username: 'teacher',
+      code: issued.code,
+      newPassword: 'TeacherAgain123!'
+    })).toThrow('Invalid or expired reset code');
+  });
+
   test('student can submit a published quiz attempt for server-side grading', () => {
     const session = authService.login('student@example.com', 'Student123!');
     const quizzes = quizService.getAll(session.user);

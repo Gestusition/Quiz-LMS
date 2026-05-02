@@ -25,6 +25,14 @@ router.get('/', (req, res) => {
   }
 });
 
+router.get('/password-reset-requests', (req, res) => {
+  try {
+    res.json(authService.getPasswordResetRequests());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', validateId, (req, res) => {
   try {
     const user = authService.getUserById(req.params.id);
@@ -46,6 +54,15 @@ router.post('/', (req, res) => {
 router.put('/:id', validateId, (req, res) => {
   try {
     res.json(authService.updateUser(req.params.id, req.body));
+  } catch (err) {
+    if (err.message === 'User not found.') return res.status(404).json({ error: err.message });
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/:id/password-reset-code', validateId, (req, res) => {
+  try {
+    res.status(201).json(authService.issuePasswordResetCode(req.params.id));
   } catch (err) {
     if (err.message === 'User not found.') return res.status(404).json({ error: err.message });
     res.status(400).json({ error: err.message });

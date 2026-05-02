@@ -1,14 +1,19 @@
 const { getDatabase } = require('../database/db');
 const {
+  createOneTimeCode,
   createSessionToken,
+  hashOneTimeCode,
   hashPassword,
   hashSessionToken,
   nowIso,
   sessionExpiryDate,
+  verifyOneTimeCode,
   verifyPassword
 } = require('../utils/security');
 
 const VALID_ROLES = ['admin', 'teacher', 'student'];
+const RESETTABLE_ROLES = ['teacher', 'student'];
+const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
 
 function publicUser(user) {
   if (!user) return null;
@@ -157,6 +162,175 @@ class AuthService {
     return user || null;
   }
 
+  requestPasswordReset(identifier) {
+    const requestedUsername = String(identifier || '').trim().toLowerCase();
+    if (!requestedUsername) {
+      throw new Error('Username is required.');
+    }
+
+    const db = getDatabase();
+    const user = db.prepare(`
+      SELECT id, username, email, role, status
+      FROM users
+      WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
+    `).get(requestedUsername, requestedUsername);
+
+    if (user && user.status === 'active' && RESETTABLE_ROLES.includes(user.role)) {
+      db.prepare(`
+        UPDATE password_reset_codes
+        SET status = 'expired'
+        WHERE userId = ?
+          AND status IN ('requested', 'issued')
+      `).run(user.id);
+
+      db.prepare(`
+        INSERT INTO password_reset_codes (userId, requestedUsername, status)
+        VALUES (?, ?, 'requested')
+      `).run(user.id, user.username || requestedUsername);
+    }
+
+    return {
+      message: 'If the username matches an active teacher or student account, an admin reset request has been created.'
+    };
+  }
+
+  getPasswordResetRequests() {
+    const db = getDatabase();
+    this.expireResetCodes(db);
+
+    return db.prepare(`
+      SELECT
+        r.id,
+        r.userId,
+        r.requestedUsername,
+        r.status,
+        r.expiresAt,
+        r.createdAt,
+        r.issuedAt,
+        u.name,
+        u.username,
+        u.email,
+        u.role,
+        u.status as userStatus
+      FROM password_reset_codes r
+      JOIN users u ON u.id = r.userId
+      WHERE r.status IN ('requested', 'issued')
+      ORDER BY r.createdAt DESC, r.id DESC
+    `).all();
+  }
+
+  issuePasswordResetCode(userId) {
+    const db = getDatabase();
+    const user = db.prepare(`
+      SELECT id, name, username, email, role, status
+      FROM users
+      WHERE id = ?
+    `).get(userId);
+
+    if (!user) {
+      throw new Error('User not found.');
+    }
+    if (user.status !== 'active' || !RESETTABLE_ROLES.includes(user.role)) {
+      throw new Error('Password reset codes can only be issued for active teachers and students.');
+    }
+
+    const code = createOneTimeCode();
+    const codeHash = hashOneTimeCode(code);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS).toISOString();
+    const issuedAt = nowIso();
+
+    db.exec('BEGIN TRANSACTION');
+    try {
+      db.prepare(`
+        UPDATE password_reset_codes
+        SET status = 'expired'
+        WHERE userId = ?
+          AND status IN ('requested', 'issued')
+      `).run(user.id);
+
+      const result = db.prepare(`
+        INSERT INTO password_reset_codes (userId, requestedUsername, codeHash, status, expiresAt, issuedAt)
+        VALUES (?, ?, ?, 'issued', ?, ?)
+      `).run(user.id, user.username, codeHash, expiresAt, issuedAt);
+
+      db.exec('COMMIT');
+
+      return {
+        id: result.lastInsertRowid,
+        userId: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        code,
+        expiresAt
+      };
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+  }
+
+  completePasswordReset(data) {
+    const username = String(data.username || '').trim().toLowerCase();
+    const code = String(data.code || '').trim();
+    const newPassword = String(data.newPassword || '');
+
+    if (!username || !code || !newPassword) {
+      throw new Error('Username, reset code, and new password are required.');
+    }
+    this.validatePassword(newPassword);
+
+    const db = getDatabase();
+    this.expireResetCodes(db);
+
+    const user = db.prepare(`
+      SELECT *
+      FROM users
+      WHERE LOWER(username) = LOWER(?)
+    `).get(username);
+    if (!user || user.status !== 'active' || !RESETTABLE_ROLES.includes(user.role)) {
+      throw new Error('Invalid or expired reset code.');
+    }
+    if (verifyPassword(newPassword, user.passwordSalt, user.passwordHash)) {
+      throw new Error('New password must be different from the current password.');
+    }
+
+    const reset = db.prepare(`
+      SELECT *
+      FROM password_reset_codes
+      WHERE userId = ?
+        AND status = 'issued'
+        AND expiresAt > ?
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(user.id, nowIso());
+    if (!reset || !verifyOneTimeCode(code, reset.codeHash)) {
+      throw new Error('Invalid or expired reset code.');
+    }
+
+    const hashed = hashPassword(newPassword);
+    db.exec('BEGIN TRANSACTION');
+    try {
+      db.prepare(`
+        UPDATE users
+        SET passwordHash = ?, passwordSalt = ?, passwordAlgorithm = ?, updatedAt = ?
+        WHERE id = ?
+      `).run(hashed.passwordHash, hashed.passwordSalt, hashed.passwordAlgorithm, nowIso(), user.id);
+      db.prepare('DELETE FROM sessions WHERE userId = ?').run(user.id);
+      db.prepare(`
+        UPDATE password_reset_codes
+        SET status = 'used', usedAt = ?
+        WHERE id = ?
+      `).run(nowIso(), reset.id);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+
+    return { message: 'Password updated. Sign in with the new password.' };
+  }
+
   updateUser(id, data) {
     const db = getDatabase();
     const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -299,6 +473,7 @@ class AuthService {
       db.prepare('UPDATE quizzes SET createdBy = NULL WHERE createdBy = ?').run(id);
       db.prepare('UPDATE announcements SET createdBy = NULL WHERE createdBy = ?').run(id);
       db.prepare('UPDATE resources SET createdBy = NULL WHERE createdBy = ?').run(id);
+      db.prepare('DELETE FROM password_reset_codes WHERE userId = ?').run(id);
       db.prepare('DELETE FROM admin_profiles WHERE userId = ?').run(id);
       db.prepare('DELETE FROM teacher_profiles WHERE userId = ?').run(id);
       db.prepare('DELETE FROM student_profiles WHERE userId = ?').run(id);
@@ -378,6 +553,16 @@ class AuthService {
         VALUES (?, ?, ?)
       `).run(userId, payload.name, `STU-${String(userId).padStart(4, '0')}`);
     }
+  }
+
+  expireResetCodes(db = getDatabase()) {
+    db.prepare(`
+      UPDATE password_reset_codes
+      SET status = 'expired'
+      WHERE status = 'issued'
+        AND expiresAt != ''
+        AND expiresAt <= ?
+    `).run(nowIso());
   }
 }
 

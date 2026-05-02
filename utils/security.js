@@ -48,6 +48,27 @@ function hashSessionToken(token) {
     .digest('hex');
 }
 
+function createOneTimeCode() {
+  return crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
+function hashOneTimeCode(code) {
+  return crypto
+    .createHash('sha256')
+    .update(`${String(code || '').trim().toUpperCase()}${getPasswordSpice()}`)
+    .digest('hex');
+}
+
+function verifyOneTimeCode(code, expectedHash) {
+  if (!code || !expectedHash) return false;
+
+  const candidate = Buffer.from(hashOneTimeCode(code), 'hex');
+  const expected = Buffer.from(expectedHash, 'hex');
+
+  if (candidate.length !== expected.length) return false;
+  return crypto.timingSafeEqual(candidate, expected);
+}
+
 function sessionExpiryDate() {
   return new Date(Date.now() + SESSION_TTL_MS).toISOString();
 }
@@ -57,10 +78,13 @@ function nowIso() {
 }
 
 module.exports = {
+  createOneTimeCode,
   createSessionToken,
   hashPassword,
+  hashOneTimeCode,
   hashSessionToken,
   nowIso,
   sessionExpiryDate,
+  verifyOneTimeCode,
   verifyPassword
 };

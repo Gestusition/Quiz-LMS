@@ -46,6 +46,8 @@ const API = {
 
   login(identifier, password) { return this.request('/auth/login', { method: 'POST', body: { identifier, password } }); },
   changeCredentials(data) { return this.request('/auth/change-credentials', { method: 'POST', body: data }); },
+  requestPasswordReset(username) { return this.request('/auth/password-reset/request', { method: 'POST', body: { username } }); },
+  completePasswordReset(data) { return this.request('/auth/password-reset/complete', { method: 'POST', body: data }); },
   logout() { return this.request('/auth/logout', { method: 'POST' }); },
   me() { return this.request('/auth/me'); },
 
@@ -58,6 +60,8 @@ const API = {
   createUser(data) { return this.request('/users', { method: 'POST', body: data }); },
   updateUser(id, data) { return this.request(`/users/${id}`, { method: 'PUT', body: data }); },
   deleteUser(id) { return this.request(`/users/${id}`, { method: 'DELETE' }); },
+  getPasswordResetRequests() { return this.request('/users/password-reset-requests'); },
+  issuePasswordResetCode(id) { return this.request(`/users/${id}/password-reset-code`, { method: 'POST' }); },
 
   getCourses(filters = {}) {
     const params = new URLSearchParams();

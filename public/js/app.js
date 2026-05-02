@@ -119,7 +119,7 @@ const App = {
           <form id="login-form" class="stack">
             <label class="form-field">
               <span>Username or email</span>
-              <input class="form-input" id="login-identifier" type="text" value="admin" autocomplete="username" required>
+              <input class="form-input" id="login-identifier" type="text" autocomplete="username" required>
             </label>
             <label class="form-field">
               <span>Password</span>
@@ -127,23 +127,17 @@ const App = {
             </label>
             <button class="btn btn-primary full" type="submit">Sign in</button>
           </form>
-          <div class="demo-logins">
-            <button data-identifier="admin">Admin</button>
-            <button data-identifier="teacher">Teacher</button>
-            <button data-identifier="student">Student</button>
+          <div class="login-actions">
+            <button class="link-button" id="btn-forgot-password" type="button">Forgot password?</button>
+            <button class="link-button" id="btn-use-reset-code" type="button">Use reset code</button>
           </div>
         </div>
       </section>
     `);
 
     document.getElementById('login-form').addEventListener('submit', event => this.login(event));
-    document.querySelectorAll('.demo-logins button').forEach(button => {
-      button.addEventListener('click', () => {
-        document.getElementById('login-identifier').value = button.dataset.identifier;
-        document.getElementById('login-password').value = '';
-        document.getElementById('login-password').focus();
-      });
-    });
+    document.getElementById('btn-forgot-password').addEventListener('click', () => this.showPasswordResetRequest());
+    document.getElementById('btn-use-reset-code').addEventListener('click', () => this.showPasswordResetComplete());
   },
 
   async login(event) {
@@ -176,6 +170,71 @@ const App = {
     this.renderShell();
     location.hash = '#/';
     this.renderLogin();
+  },
+
+  showPasswordResetRequest() {
+    const currentIdentifier = document.getElementById('login-identifier')?.value || '';
+    this.openModal('Request password reset', `
+      <form id="reset-request-form" class="stack">
+        ${this.input('reset-request-username', 'Username', currentIdentifier, 'text', 'student.username')}
+        <p class="muted">The request will appear for an admin. Admins can issue a one-time code for teacher and student accounts.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" type="submit">Send request</button>
+        </div>
+      </form>
+    `);
+
+    document.getElementById('reset-request-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      try {
+        const result = await API.requestPasswordReset(value('reset-request-username'));
+        this.closeModal();
+        this.toast(result.message, 'success');
+      } catch (err) {
+        this.toast(err.message, 'error');
+      }
+    });
+  },
+
+  showPasswordResetComplete() {
+    const currentIdentifier = document.getElementById('login-identifier')?.value || '';
+    this.openModal('Use reset code', `
+      <form id="reset-complete-form" class="stack">
+        ${this.input('reset-username', 'Username', currentIdentifier, 'text', 'student.username')}
+        ${this.input('reset-code', 'One-time code', '', 'text', 'A1B2C3D4')}
+        ${this.input('reset-new-password', 'New password', '', 'password')}
+        ${this.input('reset-confirm-password', 'Confirm new password', '', 'password')}
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" type="submit">Update password</button>
+        </div>
+      </form>
+    `);
+
+    document.getElementById('reset-complete-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const username = value('reset-username');
+      const newPassword = value('reset-new-password');
+      if (newPassword !== value('reset-confirm-password')) {
+        this.toast('New password confirmation does not match.', 'error');
+        return;
+      }
+
+      try {
+        const result = await API.completePasswordReset({
+          username,
+          code: value('reset-code'),
+          newPassword
+        });
+        this.closeModal();
+        const loginIdentifier = document.getElementById('login-identifier');
+        if (loginIdentifier) loginIdentifier.value = username;
+        this.toast(result.message, 'success');
+      } catch (err) {
+        this.toast(err.message, 'error');
+      }
+    });
   },
 
   renderCredentialChange() {
@@ -472,38 +531,56 @@ const App = {
     }
   },
 
-  async renderUsers() {
+  async renderUsers(filters = {}) {
     if (this.user.role !== 'admin') return this.setApp(this.emptyBlock('Admin access is required.'));
     this.setApp(this.loading('Loading users'));
     try {
-      const users = await API.getUsers();
+      const [users, resetRequests] = await Promise.all([
+        API.getUsers(filters),
+        API.getPasswordResetRequests()
+      ]);
       this.setApp(`
         <header class="page-header">
           <div><h1>Users</h1><p>${users.length} accounts</p></div>
           <button class="btn btn-primary" id="btn-new-user">New User</button>
         </header>
         <section class="panel">
+          <div class="toolbar user-toolbar">
+            <input class="form-input" id="user-search" value="${this.esc(filters.search || '')}" placeholder="Search users">
+            <select class="form-select" id="user-role-filter">
+              ${['', 'admin', 'teacher', 'student'].map(role =>
+                `<option value="${role}" ${filters.role === role ? 'selected' : ''}>${role || 'all roles'}</option>`
+              ).join('')}
+            </select>
+          </div>
           <div class="table-wrap">
             <table class="table">
               <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
-              <tbody>${users.map(user => `
-                <tr>
-                  <td>${this.esc(user.name)}</td>
-                  <td>${this.esc(user.username)}</td>
-                  <td>${this.esc(user.email)}</td>
-                  <td><span class="role-badge">${this.esc(user.role)}</span></td>
-                  <td>${this.esc(user.status)}</td>
-                  <td class="table-actions">
-                    <button class="btn btn-ghost btn-sm" onclick="App.showUserForm(${user.id})">Edit</button>
-                    ${user.id !== this.user.id ? `<button class="btn btn-danger btn-sm" onclick="App.deleteUser(${user.id})">Delete</button>` : ''}
-                  </td>
-                </tr>
-              `).join('')}</tbody>
+              <tbody>${users.map(user => this.userTableRow(user)).join('') || '<tr><td colspan="6">No users found.</td></tr>'}</tbody>
             </table>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Password reset requests</h2>
+            <span>${resetRequests.length} active</span>
+          </div>
+          <div class="list">
+            ${resetRequests.map(request => this.resetRequestRow(request)).join('') || this.emptyLine('No active reset requests.')}
           </div>
         </section>
       `);
       document.getElementById('btn-new-user').addEventListener('click', () => this.showUserForm());
+      let searchTimer;
+      const refresh = () => this.renderUsers({
+        search: value('user-search'),
+        role: value('user-role-filter')
+      });
+      document.getElementById('user-search').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(refresh, 250);
+      });
+      document.getElementById('user-role-filter').addEventListener('change', refresh);
     } catch (err) {
       this.renderError(err);
     }
@@ -946,6 +1023,23 @@ const App = {
     }
   },
 
+  async issuePasswordResetCode(id) {
+    try {
+      const reset = await API.issuePasswordResetCode(id);
+      this.openModal('One-time reset code', `
+        <div class="stack">
+          <p class="muted">Give this code to ${this.esc(reset.name)}. It is shown only once and expires at ${this.esc(this.formatDate(reset.expiresAt))}.</p>
+          <div class="reset-code">${this.esc(reset.code)}</div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-primary" onclick="App.closeModal(); App.renderUsers()">Done</button>
+          </div>
+        </div>
+      `);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
   async deleteCategory(id) {
     if (!confirm('Delete this category and its questions?')) return;
     try {
@@ -1077,6 +1171,41 @@ const App = {
       <div class="list-row">
         <div><strong>${title}</strong><small>${this.esc(item.type)} - ${this.esc(item.description || '')}</small></div>
         ${manager ? `<button class="btn btn-ghost btn-sm" onclick="App.deleteResource(${item.id})">Delete</button>` : ''}
+      </div>
+    `;
+  },
+
+  userTableRow(user) {
+    const canIssueReset = ['teacher', 'student'].includes(user.role) && user.status === 'active';
+    return `
+      <tr>
+        <td>${this.esc(user.name)}</td>
+        <td>${this.esc(user.username)}</td>
+        <td>${this.esc(user.email)}</td>
+        <td><span class="role-badge">${this.esc(user.role)}</span></td>
+        <td>${this.esc(user.status)}</td>
+        <td class="table-actions">
+          ${canIssueReset ? `<button class="btn btn-ghost btn-sm" onclick="App.issuePasswordResetCode(${user.id})">Reset code</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="App.showUserForm(${user.id})">Edit</button>
+          ${user.id !== this.user.id ? `<button class="btn btn-danger btn-sm" onclick="App.deleteUser(${user.id})">Delete</button>` : ''}
+        </td>
+      </tr>
+    `;
+  },
+
+  resetRequestRow(request) {
+    const detail = `${request.username} - ${request.email} (${request.role})`;
+    const status = request.status === 'issued' && request.expiresAt
+      ? `issued, expires ${this.formatDate(request.expiresAt)}`
+      : request.status;
+
+    return `
+      <div class="list-row">
+        <div>
+          <strong>${this.esc(request.name)}</strong>
+          <small>${this.esc(detail)} - ${this.esc(status)}</small>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="App.issuePasswordResetCode(${request.userId})">Issue code</button>
       </div>
     `;
   },
