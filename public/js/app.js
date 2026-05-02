@@ -996,12 +996,13 @@ const App = {
         status: value('user-status')
       };
       const newPassword = value('user-password');
+      if (newPassword) {
+        data.password = newPassword;
+      }
       try {
         if (id) {
           await API.updateUser(id, data);
-          if (newPassword) await API.updateUserPassword(id, newPassword);
         } else {
-          data.password = newPassword;
           await API.createUser(data);
         }
         this.closeModal();
