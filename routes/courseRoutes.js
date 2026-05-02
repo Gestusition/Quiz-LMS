@@ -3,7 +3,8 @@ const router = express.Router();
 const courseService = require('../services/courseService');
 const contentService = require('../services/contentService');
 const quizService = require('../services/quizService');
-const { getDatabase } = require('../database/db');
+const enrollmentRepository = require('../repositories/enrollmentRepository');
+const contentRepository = require('../repositories/contentRepository');
 const { requireAuth, requireRole, canAccessCourse, canManageCourse } = require('../middleware/auth');
 
 router.use(requireAuth);
@@ -30,15 +31,11 @@ function requireCourseManager(req, res, next) {
 }
 
 function enrollmentCourseId(enrollmentId) {
-  const db = getDatabase();
-  const enrollment = db.prepare('SELECT courseId FROM enrollments WHERE id = ?').get(enrollmentId);
-  return enrollment ? enrollment.courseId : null;
+  return enrollmentRepository.findCourseIdByEnrollmentId(enrollmentId);
 }
 
 function contentCourseId(table, id) {
-  const db = getDatabase();
-  const row = db.prepare(`SELECT courseId FROM ${table} WHERE id = ?`).get(id);
-  return row ? row.courseId : null;
+  return contentRepository.findCourseId(table, id);
 }
 
 /**

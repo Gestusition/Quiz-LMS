@@ -7,7 +7,7 @@ const { requireAuth } = require('../middleware/auth');
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Login with username/email and password
+ *     summary: Login with username, email, or student number and password
  *     tags: [Auth]
  *     security: []
  *     requestBody:

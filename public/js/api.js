@@ -1,4 +1,4 @@
-const API = {
+export const API = {
   BASE: '/api',
 
   token() {
@@ -134,3 +134,5 @@ const API = {
     });
   }
 };
+
+window.API = API;

@@ -8,6 +8,7 @@ const request = require('supertest');
 const app = require('../server');
 
 const TEST_DB = path.join(__dirname, 'test_auth_quiz.db');
+let uniqueUserSuffix = 0;
 
 function removeDbFiles() {
   const files = Object.values(resolveDatabaseFiles(TEST_DB));
@@ -16,6 +17,23 @@ function removeDbFiles() {
       if (fs.existsSync(candidate)) fs.unlinkSync(candidate);
     });
   });
+}
+
+function nextSuffix() {
+  uniqueUserSuffix += 1;
+  return `${Date.now()}-${uniqueUserSuffix}`;
+}
+
+function createAdminSession() {
+  const suffix = nextSuffix();
+  const admin = authService.createUser({
+    name: `Test Admin ${suffix}`,
+    username: `test-admin-${uniqueUserSuffix}`,
+    email: `test-admin-${suffix}@example.com`,
+    role: 'admin',
+    password: 'TestAdmin123!'
+  });
+  return authService.login(admin.username, 'TestAdmin123!');
 }
 
 beforeAll(() => {
@@ -184,6 +202,7 @@ describe('Auth and quiz attempt flow', () => {
       username: 'managed-student',
       email: 'managed-student@example.com',
       role: 'student',
+      studentNumber: 'MNG-0001',
       password: 'ManagedOld123!'
     });
     const adminSession = authService.login(admin.username, 'PasswordAdmin123!');
@@ -201,6 +220,139 @@ describe('Auth and quiz attempt flow', () => {
     expect(stored.passwordHash).not.toBe('ManagedNew123!');
     expect(stored.passwordSalt).not.toBe('ManagedNew123!');
     expect(stored.passwordHash).toMatch(/^[0-9a-f]{128}$/i);
+  });
+
+  test('admin can create a student with studentNumber and cohort', async () => {
+    const adminSession = createAdminSession();
+    const response = await request(app)
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .send({
+        name: 'Academic Student',
+        username: 'academic-student',
+        email: 'academic-student@example.com',
+        role: 'student',
+        password: 'Academic123!',
+        studentNumber: 'ACD-1001',
+        cohort: '2026'
+      })
+      .expect(201);
+
+    expect(response.body.studentNumber).toBe('ACD-1001');
+    expect(response.body.cohort).toBe('2026');
+  });
+
+  test('duplicate studentNumber is rejected', async () => {
+    const adminSession = createAdminSession();
+    authService.createUser({
+      name: 'Duplicate Seed Student',
+      username: 'duplicate-seed-student',
+      email: 'duplicate-seed-student@example.com',
+      role: 'student',
+      password: 'Duplicate123!',
+      studentNumber: 'DUP-1001'
+    });
+
+    await request(app)
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .send({
+        name: 'Duplicate Student',
+        username: 'duplicate-student-number',
+        email: 'duplicate-student-number@example.com',
+        role: 'student',
+        password: 'Duplicate123!',
+        studentNumber: 'DUP-1001'
+      })
+      .expect(400)
+      .expect(response => {
+        expect(response.body.error).toMatch(/student number already exists/i);
+      });
+  });
+
+  test('student can log in using studentNumber', () => {
+    const student = authService.createUser({
+      name: 'Number Login Student',
+      username: 'number-login-student',
+      email: 'number-login-student@example.com',
+      role: 'student',
+      password: 'NumberLogin123!',
+      studentNumber: 'LOGIN-1001',
+      cohort: '2027'
+    });
+
+    const session = authService.login('LOGIN-1001', 'NumberLogin123!');
+    expect(session.user.id).toBe(student.id);
+    expect(session.user.studentNumber).toBe('LOGIN-1001');
+  });
+
+  test('password reset request can identify studentNumber', () => {
+    authService.createUser({
+      name: 'Reset Number Student',
+      username: 'reset-number-student',
+      email: 'reset-number-student@example.com',
+      role: 'student',
+      password: 'ResetNumber123!',
+      studentNumber: 'RESET-1001'
+    });
+
+    const result = authService.requestPasswordReset('RESET-1001');
+    expect(result.message).toMatch(/admin reset request/);
+
+    const pending = authService.getPasswordResetRequests();
+    expect(pending.some(request => request.username === 'reset-number-student')).toBe(true);
+  });
+
+  test('admin user search can find a student by studentNumber', async () => {
+    const adminSession = createAdminSession();
+    authService.createUser({
+      name: 'Search Number Student',
+      username: 'search-number-student',
+      email: 'search-number-student@example.com',
+      role: 'student',
+      password: 'SearchNumber123!',
+      studentNumber: 'SEARCH-1001',
+      cohort: '2028'
+    });
+
+    await request(app)
+      .get('/api/users?search=SEARCH-1001')
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(user => user.username === 'search-number-student')).toBe(true);
+        expect(response.body[0]).toHaveProperty('studentNumber');
+      });
+  });
+
+  test('course participants include studentNumber', async () => {
+    const db = getDatabase();
+    const adminSession = createAdminSession();
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+
+    await request(app)
+      .get(`/api/courses/${course.id}/participants`)
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .expect(200)
+      .expect(response => {
+        const student = response.body.find(participant => participant.courseRole === 'student');
+        expect(student.studentNumber).toMatch(/^STU-/);
+      });
+  });
+
+  test('gradebook includes studentNumber', async () => {
+    const db = getDatabase();
+    const adminSession = createAdminSession();
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+
+    await request(app)
+      .get(`/api/courses/${course.id}/gradebook`)
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .expect(200)
+      .expect(response => {
+        expect(response.body.students.length).toBeGreaterThan(0);
+        expect(response.body.students[0].studentNumber).toMatch(/^STU-/);
+      });
   });
 
   test('student can submit a published quiz attempt for server-side grading', () => {

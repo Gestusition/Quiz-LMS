@@ -1,106 +1,48 @@
-const { getDatabase } = require('../database/db');
+const courseRepository = require('../repositories/courseRepository');
+const questionRepository = require('../repositories/questionRepository');
+const quizRepository = require('../repositories/quizRepository');
+const { quizStatusValues } = require('../constants/enums');
+const { validateQuiz } = require('../validators/quizValidators');
+const {
+  serializeQuiz,
+  serializeQuizQuestion
+} = require('../serializers/quizSerializer');
+const { serializeGradebook } = require('../serializers/gradebookSerializer');
 const { nowIso } = require('../utils/security');
 
 class QuizService {
   getAll(user, filters = {}) {
-    const db = getDatabase();
-    let query = `
-      SELECT q.*,
-        c.title as courseTitle,
-        c.code as courseCode,
-        COUNT(DISTINCT qq.questionId) as questionCount,
-        COALESCE(SUM(qq.points), 0) as maxScore
-      FROM quizzes q
-      JOIN courses c ON c.id = q.courseId
-      LEFT JOIN quiz_questions qq ON qq.quizId = q.id
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (user.role !== 'admin') {
-      query += ` AND q.courseId IN (
-        SELECT courseId FROM enrollments WHERE userId = ? AND status = 'active'
-      )`;
-      params.push(user.id);
-    }
-    if (user.role === 'student') {
-      query += " AND q.status IN ('published', 'closed')";
-    }
-    if (filters.courseId) {
-      query += ' AND q.courseId = ?';
-      params.push(filters.courseId);
-    }
-    if (filters.status && ['draft', 'published', 'closed'].includes(filters.status)) {
-      query += ' AND q.status = ?';
-      params.push(filters.status);
-    }
-    if (filters.search) {
-      query += ' AND q.title LIKE ?';
-      params.push(`%${filters.search}%`);
-    }
-
-    query += ' GROUP BY q.id ORDER BY q.createdAt DESC';
-    const quizzes = db.prepare(query).all(...params);
-    return quizzes.map(quiz => this.withAvailability(quiz));
+    return quizRepository.list(user, filters, quizStatusValues).map(serializeQuiz);
   }
 
   getById(id, options = {}) {
-    const db = getDatabase();
-    const quiz = db.prepare(`
-      SELECT q.*, c.title as courseTitle, c.code as courseCode
-      FROM quizzes q
-      JOIN courses c ON c.id = q.courseId
-      WHERE q.id = ?
-    `).get(id);
-
+    const quiz = serializeQuiz(quizRepository.getById(id));
     if (!quiz) return null;
 
-    const result = this.withAvailability(quiz);
     if (options.includeQuestions) {
-      result.questions = this.getQuizQuestions(id, { includeCorrect: !!options.includeCorrect });
+      quiz.questions = this.getQuizQuestions(id, { includeCorrect: !!options.includeCorrect });
     }
-    return result;
+    return quiz;
   }
 
   create(data, user) {
-    const payload = this.validateQuiz(data);
-    const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE id = ?').get(payload.courseId);
+    const payload = validateQuiz(data);
+    const course = courseRepository.findById(payload.courseId);
     if (!course) {
       throw new Error('Course not found.');
     }
 
-    const result = db.prepare(`
-      INSERT INTO quizzes (
-        courseId, title, description, status, openAt, closeAt, timeLimitMinutes,
-        attemptsAllowed, shuffleQuestions, showCorrectAnswers, createdBy
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      payload.courseId,
-      payload.title,
-      payload.description,
-      payload.status,
-      payload.openAt,
-      payload.closeAt,
-      payload.timeLimitMinutes,
-      payload.attemptsAllowed,
-      payload.shuffleQuestions ? 1 : 0,
-      payload.showCorrectAnswers ? 1 : 0,
-      user.id
-    );
-
+    const result = quizRepository.insert(payload, user.id);
     return this.getById(result.lastInsertRowid, { includeQuestions: true, includeCorrect: true });
   }
 
   update(id, data) {
-    const db = getDatabase();
-    const existing = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(id);
+    const existing = quizRepository.findById(id);
     if (!existing) {
       throw new Error('Quiz not found.');
     }
 
-    const payload = this.validateQuiz({
+    const payload = validateQuiz({
       courseId: data.courseId !== undefined ? data.courseId : existing.courseId,
       title: data.title !== undefined ? data.title : existing.title,
       description: data.description !== undefined ? data.description : existing.description,
@@ -113,38 +55,17 @@ class QuizService {
       showCorrectAnswers: data.showCorrectAnswers !== undefined ? data.showCorrectAnswers : !!existing.showCorrectAnswers
     });
 
-    db.prepare(`
-      UPDATE quizzes
-      SET courseId = ?, title = ?, description = ?, status = ?, openAt = ?, closeAt = ?,
-        timeLimitMinutes = ?, attemptsAllowed = ?, shuffleQuestions = ?, showCorrectAnswers = ?,
-        updatedAt = ?
-      WHERE id = ?
-    `).run(
-      payload.courseId,
-      payload.title,
-      payload.description,
-      payload.status,
-      payload.openAt,
-      payload.closeAt,
-      payload.timeLimitMinutes,
-      payload.attemptsAllowed,
-      payload.shuffleQuestions ? 1 : 0,
-      payload.showCorrectAnswers ? 1 : 0,
-      nowIso(),
-      id
-    );
-
+    quizRepository.update(id, payload, nowIso());
     return this.getById(id, { includeQuestions: true, includeCorrect: true });
   }
 
   delete(id) {
-    const db = getDatabase();
-    const existing = db.prepare('SELECT id FROM quizzes WHERE id = ?').get(id);
+    const existing = quizRepository.findById(id);
     if (!existing) {
       throw new Error('Quiz not found.');
     }
 
-    db.prepare('DELETE FROM quizzes WHERE id = ?').run(id);
+    quizRepository.deleteById(id);
     return true;
   }
 
@@ -158,20 +79,12 @@ class QuizService {
       throw new Error('At least one question is required.');
     }
 
-    const db = getDatabase();
-    const quiz = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(quizId);
+    const quiz = quizRepository.findById(quizId);
     if (!quiz) {
       throw new Error('Quiz not found.');
     }
 
-    const placeholders = uniqueIds.map(() => '?').join(',');
-    const questions = db.prepare(`
-      SELECT q.id, q.points, c.courseId
-      FROM questions q
-      JOIN categories c ON c.id = q.categoryId
-      WHERE q.id IN (${placeholders})
-    `).all(...uniqueIds);
-
+    const questions = questionRepository.findByIdsWithCourse(uniqueIds);
     if (questions.length !== uniqueIds.length) {
       throw new Error('One or more questions were not found.');
     }
@@ -179,49 +92,16 @@ class QuizService {
       throw new Error('All quiz questions must belong to the same course as the quiz.');
     }
 
-    db.exec('BEGIN TRANSACTION');
-    try {
-      db.prepare('DELETE FROM quiz_questions WHERE quizId = ?').run(quizId);
-      const insert = db.prepare(`
-        INSERT INTO quiz_questions (quizId, questionId, points, position)
-        VALUES (?, ?, ?, ?)
-      `);
-      uniqueIds.forEach((questionId, index) => {
-        const question = questions.find(item => item.id === questionId);
-        insert.run(quizId, questionId, question.points || 1, index + 1);
-      });
-      db.exec('COMMIT');
-    } catch (e) {
-      db.exec('ROLLBACK');
-      throw e;
-    }
+    quizRepository.withTransaction(() => {
+      quizRepository.replaceQuestions(quizId, questions, uniqueIds);
+    });
 
     return this.getById(quizId, { includeQuestions: true, includeCorrect: true });
   }
 
   getQuizQuestions(quizId, options = {}) {
-    const db = getDatabase();
-    const rows = db.prepare(`
-      SELECT q.*, c.name as categoryName, qq.points as quizPoints, qq.position
-      FROM quiz_questions qq
-      JOIN questions q ON q.id = qq.questionId
-      LEFT JOIN categories c ON c.id = q.categoryId
-      WHERE qq.quizId = ?
-      ORDER BY qq.position ASC, qq.id ASC
-    `).all(quizId);
-
-    return rows.map(row => {
-      const question = {
-        ...row,
-        points: row.quizPoints,
-        options: JSON.parse(row.options || '[]')
-      };
-      delete question.quizPoints;
-      if (!options.includeCorrect) {
-        delete question.correctAnswer;
-      }
-      return question;
-    });
+    return quizRepository.getQuestions(quizId)
+      .map(row => serializeQuizQuestion(row, options));
   }
 
   startAttempt(quizId, user) {
@@ -229,7 +109,6 @@ class QuizService {
       throw new Error('Only student accounts can start quiz attempts.');
     }
 
-    const db = getDatabase();
     const quiz = this.getById(quizId, { includeQuestions: true, includeCorrect: false });
     if (!quiz) {
       throw new Error('Quiz not found.');
@@ -244,37 +123,25 @@ class QuizService {
       throw new Error('This quiz has no questions yet.');
     }
 
-    const active = db.prepare(`
-      SELECT id FROM quiz_attempts
-      WHERE quizId = ? AND userId = ? AND status = 'in_progress'
-      ORDER BY attemptNumber DESC LIMIT 1
-    `).get(quizId, user.id);
+    const active = quizRepository.findActiveAttempt(quizId, user.id);
     if (active) {
       return this.getAttempt(active.id, user, { includeQuestions: true });
     }
 
-    const submittedCount = db.prepare(`
-      SELECT COUNT(*) as count FROM quiz_attempts
-      WHERE quizId = ? AND userId = ? AND status = 'submitted'
-    `).get(quizId, user.id).count;
-
+    const submittedCount = quizRepository.countSubmittedAttempts(quizId, user.id);
     if (submittedCount >= quiz.attemptsAllowed) {
       throw new Error('No attempts remaining for this quiz.');
     }
 
     const attemptNumber = submittedCount + 1;
     const maxScore = quiz.questions.reduce((sum, question) => sum + Number(question.points || 1), 0);
-    const result = db.prepare(`
-      INSERT INTO quiz_attempts (quizId, userId, attemptNumber, maxScore)
-      VALUES (?, ?, ?, ?)
-    `).run(quizId, user.id, attemptNumber, maxScore);
+    const result = quizRepository.createAttempt(quizId, user.id, attemptNumber, maxScore);
 
     return this.getAttempt(result.lastInsertRowid, user, { includeQuestions: true });
   }
 
   submitAttempt(attemptId, user, payload) {
-    const db = getDatabase();
-    const attempt = db.prepare('SELECT * FROM quiz_attempts WHERE id = ?').get(attemptId);
+    const attempt = quizRepository.findAttemptById(attemptId);
     if (!attempt) {
       throw new Error('Attempt not found.');
     }
@@ -294,20 +161,15 @@ class QuizService {
     let score = 0;
     const maxScore = quiz.questions.reduce((sum, question) => sum + Number(question.points || 1), 0);
 
-    db.exec('BEGIN TRANSACTION');
-    try {
-      db.prepare('DELETE FROM attempt_answers WHERE attemptId = ?').run(attemptId);
-      const insertAnswer = db.prepare(`
-        INSERT INTO attempt_answers (attemptId, questionId, answer, isCorrect, pointsAwarded)
-        VALUES (?, ?, ?, ?, ?)
-      `);
+    quizRepository.withTransaction(() => {
+      quizRepository.deleteAttemptAnswers(attemptId);
 
       quiz.questions.forEach(question => {
         const answer = answers.get(Number(question.id)) || '';
         const isCorrect = this.isAnswerCorrect(question, answer);
         const pointsAwarded = isCorrect ? Number(question.points || 1) : 0;
         score += pointsAwarded;
-        insertAnswer.run(attemptId, question.id, String(answer), isCorrect ? 1 : 0, pointsAwarded);
+        quizRepository.insertAttemptAnswer(attemptId, question.id, answer, isCorrect, pointsAwarded);
       });
 
       const percentage = maxScore > 0 ? Math.round((score / maxScore) * 10000) / 100 : 0;
@@ -315,30 +177,14 @@ class QuizService {
       const timeSpentSeconds = Number(payload.timeSpentSeconds) ||
         Math.max(0, Math.round((Date.now() - startedAt) / 1000));
 
-      db.prepare(`
-        UPDATE quiz_attempts
-        SET status = 'submitted', submittedAt = ?, score = ?, maxScore = ?, percentage = ?, timeSpentSeconds = ?
-        WHERE id = ?
-      `).run(nowIso(), score, maxScore, percentage, timeSpentSeconds, attemptId);
-      db.exec('COMMIT');
-    } catch (e) {
-      db.exec('ROLLBACK');
-      throw e;
-    }
+      quizRepository.submitAttempt(attemptId, nowIso(), score, maxScore, percentage, timeSpentSeconds);
+    });
 
     return this.getAttempt(attemptId, user, { includeAnswers: true, includeQuestions: true });
   }
 
   getAttempt(attemptId, user, options = {}) {
-    const db = getDatabase();
-    const attempt = db.prepare(`
-      SELECT a.*, q.title as quizTitle, q.courseId, q.showCorrectAnswers, u.name as studentName, u.email as studentEmail
-      FROM quiz_attempts a
-      JOIN quizzes q ON q.id = a.quizId
-      JOIN users u ON u.id = a.userId
-      WHERE a.id = ?
-    `).get(attemptId);
-
+    const attempt = quizRepository.getAttempt(attemptId);
     if (!attempt) return null;
 
     if (user.role === 'student' && attempt.userId !== user.id) {
@@ -352,13 +198,7 @@ class QuizService {
       result.questions = this.getQuizQuestions(attempt.quizId, { includeCorrect: canSeeCorrect });
     }
     if (options.includeAnswers) {
-      result.answers = db.prepare(`
-        SELECT aa.*, q.correctAnswer
-        FROM attempt_answers aa
-        JOIN questions q ON q.id = aa.questionId
-        WHERE aa.attemptId = ?
-        ORDER BY aa.id ASC
-      `).all(attemptId);
+      result.answers = quizRepository.getAttemptAnswers(attemptId);
       if (user.role === 'student' && Number(attempt.showCorrectAnswers) !== 1) {
         result.answers = result.answers.map(answer => {
           const copy = { ...answer };
@@ -372,48 +212,16 @@ class QuizService {
   }
 
   getAttemptsForQuiz(quizId, user) {
-    const db = getDatabase();
-    let query = `
-      SELECT a.*, u.name as studentName, u.email as studentEmail
-      FROM quiz_attempts a
-      JOIN users u ON u.id = a.userId
-      WHERE a.quizId = ?
-    `;
-    const params = [quizId];
-
-    if (user.role === 'student') {
-      query += ' AND a.userId = ?';
-      params.push(user.id);
-    }
-
-    query += ' ORDER BY a.startedAt DESC';
-    return db.prepare(query).all(...params);
+    return quizRepository.getAttemptsForQuiz(quizId, user);
   }
 
   getGradebook(courseId) {
-    const db = getDatabase();
-    const quizzes = db.prepare(`
-      SELECT id, title
-      FROM quizzes
-      WHERE courseId = ?
-      ORDER BY createdAt ASC
-    `).all(courseId);
-
-    const students = db.prepare(`
-      SELECT u.id, u.name, u.email
-      FROM enrollments e
-      JOIN users u ON u.id = e.userId
-      WHERE e.courseId = ? AND e.role = 'student' AND e.status = 'active'
-      ORDER BY u.name ASC
-    `).all(courseId);
+    const quizzes = quizRepository.getGradebookQuizzes(courseId);
+    const students = quizRepository.getGradebookStudents(courseId);
 
     const grades = students.map(student => {
       const quizGrades = quizzes.map(quiz => {
-        const best = db.prepare(`
-          SELECT MAX(percentage) as percentage, MAX(score) as score, MAX(maxScore) as maxScore
-          FROM quiz_attempts
-          WHERE quizId = ? AND userId = ? AND status = 'submitted'
-        `).get(quiz.id, student.id);
+        const best = quizRepository.getBestGrade(quiz.id, student.id);
 
         return {
           quizId: quiz.id,
@@ -432,69 +240,11 @@ class QuizService {
       return { ...student, average, quizzes: quizGrades };
     });
 
-    return { quizzes, students: grades };
-  }
-
-  validateQuiz(data) {
-    const courseId = Number(data.courseId);
-    const title = String(data.title || '').trim();
-    const description = String(data.description || '').trim();
-    const status = data.status ? String(data.status).trim() : 'draft';
-    const openAt = data.openAt ? String(data.openAt).trim() : '';
-    const closeAt = data.closeAt ? String(data.closeAt).trim() : '';
-    const timeLimitMinutes = Number(data.timeLimitMinutes || 0);
-    const attemptsAllowed = Number(data.attemptsAllowed || 1);
-
-    if (!courseId) {
-      throw new Error('Course is required.');
-    }
-    if (!title || title.length > 160) {
-      throw new Error('Quiz title is required and must be 160 characters or less.');
-    }
-    if (description.length > 1000) {
-      throw new Error('Quiz description must be 1000 characters or less.');
-    }
-    if (!['draft', 'published', 'closed'].includes(status)) {
-      throw new Error('Quiz status must be draft, published, or closed.');
-    }
-    if (!Number.isInteger(timeLimitMinutes) || timeLimitMinutes < 0 || timeLimitMinutes > 600) {
-      throw new Error('Time limit must be between 0 and 600 minutes.');
-    }
-    if (!Number.isInteger(attemptsAllowed) || attemptsAllowed < 1 || attemptsAllowed > 20) {
-      throw new Error('Attempts allowed must be between 1 and 20.');
-    }
-    if (openAt && closeAt && new Date(openAt).getTime() > new Date(closeAt).getTime()) {
-      throw new Error('Open date must be before close date.');
-    }
-
-    return {
-      courseId,
-      title,
-      description,
-      status,
-      openAt,
-      closeAt,
-      timeLimitMinutes,
-      attemptsAllowed,
-      shuffleQuestions: !!data.shuffleQuestions,
-      showCorrectAnswers: data.showCorrectAnswers !== false
-    };
+    return serializeGradebook({ quizzes, students: grades });
   }
 
   withAvailability(quiz) {
-    const now = Date.now();
-    const opensAt = quiz.openAt ? new Date(quiz.openAt).getTime() : null;
-    const closesAt = quiz.closeAt ? new Date(quiz.closeAt).getTime() : null;
-    const isOpen = quiz.status === 'published' &&
-      (!opensAt || opensAt <= now) &&
-      (!closesAt || closesAt >= now);
-
-    return {
-      ...quiz,
-      shuffleQuestions: !!quiz.shuffleQuestions,
-      showCorrectAnswers: !!quiz.showCorrectAnswers,
-      isOpen
-    };
+    return serializeQuiz(quiz);
   }
 
   isAnswerCorrect(question, answer) {

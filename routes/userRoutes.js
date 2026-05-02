@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const authService = require('../services/authService');
+const userService = require('../services/userService');
 const { validateId } = require('../middleware/validation');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
@@ -23,7 +23,7 @@ router.use(requireRole('admin'));
  *         name: search
  *         schema:
  *           type: string
- *         description: Search by name, username, or email
+ *         description: Search by name, username, email, student number, cohort, or department
  *     responses:
  *       200:
  *         description: List of users
@@ -38,7 +38,7 @@ router.use(requireRole('admin'));
  */
 router.get('/', (req, res) => {
   try {
-    res.json(authService.getAllUsers({
+    res.json(userService.getAllUsers({
       role: req.query.role,
       search: req.query.search
     }));
@@ -97,7 +97,7 @@ router.get('/password-reset-requests', (req, res) => {
  */
 router.get('/:id', validateId, (req, res) => {
   try {
-    const user = authService.getUserById(req.params.id);
+    const user = userService.getUserById(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found.' });
     res.json(user);
   } catch (err) {
@@ -129,7 +129,7 @@ router.get('/:id', validateId, (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    res.status(201).json(authService.createUser(req.body));
+    res.status(201).json(userService.createUser(req.body));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -167,7 +167,7 @@ router.post('/', (req, res) => {
  */
 router.put('/:id', validateId, (req, res) => {
   try {
-    res.json(authService.updateUser(req.params.id, req.body));
+    res.json(userService.updateUser(req.params.id, req.body));
   } catch (err) {
     if (err.message === 'User not found.') return res.status(404).json({ error: err.message });
     res.status(400).json({ error: err.message });
@@ -206,7 +206,7 @@ router.put('/:id', validateId, (req, res) => {
  */
 router.put('/:id/password', validateId, (req, res) => {
   try {
-    res.json(authService.setUserPassword(req.params.id, req.body.password));
+    res.json(userService.setUserPassword(req.params.id, req.body.password));
   } catch (err) {
     if (err.message === 'User not found.') return res.status(404).json({ error: err.message });
     res.status(400).json({ error: err.message });
@@ -275,7 +275,7 @@ router.delete('/:id', validateId, (req, res) => {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ error: 'You cannot delete your own account.' });
     }
-    authService.deleteUser(req.params.id);
+    userService.deleteUser(req.params.id);
     res.json({ message: 'User deleted successfully.' });
   } catch (err) {
     if (err.message === 'User not found.') return res.status(404).json({ error: err.message });

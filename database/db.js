@@ -276,10 +276,20 @@ function createTables() {
 function migrateExistingTables() {
   ensureColumn('users', 'users', 'username', 'username TEXT');
   ensureColumn('users', 'users', 'mustChangeCredentials', 'mustChangeCredentials INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('admin', 'admin_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
+  ensureColumn('admin', 'admin_profiles', 'securityNotes', 'securityNotes TEXT DEFAULT \'\'');
+  ensureColumn('admin', 'admin_profiles', 'lastCredentialRotationAt', 'lastCredentialRotationAt TEXT DEFAULT \'\'');
+  ensureColumn('teacher', 'teacher_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
+  ensureColumn('teacher', 'teacher_profiles', 'department', 'department TEXT DEFAULT \'\'');
+  ensureColumn('teacher', 'teacher_profiles', 'officeHours', 'officeHours TEXT DEFAULT \'\'');
+  ensureColumn('student', 'student_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
+  ensureColumn('student', 'student_profiles', 'studentNumber', 'studentNumber TEXT DEFAULT \'\'');
+  ensureColumn('student', 'student_profiles', 'cohort', 'cohort TEXT DEFAULT \'\'');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
   ensureColumn('assessment', 'questions', 'points', 'points REAL NOT NULL DEFAULT 1');
   ensureColumn('assessment', 'questions', 'createdBy', 'createdBy INTEGER');
   normalizeUserIdentityState();
+  normalizeAcademicProfileState();
   migrateLegacyIdentityDatabase();
 }
 
@@ -318,6 +328,7 @@ function migrateLegacySingleDatabase(dbPath) {
     copyLegacyTable('content', 'announcements');
     copyLegacyTable('content', 'resources');
     normalizeUserIdentityState();
+    normalizeAcademicProfileState();
   } finally {
     db.exec('DETACH DATABASE legacy');
   }
@@ -333,6 +344,7 @@ function migrateLegacyIdentityDatabase() {
     copyTable('legacy_identity', 'users', 'users');
     copyTable('legacy_identity', 'users', 'sessions');
     normalizeUserIdentityState();
+    normalizeAcademicProfileState();
   } finally {
     db.exec('DETACH DATABASE legacy_identity');
   }
@@ -361,6 +373,59 @@ function normalizeUserIdentityState() {
       AND LOWER(email) = LOWER('admin@example.com')
       AND LOWER(username) = LOWER('admin')
   `).run();
+}
+
+function normalizeAcademicProfileState(database = db) {
+  const students = database.prepare(`
+    SELECT u.id, u.name, sp.id as profileId, sp.studentNumber
+    FROM users u
+    LEFT JOIN student_profiles sp ON sp.userId = u.id
+    WHERE u.role = 'student'
+    ORDER BY u.id ASC
+  `).all();
+  const usedStudentNumbers = new Set();
+  const insertStudent = database.prepare(`
+    INSERT INTO student_profiles (userId, displayName, studentNumber, cohort)
+    VALUES (?, ?, ?, '')
+  `);
+  const updateStudentNumber = database.prepare(`
+    UPDATE student_profiles
+    SET studentNumber = ?, updatedAt = datetime('now')
+    WHERE userId = ?
+  `);
+
+  students.forEach(student => {
+    const existing = String(student.studentNumber || '').trim();
+    const normalizedKey = existing.toLowerCase();
+    const valid = /^[A-Za-z0-9._-]{3,32}$/.test(existing);
+    const duplicate = normalizedKey && usedStudentNumbers.has(normalizedKey);
+    const studentNumber = valid && !duplicate
+      ? existing
+      : uniqueStudentNumber(student.id, usedStudentNumbers);
+
+    usedStudentNumbers.add(studentNumber.toLowerCase());
+    if (!student.profileId) {
+      insertStudent.run(student.id, student.name, studentNumber);
+    } else if (studentNumber !== existing) {
+      updateStudentNumber.run(studentNumber, student.id);
+    }
+  });
+
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS student.idx_student_profiles_student_number_ci
+    ON student_profiles(LOWER(studentNumber))
+    WHERE TRIM(studentNumber) != ''
+  `);
+}
+
+function uniqueStudentNumber(userId, used) {
+  let suffix = 0;
+  let candidate = `STU-${String(userId).padStart(4, '0')}`;
+  while (used.has(candidate.toLowerCase())) {
+    suffix += 1;
+    candidate = `STU-${String(userId).padStart(4, '0')}-${suffix}`;
+  }
+  return candidate;
 }
 
 function usernameFromUser(user) {
@@ -437,6 +502,7 @@ function seedDatabase() {
     seedUsers(database);
   }
   ensureRoleProfiles(database);
+  normalizeAcademicProfileState(database);
 
   const courseCount = database.prepare('SELECT COUNT(*) as count FROM courses').get().count;
   if (courseCount === 0) {

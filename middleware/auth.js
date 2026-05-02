@@ -1,5 +1,5 @@
 const authService = require('../services/authService');
-const { getDatabase } = require('../database/db');
+const enrollmentRepository = require('../repositories/enrollmentRepository');
 
 function getBearerToken(req) {
   const header = req.headers.authorization || '';
@@ -50,30 +50,11 @@ function requireRole(roles) {
 }
 
 function canManageCourse(user, courseId) {
-  if (!user) return false;
-  if (user.role === 'admin') return true;
-  if (user.role !== 'teacher') return false;
-
-  const db = getDatabase();
-  const enrollment = db.prepare(`
-    SELECT id FROM enrollments
-    WHERE courseId = ? AND userId = ? AND role = 'teacher' AND status = 'active'
-  `).get(courseId, user.id);
-
-  return !!enrollment;
+  return enrollmentRepository.canManageCourse(user, courseId);
 }
 
 function canAccessCourse(user, courseId) {
-  if (!user) return false;
-  if (user.role === 'admin') return true;
-
-  const db = getDatabase();
-  const enrollment = db.prepare(`
-    SELECT id FROM enrollments
-    WHERE courseId = ? AND userId = ? AND status = 'active'
-  `).get(courseId, user.id);
-
-  return !!enrollment;
+  return enrollmentRepository.canAccessCourse(user, courseId);
 }
 
 function requireCourseAccess(paramName = 'courseId') {

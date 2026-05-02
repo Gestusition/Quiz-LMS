@@ -65,7 +65,7 @@ const options = {
           type: 'object',
           required: ['identifier', 'password'],
           properties: {
-            identifier: { type: 'string', description: 'Username or email' },
+            identifier: { type: 'string', description: 'Username, email, or student number' },
             password: { type: 'string' }
           }
         },
@@ -85,7 +85,12 @@ const options = {
             username: { type: 'string' },
             email: { type: 'string' },
             role: { type: 'string' },
-            mustChangeCredentials: { type: 'integer' }
+            mustChangeCredentials: { type: 'integer' },
+            studentNumber: { type: 'string', description: 'Student profile field, present for students' },
+            cohort: { type: 'string', description: 'Student profile field, present for students' },
+            department: { type: 'string', description: 'Teacher profile field, present for teachers' },
+            officeHours: { type: 'string', description: 'Teacher profile field, present for teachers' },
+            displayName: { type: 'string', description: 'Admin profile field, present for admins' }
           }
         },
         User: {
@@ -98,6 +103,11 @@ const options = {
             role: { type: 'string', enum: ['admin', 'teacher', 'student'] },
             status: { type: 'string', enum: ['active', 'disabled'] },
             mustChangeCredentials: { type: 'integer' },
+            studentNumber: { type: 'string', description: 'Required when role is student' },
+            cohort: { type: 'string' },
+            department: { type: 'string' },
+            officeHours: { type: 'string' },
+            displayName: { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' }
           }
         },
@@ -111,7 +121,12 @@ const options = {
             role: { type: 'string', enum: ['admin', 'teacher', 'student'] },
             password: { type: 'string' },
             status: { type: 'string', enum: ['active', 'disabled'] },
-            mustChangeCredentials: { type: 'boolean' }
+            mustChangeCredentials: { type: 'boolean' },
+            studentNumber: { type: 'string', description: 'Required when role is student; unique across student profiles' },
+            cohort: { type: 'string' },
+            department: { type: 'string' },
+            officeHours: { type: 'string' },
+            displayName: { type: 'string' }
           }
         },
         UpdateUserRequest: {
@@ -123,7 +138,12 @@ const options = {
             role: { type: 'string', enum: ['admin', 'teacher', 'student'] },
             status: { type: 'string', enum: ['active', 'disabled'] },
             mustChangeCredentials: { type: 'boolean' },
-            password: { type: 'string' }
+            password: { type: 'string' },
+            studentNumber: { type: 'string', description: 'Required if resulting role is student and no existing student number exists' },
+            cohort: { type: 'string' },
+            department: { type: 'string' },
+            officeHours: { type: 'string' },
+            displayName: { type: 'string' }
           }
         },
         SetUserPasswordRequest: {
@@ -137,14 +157,14 @@ const options = {
           type: 'object',
           required: ['identifier'],
           properties: {
-            identifier: { type: 'string', description: 'Username or email' }
+            identifier: { type: 'string', description: 'Username, email, or student number' }
           }
         },
         PasswordResetCompleteRequest: {
           type: 'object',
           required: ['username', 'code', 'newPassword'],
           properties: {
-            username: { type: 'string' },
+            username: { type: 'string', description: 'Username, email, or student number' },
             code: { type: 'string' },
             newPassword: { type: 'string' }
           }
@@ -250,7 +270,10 @@ const options = {
             name: { type: 'string' },
             email: { type: 'string' },
             role: { type: 'string', enum: ['admin', 'teacher', 'student'] },
-            status: { type: 'string', enum: ['active', 'disabled'] }
+            status: { type: 'string', enum: ['active', 'disabled'] },
+            studentNumber: { type: 'string', description: 'Present for student participants' },
+            cohort: { type: 'string', description: 'Present for student participants' },
+            department: { type: 'string', description: 'Present for teacher participants' }
           }
         },
         CreateEnrollmentRequest: {
@@ -334,6 +357,8 @@ const options = {
                   id: { type: 'integer' },
                   name: { type: 'string' },
                   email: { type: 'string' },
+                  studentNumber: { type: 'string' },
+                  cohort: { type: 'string' },
                   average: { type: 'number' },
                   quizzes: {
                     type: 'array',
