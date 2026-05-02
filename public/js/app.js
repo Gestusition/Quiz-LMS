@@ -979,7 +979,10 @@ const App = {
         ${this.input('user-email', 'Email', user.email, 'email')}
         <label class="form-field"><span>Role</span><select class="form-select" id="user-role">${['admin', 'teacher', 'student'].map(role => `<option value="${role}" ${user.role === role ? 'selected' : ''}>${role}</option>`).join('')}</select></label>
         <label class="form-field"><span>Status</span><select class="form-select" id="user-status">${['active', 'disabled'].map(status => `<option value="${status}" ${user.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
-        ${this.input('user-password', id ? 'New password' : 'Password', '', 'password')}
+        <label class="form-field">
+          <span>${id ? 'Set new password' : 'Password'}</span>
+          <input class="form-input" id="user-password" type="password" autocomplete="new-password" placeholder="${id ? 'Leave blank to keep current password' : ''}">
+        </label>
         <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary">Save</button></div>
       </form>
     `);
@@ -992,12 +995,18 @@ const App = {
         role: value('user-role'),
         status: value('user-status')
       };
-      if (value('user-password')) data.password = value('user-password');
+      const newPassword = value('user-password');
       try {
-        if (id) await API.updateUser(id, data);
-        else await API.createUser(data);
+        if (id) {
+          await API.updateUser(id, data);
+          if (newPassword) await API.updateUserPassword(id, newPassword);
+        } else {
+          data.password = newPassword;
+          await API.createUser(data);
+        }
         this.closeModal();
         this.renderUsers();
+        this.toast(id && newPassword ? 'User and password saved.' : 'User saved.', 'success');
       } catch (err) {
         this.toast(err.message, 'error');
       }

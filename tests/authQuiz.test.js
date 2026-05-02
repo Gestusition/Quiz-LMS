@@ -170,6 +170,39 @@ describe('Auth and quiz attempt flow', () => {
     })).toThrow('Invalid or expired reset code');
   });
 
+  test('admin user edit can set a new password that works for login', async () => {
+    const db = getDatabase();
+    const admin = authService.createUser({
+      name: 'Password Admin',
+      username: 'password-admin',
+      email: 'password-admin@example.com',
+      role: 'admin',
+      password: 'PasswordAdmin123!'
+    });
+    const student = authService.createUser({
+      name: 'Managed Student',
+      username: 'managed-student',
+      email: 'managed-student@example.com',
+      role: 'student',
+      password: 'ManagedOld123!'
+    });
+    const adminSession = authService.login(admin.username, 'PasswordAdmin123!');
+
+    await request(app)
+      .put(`/api/users/${student.id}/password`)
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .send({ password: 'ManagedNew123!' })
+      .expect(200);
+
+    expect(authService.login('managed-student', 'ManagedNew123!').user.id).toBe(student.id);
+    expect(() => authService.login('managed-student', 'ManagedOld123!')).toThrow('Invalid email or password');
+
+    const stored = db.prepare('SELECT passwordHash, passwordSalt FROM users WHERE id = ?').get(student.id);
+    expect(stored.passwordHash).not.toBe('ManagedNew123!');
+    expect(stored.passwordSalt).not.toBe('ManagedNew123!');
+    expect(stored.passwordHash).toMatch(/^[0-9a-f]{128}$/i);
+  });
+
   test('student can submit a published quiz attempt for server-side grading', () => {
     const session = authService.login('student@example.com', 'Student123!');
     const quizzes = quizService.getAll(session.user);

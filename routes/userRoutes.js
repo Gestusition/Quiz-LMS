@@ -60,6 +60,15 @@ router.put('/:id', validateId, (req, res) => {
   }
 });
 
+router.put('/:id/password', validateId, (req, res) => {
+  try {
+    res.json(authService.setUserPassword(req.params.id, req.body.password));
+  } catch (err) {
+    if (err.message === 'User not found.') return res.status(404).json({ error: err.message });
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/:id/password-reset-code', validateId, (req, res) => {
   try {
     res.status(201).json(authService.issuePasswordResetCode(req.params.id));

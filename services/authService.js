@@ -398,6 +398,40 @@ class AuthService {
     return this.getUserById(id);
   }
 
+  setUserPassword(id, password) {
+    const db = getDatabase();
+    const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!existing) {
+      throw new Error('User not found.');
+    }
+
+    const newPassword = String(password || '');
+    this.validatePassword(newPassword);
+
+    const hashed = hashPassword(newPassword);
+    db.exec('BEGIN TRANSACTION');
+    try {
+      db.prepare(`
+        UPDATE users
+        SET passwordHash = ?, passwordSalt = ?, passwordAlgorithm = ?, updatedAt = ?
+        WHERE id = ?
+      `).run(hashed.passwordHash, hashed.passwordSalt, hashed.passwordAlgorithm, nowIso(), id);
+      db.prepare('DELETE FROM sessions WHERE userId = ?').run(id);
+      db.prepare(`
+        UPDATE password_reset_codes
+        SET status = 'expired'
+        WHERE userId = ?
+          AND status IN ('requested', 'issued')
+      `).run(id);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+
+    return this.getUserById(id);
+  }
+
   changeOwnCredentials(userId, token, data) {
     const db = getDatabase();
     const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);

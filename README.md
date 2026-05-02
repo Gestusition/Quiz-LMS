@@ -100,6 +100,7 @@ Users:
 - `GET /api/users`
 - `POST /api/users`
 - `PUT /api/users/:id`
+- `PUT /api/users/:id/password`
 - `GET /api/users/password-reset-requests`
 - `POST /api/users/:id/password-reset-code`
 - `DELETE /api/users/:id`

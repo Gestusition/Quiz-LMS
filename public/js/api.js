@@ -59,6 +59,7 @@ const API = {
   },
   createUser(data) { return this.request('/users', { method: 'POST', body: data }); },
   updateUser(id, data) { return this.request(`/users/${id}`, { method: 'PUT', body: data }); },
+  updateUserPassword(id, password) { return this.request(`/users/${id}/password`, { method: 'PUT', body: { password } }); },
   deleteUser(id) { return this.request(`/users/${id}`, { method: 'DELETE' }); },
   getPasswordResetRequests() { return this.request('/users/password-reset-requests'); },
   issuePasswordResetCode(id) { return this.request(`/users/${id}/password-reset-code`, { method: 'POST' }); },
