@@ -3,6 +3,7 @@ const fs = require('fs');
 const { initDatabase, seedDatabase, closeDatabase, getDatabase, getDatabaseFiles, resolveDatabaseFiles } = require('../database/db');
 const authService = require('../services/authService');
 const quizService = require('../services/quizService');
+const { hashPassword, verifyPassword } = require('../utils/security');
 const request = require('supertest');
 const app = require('../server');
 
@@ -54,6 +55,37 @@ describe('Auth and quiz attempt flow', () => {
     expect(db.prepare('SELECT COUNT(*) as count FROM admin_profiles').get().count).toBeGreaterThanOrEqual(1);
     expect(db.prepare('SELECT COUNT(*) as count FROM teacher_profiles').get().count).toBeGreaterThanOrEqual(1);
     expect(db.prepare('SELECT COUNT(*) as count FROM student_profiles').get().count).toBeGreaterThanOrEqual(1);
+  });
+
+  test('does not store plaintext passwords in the users database', () => {
+    const db = getDatabase();
+    const users = db.prepare(`
+      SELECT passwordHash, passwordSalt, passwordAlgorithm
+      FROM users
+    `).all();
+
+    expect(users.length).toBeGreaterThan(0);
+    users.forEach(user => {
+      expect(user.passwordAlgorithm).toBe('scrypt+salt+spice');
+      expect(user.passwordHash).toMatch(/^[0-9a-f]{128}$/i);
+      expect(user.passwordSalt).toMatch(/^[0-9a-f]{32}$/i);
+      expect(['Admin123!', 'Teacher123!', 'Student123!', 'BetterAdmin123!']).not.toContain(user.passwordHash);
+      expect(['Admin123!', 'Teacher123!', 'Student123!', 'BetterAdmin123!']).not.toContain(user.passwordSalt);
+    });
+  });
+
+  test('requires the same application spice to verify a password hash', () => {
+    const originalSpice = process.env.PASSWORD_SPICE;
+    process.env.PASSWORD_SPICE = 'test-spice-one';
+    const hashed = hashPassword('SpicedPassword123!');
+
+    expect(verifyPassword('SpicedPassword123!', hashed.passwordSalt, hashed.passwordHash)).toBe(true);
+
+    process.env.PASSWORD_SPICE = 'test-spice-two';
+    expect(verifyPassword('SpicedPassword123!', hashed.passwordSalt, hashed.passwordHash)).toBe(false);
+
+    if (originalSpice === undefined) delete process.env.PASSWORD_SPICE;
+    else process.env.PASSWORD_SPICE = originalSpice;
   });
 
   test('logs in seeded role accounts with salted and spiced password hashes', () => {
