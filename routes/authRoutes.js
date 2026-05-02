@@ -9,6 +9,22 @@ const { requireAuth } = require('../middleware/auth');
  *   post:
  *     summary: Login with username/email and password
  *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Successful login
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthSession'
+ *       401:
+ *         $ref: '#/components/responses/401Unauthorized'
  */
 router.post('/login', (req, res) => {
   try {
@@ -20,6 +36,29 @@ router.post('/login', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/password-reset/request:
+ *   post:
+ *     summary: Request a password reset code
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PasswordResetRequest'
+ *     responses:
+ *       200:
+ *         description: Reset code sent or request accepted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ */
 router.post('/password-reset/request', (req, res) => {
   try {
     const identifier = req.body.username || req.body.identifier;
@@ -29,6 +68,29 @@ router.post('/password-reset/request', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/password-reset/complete:
+ *   post:
+ *     summary: Complete password reset using a code
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PasswordResetCompleteRequest'
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ */
 router.post('/password-reset/complete', (req, res) => {
   try {
     res.json(authService.completePasswordReset(req.body));
@@ -37,6 +99,30 @@ router.post('/password-reset/complete', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/change-credentials:
+ *   post:
+ *     summary: Change current user's credentials
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ChangeCredentialsRequest'
+ *     responses:
+ *       200:
+ *         description: Credentials updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/401Unauthorized'
+ */
 router.post('/change-credentials', requireAuth, (req, res) => {
   try {
     const user = authService.changeOwnCredentials(req.user.id, req.authToken, req.body);
@@ -46,11 +132,43 @@ router.post('/change-credentials', requireAuth, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Logout the current user
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Logged out successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       401:
+ *         $ref: '#/components/responses/401Unauthorized'
+ */
 router.post('/logout', requireAuth, (req, res) => {
   authService.logout(req.authToken);
   res.json({ message: 'Logged out successfully.' });
 });
 
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Get current authenticated user
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Current user information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CurrentUser'
+ *       401:
+ *         $ref: '#/components/responses/401Unauthorized'
+ */
 router.get('/me', requireAuth, (req, res) => {
   res.json(req.user);
 });

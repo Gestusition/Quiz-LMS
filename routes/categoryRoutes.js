@@ -72,6 +72,12 @@ function ensureCategoryManager(req, res, category) {
  *   get:
  *     summary: Get all categories
  *     tags: [Categories]
+ *     parameters:
+ *       - in: query
+ *         name: courseId
+ *         schema:
+ *           type: integer
+ *         description: Filter by course ID
  *     responses:
  *       200:
  *         description: List of all categories
@@ -138,19 +144,18 @@ router.get('/:id', validateId, (req, res) => {
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - name
- *             properties:
- *               name:
- *                 type: string
- *               description:
- *                 type: string
+ *             $ref: '#/components/schemas/CreateCategoryRequest'
  *     responses:
  *       201:
  *         description: Category created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Category'
  *       400:
- *         description: Validation error
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  */
 router.post('/', requireRole(['admin', 'teacher']), requireFields(['name']), sanitizeStrings(['name', 'description']), (req, res) => {
   try {
@@ -181,19 +186,20 @@ router.post('/', requireRole(['admin', 'teacher']), requireFields(['name']), san
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *               description:
- *                 type: string
+ *             $ref: '#/components/schemas/UpdateCategoryRequest'
  *     responses:
  *       200:
  *         description: Category updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Category'
  *       400:
- *         description: Validation error
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  *       404:
- *         description: Category not found
+ *         $ref: '#/components/responses/404NotFound'
  */
 router.put('/:id', validateId, sanitizeStrings(['name', 'description']), (req, res) => {
   try {
@@ -227,8 +233,14 @@ router.put('/:id', validateId, sanitizeStrings(['name', 'description']), (req, r
  *     responses:
  *       200:
  *         description: Category deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  *       404:
- *         description: Category not found
+ *         $ref: '#/components/responses/404NotFound'
  */
 router.delete('/:id', validateId, (req, res) => {
   try {

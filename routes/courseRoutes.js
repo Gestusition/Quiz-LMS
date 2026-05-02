@@ -47,6 +47,27 @@ function contentCourseId(table, id) {
  *   get:
  *     summary: List courses visible to the current user
  *     tags: [Courses]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by title or code
+ *       - in: query
+ *         name: visibility
+ *         schema:
+ *           type: string
+ *           enum: [public, private]
+ *         description: Filter by visibility
+ *     responses:
+ *       200:
+ *         description: List of courses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Course'
  */
 router.get('/', (req, res) => {
   try {
@@ -59,6 +80,30 @@ router.get('/', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses:
+ *   post:
+ *     summary: Create a new course (Admin or Teacher)
+ *     tags: [Courses]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateCourseRequest'
+ *     responses:
+ *       201:
+ *         description: Course created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Course'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.post('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     res.status(201).json(courseService.create(req.body, req.user));
@@ -67,6 +112,38 @@ router.post('/', requireRole(['admin', 'teacher']), (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/enrollments/{id}:
+ *   put:
+ *     summary: Update an enrollment (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateEnrollmentRequest'
+ *     responses:
+ *       200:
+ *         description: Enrollment updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Enrollment'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.put('/enrollments/:id', (req, res) => {
   const enrollmentId = parseId(req.params.id);
   if (!enrollmentId) return res.status(400).json({ error: 'Invalid enrollment ID.' });
@@ -81,6 +158,32 @@ router.put('/enrollments/:id', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/enrollments/{id}:
+ *   delete:
+ *     summary: Delete an enrollment (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Enrollment deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.delete('/enrollments/:id', (req, res) => {
   const enrollmentId = parseId(req.params.id);
   if (!enrollmentId) return res.status(400).json({ error: 'Invalid enrollment ID.' });
@@ -96,6 +199,32 @@ router.delete('/enrollments/:id', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/announcements/{id}:
+ *   delete:
+ *     summary: Delete an announcement (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Announcement deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.delete('/announcements/:id', (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid announcement ID.' });
@@ -111,6 +240,32 @@ router.delete('/announcements/:id', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/resources/{id}:
+ *   delete:
+ *     summary: Delete a resource (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Resource deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.delete('/resources/:id', (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid resource ID.' });
@@ -126,6 +281,30 @@ router.delete('/resources/:id', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{courseId}/participants:
+ *   get:
+ *     summary: Get course participants (Course Access)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of participants
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Participant'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.get('/:courseId/participants', requireCourseAccess, (req, res) => {
   try {
     res.json(courseService.getParticipants(req.courseId));
@@ -134,6 +313,36 @@ router.get('/:courseId/participants', requireCourseAccess, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{courseId}/enrollments:
+ *   post:
+ *     summary: Enroll a user in the course (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateEnrollmentRequest'
+ *     responses:
+ *       201:
+ *         description: Enrolled successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Enrollment'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.post('/:courseId/enrollments', requireCourseManager, (req, res) => {
   try {
     res.status(201).json(courseService.enroll(req.courseId, Number(req.body.userId), req.body.role));
@@ -142,6 +351,30 @@ router.post('/:courseId/enrollments', requireCourseManager, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{courseId}/announcements:
+ *   get:
+ *     summary: Get course announcements (Course Access)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of announcements
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Announcement'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.get('/:courseId/announcements', requireCourseAccess, (req, res) => {
   try {
     res.json(contentService.getAnnouncements(req.courseId));
@@ -150,6 +383,36 @@ router.get('/:courseId/announcements', requireCourseAccess, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{courseId}/announcements:
+ *   post:
+ *     summary: Create an announcement (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateAnnouncementRequest'
+ *     responses:
+ *       201:
+ *         description: Announcement created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Announcement'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.post('/:courseId/announcements', requireCourseManager, (req, res) => {
   try {
     res.status(201).json(contentService.createAnnouncement(req.courseId, req.body, req.user));
@@ -158,6 +421,30 @@ router.post('/:courseId/announcements', requireCourseManager, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{courseId}/resources:
+ *   get:
+ *     summary: Get course resources (Course Access)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of resources
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Resource'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.get('/:courseId/resources', requireCourseAccess, (req, res) => {
   try {
     res.json(contentService.getResources(req.courseId));
@@ -166,6 +453,36 @@ router.get('/:courseId/resources', requireCourseAccess, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{courseId}/resources:
+ *   post:
+ *     summary: Create a resource (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateResourceRequest'
+ *     responses:
+ *       201:
+ *         description: Resource created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Resource'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.post('/:courseId/resources', requireCourseManager, (req, res) => {
   try {
     res.status(201).json(contentService.createResource(req.courseId, req.body, req.user));
@@ -174,6 +491,28 @@ router.post('/:courseId/resources', requireCourseManager, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{courseId}/gradebook:
+ *   get:
+ *     summary: Get course gradebook (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Course gradebook data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Gradebook'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.get('/:courseId/gradebook', requireCourseManager, (req, res) => {
   try {
     res.json(quizService.getGradebook(req.courseId));
@@ -182,6 +521,30 @@ router.get('/:courseId/gradebook', requireCourseManager, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{id}:
+ *   get:
+ *     summary: Get course details (Course Access)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Course data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Course'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.get('/:id', requireCourseAccess, (req, res) => {
   try {
     const course = courseService.getById(req.courseId);
@@ -192,6 +555,38 @@ router.get('/:id', requireCourseAccess, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{id}:
+ *   put:
+ *     summary: Update a course (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateCourseRequest'
+ *     responses:
+ *       200:
+ *         description: Course updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Course'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.put('/:id', requireCourseManager, (req, res) => {
   try {
     res.json(courseService.update(req.courseId, req.body));
@@ -201,6 +596,30 @@ router.put('/:id', requireCourseManager, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/{id}:
+ *   delete:
+ *     summary: Delete a course (Course Manager)
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Course deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.delete('/:id', requireCourseManager, (req, res) => {
   try {
     courseService.delete(req.courseId);

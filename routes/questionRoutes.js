@@ -42,62 +42,9 @@ function ensureCategoryManager(req, res, categoryId) {
 
 /**
  * @swagger
- * components:
- *   schemas:
- *     Question:
- *       type: object
- *       required:
- *         - categoryId
- *         - text
- *         - type
- *         - correctAnswer
- *       properties:
- *         id:
- *           type: integer
- *           description: Auto-generated ID
- *         categoryId:
- *           type: integer
- *           description: FK to categories table
- *         categoryName:
- *           type: string
- *           description: Name of the parent category
- *         text:
- *           type: string
- *           description: The question text
- *         type:
- *           type: string
- *           enum: [MC, TF, FB]
- *           description: "Question type: MC=Multiple Choice, TF=True/False, FB=Fill Blank"
- *         options:
- *           type: array
- *           items:
- *             type: string
- *           description: Options for multiple choice questions
- *         correctAnswer:
- *           type: string
- *           description: "Correct answer (index for MC, true/false for TF, text for FB)"
- *         difficulty:
- *           type: string
- *           enum: [EASY, MEDIUM, HARD]
- *         createdAt:
- *           type: string
- *           format: date-time
- *       example:
- *         id: 1
- *         categoryId: 1
- *         categoryName: JavaScript
- *         text: "Which keyword is used to declare a constant?"
- *         type: MC
- *         options: ["var", "let", "const", "define"]
- *         correctAnswer: "2"
- *         difficulty: EASY
- */
-
-/**
- * @swagger
  * /api/questions:
  *   get:
- *     summary: Get all questions with optional filters
+ *     summary: Get all questions with optional filters (Admin/Teacher only)
  *     tags: [Questions]
  *     parameters:
  *       - in: query
@@ -105,6 +52,11 @@ function ensureCategoryManager(req, res, categoryId) {
  *         schema:
  *           type: integer
  *         description: Filter by category ID
+ *       - in: query
+ *         name: courseId
+ *         schema:
+ *           type: integer
+ *         description: Filter by course ID
  *       - in: query
  *         name: difficulty
  *         schema:
@@ -131,6 +83,8 @@ function ensureCategoryManager(req, res, categoryId) {
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/Question'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  */
 router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
@@ -153,7 +107,7 @@ router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
  * @swagger
  * /api/questions/random:
  *   get:
- *     summary: Get random questions for a quiz
+ *     summary: Get random questions for a quiz (Admin/Teacher only)
  *     tags: [Questions]
  *     parameters:
  *       - in: query
@@ -161,6 +115,11 @@ router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
  *         schema:
  *           type: integer
  *         description: Filter by category
+ *       - in: query
+ *         name: courseId
+ *         schema:
+ *           type: integer
+ *         description: Filter by course
  *       - in: query
  *         name: difficulty
  *         schema:
@@ -176,6 +135,14 @@ router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
  *     responses:
  *       200:
  *         description: Random questions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Question'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  */
 router.get('/random', requireRole(['admin', 'teacher']), (req, res) => {
   try {
@@ -197,7 +164,7 @@ router.get('/random', requireRole(['admin', 'teacher']), (req, res) => {
  * @swagger
  * /api/questions/{id}:
  *   get:
- *     summary: Get a question by ID
+ *     summary: Get a question by ID (Admin/Teacher only)
  *     tags: [Questions]
  *     parameters:
  *       - in: path
@@ -208,8 +175,14 @@ router.get('/random', requireRole(['admin', 'teacher']), (req, res) => {
  *     responses:
  *       200:
  *         description: The question
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Question'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  *       404:
- *         description: Question not found
+ *         $ref: '#/components/responses/404NotFound'
  */
 router.get('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
@@ -225,41 +198,25 @@ router.get('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => 
  * @swagger
  * /api/questions:
  *   post:
- *     summary: Create a new question
+ *     summary: Create a new question (Admin/Teacher only)
  *     tags: [Questions]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - categoryId
- *               - text
- *               - type
- *               - correctAnswer
- *             properties:
- *               categoryId:
- *                 type: integer
- *               text:
- *                 type: string
- *               type:
- *                 type: string
- *                 enum: [MC, TF, FB]
- *               options:
- *                 type: array
- *                 items:
- *                   type: string
- *               correctAnswer:
- *                 type: string
- *               difficulty:
- *                 type: string
- *                 enum: [EASY, MEDIUM, HARD]
+ *             $ref: '#/components/schemas/CreateQuestionRequest'
  *     responses:
  *       201:
  *         description: Question created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Question'
  *       400:
- *         description: Validation error
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  */
 router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId', 'text', 'type', 'correctAnswer']), sanitizeStrings(['text', 'correctAnswer']), (req, res) => {
   try {
@@ -278,7 +235,7 @@ router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId',
  * @swagger
  * /api/questions/{id}:
  *   put:
- *     summary: Update a question
+ *     summary: Update a question (Admin/Teacher only)
  *     tags: [Questions]
  *     parameters:
  *       - in: path
@@ -291,31 +248,20 @@ router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId',
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               categoryId:
- *                 type: integer
- *               text:
- *                 type: string
- *               type:
- *                 type: string
- *                 enum: [MC, TF, FB]
- *               options:
- *                 type: array
- *                 items:
- *                   type: string
- *               correctAnswer:
- *                 type: string
- *               difficulty:
- *                 type: string
- *                 enum: [EASY, MEDIUM, HARD]
+ *             $ref: '#/components/schemas/UpdateQuestionRequest'
  *     responses:
  *       200:
  *         description: Question updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Question'
  *       400:
- *         description: Validation error
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  *       404:
- *         description: Question not found
+ *         $ref: '#/components/responses/404NotFound'
  */
 router.put('/:id', requireRole(['admin', 'teacher']), validateId, sanitizeStrings(['text', 'correctAnswer']), (req, res) => {
   try {
@@ -339,7 +285,7 @@ router.put('/:id', requireRole(['admin', 'teacher']), validateId, sanitizeString
  * @swagger
  * /api/questions/{id}:
  *   delete:
- *     summary: Delete a question
+ *     summary: Delete a question (Admin/Teacher only)
  *     tags: [Questions]
  *     parameters:
  *       - in: path
@@ -350,8 +296,14 @@ router.put('/:id', requireRole(['admin', 'teacher']), validateId, sanitizeString
  *     responses:
  *       200:
  *         description: Question deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  *       404:
- *         description: Question not found
+ *         $ref: '#/components/responses/404NotFound'
  */
 router.delete('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
