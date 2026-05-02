@@ -188,6 +188,35 @@ describe('Auth and quiz attempt flow', () => {
     })).toThrow('Invalid or expired reset code');
   });
 
+  test('admin can list password reset requests through the API', async () => {
+    const adminSession = createAdminSession();
+    authService.requestPasswordReset('student');
+
+    await request(app)
+      .get('/api/users/password-reset-requests')
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .expect(200)
+      .expect(response => {
+        expect(Array.isArray(response.body)).toBe(true);
+        expect(response.body.some(item => item.username === 'student')).toBe(true);
+      });
+  });
+
+  test('admin can issue password reset code through the API', async () => {
+    const db = getDatabase();
+    const adminSession = createAdminSession();
+    const student = db.prepare('SELECT id FROM users WHERE username = ?').get('student');
+
+    await request(app)
+      .post(`/api/users/${student.id}/password-reset-code`)
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .expect(201)
+      .expect(response => {
+        expect(response.body.userId).toBe(student.id);
+        expect(response.body.code).toMatch(/^[0-9A-F]{8}$/);
+      });
+  });
+
   test('admin user edit can set a new password that works for login', async () => {
     const db = getDatabase();
     const admin = authService.createUser({

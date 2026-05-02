@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userService = require('../services/userService');
+const authService = require('../services/authService');
 const { validateId } = require('../middleware/validation');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
