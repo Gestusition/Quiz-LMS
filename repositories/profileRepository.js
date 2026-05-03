@@ -13,32 +13,73 @@ function replaceForUser(userId, payload) {
 
   if (payload.role === 'admin') {
     db.prepare(`
-      INSERT INTO admin_profiles (userId, displayName, securityNotes)
-      VALUES (?, ?, ?)
-    `).run(userId, payload.displayName || payload.name, payload.mustChangeCredentials ? 'Credential rotation required.' : '');
+      INSERT INTO admin_profiles (userId, displayName, facultyId, departmentId, adminTitle, securityNotes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      userId,
+      payload.displayName || payload.name,
+      payload.facultyId,
+      payload.departmentId,
+      payload.adminTitle || '',
+      payload.mustChangeCredentials ? 'Credential rotation required.' : ''
+    );
   } else if (payload.role === 'teacher') {
     db.prepare(`
-      INSERT INTO teacher_profiles (userId, displayName, department, officeHours)
-      VALUES (?, ?, ?, ?)
-    `).run(userId, payload.name, payload.department || '', payload.officeHours || '');
+      INSERT INTO teacher_profiles (
+        userId, displayName, department, facultyId, departmentId, academicTitle, staffNumber, officeHours
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      userId,
+      payload.name,
+      payload.department || '',
+      payload.facultyId,
+      payload.departmentId,
+      payload.academicTitle || '',
+      payload.staffNumber || '',
+      payload.officeHours || ''
+    );
   } else if (payload.role === 'student') {
     db.prepare(`
-      INSERT INTO student_profiles (userId, displayName, studentNumber, cohort)
-      VALUES (?, ?, ?, ?)
-    `).run(userId, payload.name, payload.studentNumber, payload.cohort || '');
+      INSERT INTO student_profiles (
+        userId, displayName, studentNumber, cohort, facultyId, departmentId, classYearId, sectionId
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      userId,
+      payload.name,
+      payload.studentNumber,
+      payload.cohort || '',
+      payload.facultyId,
+      payload.departmentId,
+      payload.classYearId,
+      payload.sectionId
+    );
   }
 }
 
 function getForUser(userId, role) {
   const db = getDatabase();
   if (role === 'admin') {
-    return db.prepare('SELECT displayName FROM admin_profiles WHERE userId = ?').get(userId) || {};
+    return db.prepare(`
+      SELECT displayName, facultyId, departmentId, adminTitle
+      FROM admin_profiles
+      WHERE userId = ?
+    `).get(userId) || {};
   }
   if (role === 'teacher') {
-    return db.prepare('SELECT department, officeHours FROM teacher_profiles WHERE userId = ?').get(userId) || {};
+    return db.prepare(`
+      SELECT department, officeHours, facultyId, departmentId, academicTitle, staffNumber
+      FROM teacher_profiles
+      WHERE userId = ?
+    `).get(userId) || {};
   }
   if (role === 'student') {
-    return db.prepare('SELECT studentNumber, cohort FROM student_profiles WHERE userId = ?').get(userId) || {};
+    return db.prepare(`
+      SELECT studentNumber, cohort, facultyId, departmentId, classYearId, sectionId
+      FROM student_profiles
+      WHERE userId = ?
+    `).get(userId) || {};
   }
   return {};
 }

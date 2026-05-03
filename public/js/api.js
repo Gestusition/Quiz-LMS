@@ -88,6 +88,78 @@ export const API = {
   deleteResource(id) { return this.request(`/courses/resources/${id}`, { method: 'DELETE' }); },
   getGradebook(courseId) { return this.request(`/courses/${courseId}/gradebook`); },
 
+  getFaculties() { return this.request('/academic/faculties'); },
+  createFaculty(data) { return this.request('/academic/faculties', { method: 'POST', body: data }); },
+  updateFaculty(id, data) { return this.request(`/academic/faculties/${id}`, { method: 'PUT', body: data }); },
+  deleteFaculty(id) { return this.request(`/academic/faculties/${id}`, { method: 'DELETE' }); },
+  getDepartments(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.facultyId) params.set('facultyId', filters.facultyId);
+    return this.request(`/academic/departments${params.toString() ? `?${params}` : ''}`);
+  },
+  createDepartment(data) { return this.request('/academic/departments', { method: 'POST', body: data }); },
+  updateDepartment(id, data) { return this.request(`/academic/departments/${id}`, { method: 'PUT', body: data }); },
+  deleteDepartment(id) { return this.request(`/academic/departments/${id}`, { method: 'DELETE' }); },
+  getClassYears(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.departmentId) params.set('departmentId', filters.departmentId);
+    return this.request(`/academic/class-years${params.toString() ? `?${params}` : ''}`);
+  },
+  createClassYear(data) { return this.request('/academic/class-years', { method: 'POST', body: data }); },
+  updateClassYear(id, data) { return this.request(`/academic/class-years/${id}`, { method: 'PUT', body: data }); },
+  deleteClassYear(id) { return this.request(`/academic/class-years/${id}`, { method: 'DELETE' }); },
+  getSections(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.classYearId) params.set('classYearId', filters.classYearId);
+    return this.request(`/academic/sections${params.toString() ? `?${params}` : ''}`);
+  },
+  createSection(data) { return this.request('/academic/sections', { method: 'POST', body: data }); },
+  updateSection(id, data) { return this.request(`/academic/sections/${id}`, { method: 'PUT', body: data }); },
+  deleteSection(id) { return this.request(`/academic/sections/${id}`, { method: 'DELETE' }); },
+  getTerms() { return this.request('/academic/terms'); },
+  createTerm(data) { return this.request('/academic/terms', { method: 'POST', body: data }); },
+  updateTerm(id, data) { return this.request(`/academic/terms/${id}`, { method: 'PUT', body: data }); },
+  setActiveTerm(id) { return this.request(`/academic/terms/${id}/active`, { method: 'POST' }); },
+  deleteTerm(id) { return this.request(`/academic/terms/${id}`, { method: 'DELETE' }); },
+  getCourseOfferings(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.courseId) params.set('courseId', filters.courseId);
+    if (filters.termId) params.set('termId', filters.termId);
+    if (filters.activeTerm) params.set('activeTerm', 'true');
+    return this.request(`/academic/offerings${params.toString() ? `?${params}` : ''}`);
+  },
+  getCourseOffering(id) { return this.request(`/academic/offerings/${id}`); },
+  createCourseOffering(data) { return this.request('/academic/offerings', { method: 'POST', body: data }); },
+  updateCourseOffering(id, data) { return this.request(`/academic/offerings/${id}`, { method: 'PUT', body: data }); },
+  deleteCourseOffering(id) { return this.request(`/academic/offerings/${id}`, { method: 'DELETE' }); },
+  getOfferingEnrollments(id) { return this.request(`/academic/offerings/${id}/enrollments`); },
+  enrollOffering(data) { return this.request('/academic/enrollments', { method: 'POST', body: data }); },
+  updateOfferingEnrollment(id, data) { return this.request(`/academic/enrollments/${id}`, { method: 'PUT', body: data }); },
+  deleteOfferingEnrollment(id) { return this.request(`/academic/enrollments/${id}`, { method: 'DELETE' }); },
+  getAssignments(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.courseOfferingId) params.set('courseOfferingId', filters.courseOfferingId);
+    if (filters.termId) params.set('termId', filters.termId);
+    return this.request(`/academic/assignments${params.toString() ? `?${params}` : ''}`);
+  },
+  getAssignment(id) { return this.request(`/academic/assignments/${id}`); },
+  createAssignment(data) { return this.request('/academic/assignments', { method: 'POST', body: data }); },
+  updateAssignment(id, data) { return this.request(`/academic/assignments/${id}`, { method: 'PUT', body: data }); },
+  deleteAssignment(id) { return this.request(`/academic/assignments/${id}`, { method: 'DELETE' }); },
+  submitAssignment(id, data) { return this.request(`/academic/assignments/${id}/submissions`, { method: 'POST', body: data }); },
+  getAssignmentSubmissions(id) { return this.request(`/academic/assignments/${id}/submissions`); },
+  gradeSubmission(id, data) { return this.request(`/academic/submissions/${id}/grade`, { method: 'PUT', body: data }); },
+  getAttendanceSessions(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.courseOfferingId) params.set('courseOfferingId', filters.courseOfferingId);
+    return this.request(`/academic/attendance/sessions${params.toString() ? `?${params}` : ''}`);
+  },
+  createAttendanceSession(data) { return this.request('/academic/attendance/sessions', { method: 'POST', body: data }); },
+  markAttendance(id, records) { return this.request(`/academic/attendance/sessions/${id}/records`, { method: 'POST', body: { records } }); },
+  getMyAttendance() { return this.request('/academic/attendance/my'); },
+  getAttendanceSummary(courseOfferingId) { return this.request(`/academic/attendance/offerings/${courseOfferingId}/summary`); },
+  getAdminAnalytics() { return this.request('/analytics/admin'); },
+
   getCategories(filters = {}) {
     const params = new URLSearchParams();
     if (filters.courseId) params.set('courseId', filters.courseId);

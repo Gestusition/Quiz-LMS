@@ -66,10 +66,17 @@ class UserService {
         : !!existing.mustChangeCredentials,
       password: data.password,
       displayName: data.displayName !== undefined ? data.displayName : existingProfile.displayName,
+      adminTitle: data.adminTitle !== undefined ? data.adminTitle : existingProfile.adminTitle,
       department: data.department !== undefined ? data.department : existingProfile.department,
       officeHours: data.officeHours !== undefined ? data.officeHours : existingProfile.officeHours,
+      academicTitle: data.academicTitle !== undefined ? data.academicTitle : existingProfile.academicTitle,
+      staffNumber: data.staffNumber !== undefined ? data.staffNumber : existingProfile.staffNumber,
       studentNumber: data.studentNumber !== undefined ? data.studentNumber : existingProfile.studentNumber,
-      cohort: data.cohort !== undefined ? data.cohort : existingProfile.cohort
+      cohort: data.cohort !== undefined ? data.cohort : existingProfile.cohort,
+      facultyId: data.facultyId !== undefined ? data.facultyId : existingProfile.facultyId,
+      departmentId: data.departmentId !== undefined ? data.departmentId : existingProfile.departmentId,
+      classYearId: data.classYearId !== undefined ? data.classYearId : existingProfile.classYearId,
+      sectionId: data.sectionId !== undefined ? data.sectionId : existingProfile.sectionId
     }, false);
 
     const duplicateEmail = userRepository.findDuplicateEmail(payload.email, id);

@@ -482,8 +482,52 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .role-badge { background: var(--primary-soft); color: var(--primary-dark); }
 .status.private, .status.draft { background: #ede9fe; color: #5b21b6; }
-.status.published, .status.active { background: #dcfce7; color: var(--success); }
-.status.archived, .status.closed { background: #e5e7eb; color: var(--closed); }
+.status.published, .status.active, .status.present, .status.graded { background: #dcfce7; color: var(--success); }
+.status.planned, .status.late, .status.submitted, .status.returned { background: #fef3c7; color: var(--warning); }
+.status.absent { background: var(--danger-soft); color: var(--danger); }
+.status.excused { background: #e0f2fe; color: #0369a1; }
+.status.archived, .status.closed, .status.completed, .status.cancelled, .status.inactive { background: #e5e7eb; color: var(--closed); }
+
+.profile-list {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-row:last-child { border-bottom: 0; }
+.profile-row span { color: var(--muted); font-weight: 700; }
+.profile-row strong { font-weight: 700; overflow-wrap: anywhere; }
+
+.detail-copy {
+  margin: 16px 0 0;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.attendance-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 150px minmax(160px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.attendance-row small {
+  display: block;
+  color: var(--muted);
+}
+
+.compact-stats { margin-bottom: 0; }
+.analytics-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 
 .attempt-question {
   padding: 18px;
@@ -614,14 +658,17 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .nav-links { order: 3; width: 100%; overflow-x: auto; }
   .nav-user { margin-left: auto; }
   .stats-grid, .content-grid, .course-layout { grid-template-columns: 1fr; }
+  .analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .course-side { grid-row: auto; }
   .form-grid { grid-template-columns: 1fr; }
+  .attendance-row { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
   .main-content { width: min(100% - 24px, 1280px); padding-top: 20px; }
   .page-header { align-items: flex-start; flex-direction: column; }
   .toolbar { flex-direction: column; }
+  .profile-row { grid-template-columns: 1fr; gap: 2px; }
   .toolbar .form-input { max-width: none; }
   .user-toolbar .form-select { max-width: none; }
   .login-actions { flex-direction: column; align-items: flex-start; }

@@ -49,6 +49,8 @@ class CourseService {
       code: data.code !== undefined ? data.code : existing.code,
       title: data.title !== undefined ? data.title : existing.title,
       description: data.description !== undefined ? data.description : existing.description,
+      departmentId: data.departmentId !== undefined ? data.departmentId : existing.departmentId,
+      credits: data.credits !== undefined ? data.credits : existing.credits,
       visibility: data.visibility !== undefined ? data.visibility : existing.visibility,
       startDate: data.startDate !== undefined ? data.startDate : existing.startDate,
       endDate: data.endDate !== undefined ? data.endDate : existing.endDate

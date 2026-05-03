@@ -88,9 +88,20 @@ const options = {
             mustChangeCredentials: { type: 'integer' },
             studentNumber: { type: 'string', description: 'Student profile field, present for students' },
             cohort: { type: 'string', description: 'Student profile field, present for students' },
+            facultyId: { type: 'integer', nullable: true },
+            departmentId: { type: 'integer', nullable: true },
+            classYearId: { type: 'integer', nullable: true },
+            sectionId: { type: 'integer', nullable: true },
+            facultyName: { type: 'string' },
+            departmentName: { type: 'string' },
+            classYearName: { type: 'string' },
+            sectionName: { type: 'string' },
             department: { type: 'string', description: 'Teacher profile field, present for teachers' },
+            academicTitle: { type: 'string' },
+            staffNumber: { type: 'string' },
             officeHours: { type: 'string', description: 'Teacher profile field, present for teachers' },
-            displayName: { type: 'string', description: 'Admin profile field, present for admins' }
+            displayName: { type: 'string', description: 'Admin profile field, present for admins' },
+            adminTitle: { type: 'string' }
           }
         },
         User: {
@@ -105,9 +116,20 @@ const options = {
             mustChangeCredentials: { type: 'integer' },
             studentNumber: { type: 'string', description: 'Required when role is student' },
             cohort: { type: 'string' },
+            facultyId: { type: 'integer', nullable: true },
+            departmentId: { type: 'integer', nullable: true },
+            classYearId: { type: 'integer', nullable: true },
+            sectionId: { type: 'integer', nullable: true },
+            facultyName: { type: 'string' },
+            departmentName: { type: 'string' },
+            classYearName: { type: 'string' },
+            sectionName: { type: 'string' },
             department: { type: 'string' },
+            academicTitle: { type: 'string' },
+            staffNumber: { type: 'string' },
             officeHours: { type: 'string' },
             displayName: { type: 'string' },
+            adminTitle: { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' }
           }
         },
@@ -124,9 +146,16 @@ const options = {
             mustChangeCredentials: { type: 'boolean' },
             studentNumber: { type: 'string', description: 'Required when role is student; unique across student profiles' },
             cohort: { type: 'string' },
+            facultyId: { type: 'integer', nullable: true },
+            departmentId: { type: 'integer', nullable: true },
+            classYearId: { type: 'integer', nullable: true },
+            sectionId: { type: 'integer', nullable: true },
             department: { type: 'string' },
+            academicTitle: { type: 'string' },
+            staffNumber: { type: 'string' },
             officeHours: { type: 'string' },
-            displayName: { type: 'string' }
+            displayName: { type: 'string' },
+            adminTitle: { type: 'string' }
           }
         },
         UpdateUserRequest: {
@@ -141,9 +170,16 @@ const options = {
             password: { type: 'string' },
             studentNumber: { type: 'string', description: 'Required if resulting role is student and no existing student number exists' },
             cohort: { type: 'string' },
+            facultyId: { type: 'integer', nullable: true },
+            departmentId: { type: 'integer', nullable: true },
+            classYearId: { type: 'integer', nullable: true },
+            sectionId: { type: 'integer', nullable: true },
             department: { type: 'string' },
+            academicTitle: { type: 'string' },
+            staffNumber: { type: 'string' },
             officeHours: { type: 'string' },
-            displayName: { type: 'string' }
+            displayName: { type: 'string' },
+            adminTitle: { type: 'string' }
           }
         },
         SetUserPasswordRequest: {
@@ -214,6 +250,9 @@ const options = {
             code: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
+            departmentId: { type: 'integer', nullable: true },
+            departmentName: { type: 'string', nullable: true },
+            credits: { type: 'integer' },
             visibility: { type: 'string', enum: ['private', 'published', 'archived'] },
             startDate: { type: 'string', format: 'date-time', nullable: true },
             endDate: { type: 'string', format: 'date-time', nullable: true },
@@ -222,7 +261,8 @@ const options = {
             updatedAt: { type: 'string', format: 'date-time' },
             studentCount: { type: 'integer' },
             teacherCount: { type: 'integer' },
-            quizCount: { type: 'integer' }
+            quizCount: { type: 'integer' },
+            offeringCount: { type: 'integer' }
           }
         },
         CreateCourseRequest: {
@@ -232,6 +272,8 @@ const options = {
             code: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
+            departmentId: { type: 'integer', nullable: true },
+            credits: { type: 'integer' },
             visibility: { type: 'string', enum: ['private', 'published', 'archived'] },
             startDate: { type: 'string', format: 'date-time', nullable: true },
             endDate: { type: 'string', format: 'date-time', nullable: true }
@@ -243,6 +285,8 @@ const options = {
             code: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
+            departmentId: { type: 'integer', nullable: true },
+            credits: { type: 'integer' },
             visibility: { type: 'string', enum: ['private', 'published', 'archived'] },
             startDate: { type: 'string', format: 'date-time', nullable: true },
             endDate: { type: 'string', format: 'date-time', nullable: true }
@@ -550,6 +594,85 @@ const options = {
             isCorrect: { type: 'integer' },
             pointsAwarded: { type: 'number' }
           }
+        },
+        Faculty: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        Department: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            facultyId: { type: 'integer' },
+            name: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        AcademicTerm: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string' },
+            academicYear: { type: 'string' },
+            semesterType: { type: 'string' },
+            startDate: { type: 'string' },
+            endDate: { type: 'string' },
+            isActive: { type: 'integer' }
+          }
+        },
+        CourseOffering: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            courseId: { type: 'integer' },
+            termId: { type: 'integer' },
+            instructorId: { type: 'integer', nullable: true },
+            status: { type: 'string' },
+            courseCode: { type: 'string' },
+            courseTitle: { type: 'string' },
+            termName: { type: 'string' },
+            instructorName: { type: 'string' },
+            studentCount: { type: 'integer' }
+          }
+        },
+        Assignment: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            courseOfferingId: { type: 'integer' },
+            termId: { type: 'integer' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            dueDate: { type: 'string' },
+            status: { type: 'string' }
+          }
+        },
+        AssignmentSubmission: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            assignmentId: { type: 'integer' },
+            studentId: { type: 'integer' },
+            submissionText: { type: 'string' },
+            submissionUrl: { type: 'string' },
+            grade: { type: 'string' },
+            feedback: { type: 'string' },
+            status: { type: 'string' }
+          }
+        },
+        AttendanceSession: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            courseOfferingId: { type: 'integer' },
+            termId: { type: 'integer' },
+            sessionDate: { type: 'string' },
+            topic: { type: 'string' }
+          }
         }
       }
     },
@@ -560,7 +683,9 @@ const options = {
       { name: 'Courses', description: 'Course, enrollment, content, and gradebook endpoints' },
       { name: 'Quizzes', description: 'Quiz publishing, attempts, and grading endpoints' },
       { name: 'Categories', description: 'Question category management endpoints' },
-      { name: 'Questions', description: 'Question bank endpoints' }
+      { name: 'Questions', description: 'Question bank endpoints' },
+      { name: 'Academic', description: 'University hierarchy, terms, offerings, assignments, and attendance endpoints' },
+      { name: 'Analytics', description: 'Admin academic analytics endpoints' }
     ]
   },
   apis: ['./routes/*.js']

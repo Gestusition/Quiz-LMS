@@ -3,16 +3,34 @@ const { getDatabase } = require('../database/db');
 const PUBLIC_USER_COLUMNS = `
   u.id, u.name, u.username, u.email, u.role, u.status, u.mustChangeCredentials, u.createdAt,
   ap.displayName as displayName,
+  ap.adminTitle as adminTitle,
   tp.department as department,
   tp.officeHours as officeHours,
+  tp.academicTitle as academicTitle,
+  tp.staffNumber as staffNumber,
   sp.studentNumber as studentNumber,
-  sp.cohort as cohort
+  sp.cohort as cohort,
+  COALESCE(sp.facultyId, tp.facultyId, ap.facultyId) as facultyId,
+  COALESCE(sp.departmentId, tp.departmentId, ap.departmentId) as departmentId,
+  sp.classYearId as classYearId,
+  sp.sectionId as sectionId,
+  f.name as facultyName,
+  f.code as facultyCode,
+  d.name as departmentName,
+  d.code as departmentCode,
+  cy.name as classYearName,
+  cy.yearNumber as yearNumber,
+  sec.name as sectionName
 `;
 
 const PROFILE_JOINS = `
   LEFT JOIN admin_profiles ap ON ap.userId = u.id
   LEFT JOIN teacher_profiles tp ON tp.userId = u.id
   LEFT JOIN student_profiles sp ON sp.userId = u.id
+  LEFT JOIN faculties f ON f.id = COALESCE(sp.facultyId, tp.facultyId, ap.facultyId)
+  LEFT JOIN departments d ON d.id = COALESCE(sp.departmentId, tp.departmentId, ap.departmentId)
+  LEFT JOIN class_years cy ON cy.id = sp.classYearId
+  LEFT JOIN sections sec ON sec.id = sp.sectionId
 `;
 
 function list(filters = {}, validRoles = []) {
@@ -33,8 +51,13 @@ function list(filters = {}, validRoles = []) {
     query += ` AND (
       u.name LIKE ? OR u.email LIKE ? OR u.username LIKE ?
       OR sp.studentNumber LIKE ? OR sp.cohort LIKE ? OR tp.department LIKE ?
+      OR f.name LIKE ? OR d.name LIKE ? OR cy.name LIKE ? OR sec.name LIKE ?
     )`;
     params.push(
+      `%${filters.search}%`,
+      `%${filters.search}%`,
+      `%${filters.search}%`,
+      `%${filters.search}%`,
       `%${filters.search}%`,
       `%${filters.search}%`,
       `%${filters.search}%`,
@@ -66,10 +89,24 @@ function findByIdentifier(identifier) {
   return getDatabase().prepare(`
     SELECT u.*,
       ap.displayName as displayName,
+      ap.adminTitle as adminTitle,
       tp.department as department,
       tp.officeHours as officeHours,
+      tp.academicTitle as academicTitle,
+      tp.staffNumber as staffNumber,
       sp.studentNumber as studentNumber,
-      sp.cohort as cohort
+      sp.cohort as cohort,
+      COALESCE(sp.facultyId, tp.facultyId, ap.facultyId) as facultyId,
+      COALESCE(sp.departmentId, tp.departmentId, ap.departmentId) as departmentId,
+      sp.classYearId as classYearId,
+      sp.sectionId as sectionId,
+      f.name as facultyName,
+      f.code as facultyCode,
+      d.name as departmentName,
+      d.code as departmentCode,
+      cy.name as classYearName,
+      cy.yearNumber as yearNumber,
+      sec.name as sectionName
     FROM users u
     ${PROFILE_JOINS}
     WHERE LOWER(u.email) = LOWER(?)

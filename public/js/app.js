@@ -17,6 +17,10 @@ import { QuestionsPage } from './pages/questionsPage.js';
 import { UsersPage } from './pages/usersPage.js';
 import { AttemptPage } from './pages/attemptPage.js';
 import { ProfilePage } from './pages/profilePage.js';
+import { AcademicPage } from './pages/academicPage.js';
+import { AssignmentsPage } from './pages/assignmentsPage.js';
+import { AttendancePage } from './pages/attendancePage.js';
+import { AnalyticsPage } from './pages/analyticsPage.js';
 
 const App = {
   ...state,
@@ -33,6 +37,10 @@ const App = {
   ...UsersPage,
   ...AttemptPage,
   ...ProfilePage,
+  ...AcademicPage,
+  ...AssignmentsPage,
+  ...AttendancePage,
+  ...AnalyticsPage,
 
   async init() {
     document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
@@ -81,11 +89,15 @@ const App = {
 
     const items = [
       ['#/', 'Dashboard'],
+      ['#/profile', 'Profile'],
       ['#/courses', 'Courses'],
-      ['#/quizzes', 'Quizzes']
+      ['#/academic', 'Academic'],
+      ['#/quizzes', 'Quizzes'],
+      ['#/assignments', 'Assignments'],
+      ['#/attendance', 'Attendance']
     ];
     if (this.canManageLearning()) items.push(['#/questions', 'Question Bank']);
-    if (this.user.role === 'admin') items.push(['#/users', 'Users']);
+    if (this.user.role === 'admin') items.push(['#/users', 'Users'], ['#/analytics', 'Analytics']);
 
     links.innerHTML = items.map(([href, label]) =>
       `<a class="nav-link" href="${href}" data-href="${href}">${label}</a>`

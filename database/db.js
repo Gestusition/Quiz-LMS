@@ -123,6 +123,9 @@ function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL UNIQUE,
       displayName TEXT DEFAULT '',
+      facultyId INTEGER,
+      departmentId INTEGER,
+      adminTitle TEXT DEFAULT '',
       securityNotes TEXT DEFAULT '',
       lastCredentialRotationAt TEXT DEFAULT '',
       createdAt TEXT DEFAULT (datetime('now')),
@@ -134,6 +137,10 @@ function createTables() {
       userId INTEGER NOT NULL UNIQUE,
       displayName TEXT DEFAULT '',
       department TEXT DEFAULT '',
+      facultyId INTEGER,
+      departmentId INTEGER,
+      academicTitle TEXT DEFAULT '',
+      staffNumber TEXT DEFAULT '',
       officeHours TEXT DEFAULT '',
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now'))
@@ -145,6 +152,62 @@ function createTables() {
       displayName TEXT DEFAULT '',
       studentNumber TEXT DEFAULT '',
       cohort TEXT DEFAULT '',
+      facultyId INTEGER,
+      departmentId INTEGER,
+      classYearId INTEGER,
+      sectionId INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.faculties (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL UNIQUE,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.departments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      facultyId INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(facultyId, code),
+      FOREIGN KEY (facultyId) REFERENCES faculties(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.class_years (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      departmentId INTEGER NOT NULL,
+      yearNumber INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(departmentId, yearNumber),
+      FOREIGN KEY (departmentId) REFERENCES departments(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.sections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      classYearId INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(classYearId, name),
+      FOREIGN KEY (classYearId) REFERENCES class_years(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.academic_terms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      academicYear TEXT NOT NULL,
+      semesterType TEXT NOT NULL CHECK(semesterType IN ('fall', 'spring', 'summer', 'winter', 'full-year', 'other')),
+      startDate TEXT DEFAULT '',
+      endDate TEXT DEFAULT '',
+      isActive INTEGER NOT NULL DEFAULT 0,
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now'))
     );
@@ -154,12 +217,46 @@ function createTables() {
       code TEXT NOT NULL UNIQUE,
       title TEXT NOT NULL,
       description TEXT DEFAULT '',
+      departmentId INTEGER,
+      credits INTEGER NOT NULL DEFAULT 3,
       visibility TEXT NOT NULL DEFAULT 'private' CHECK(visibility IN ('private', 'published', 'archived')),
       startDate TEXT DEFAULT '',
       endDate TEXT DEFAULT '',
       createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
-      updatedAt TEXT DEFAULT (datetime('now'))
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (departmentId) REFERENCES departments(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.course_offerings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      termId INTEGER NOT NULL,
+      instructorId INTEGER,
+      departmentId INTEGER,
+      classYearId INTEGER,
+      sectionId INTEGER,
+      capacity INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'active', 'completed', 'cancelled')),
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE,
+      FOREIGN KEY (termId) REFERENCES academic_terms(id) ON DELETE CASCADE,
+      FOREIGN KEY (departmentId) REFERENCES departments(id) ON DELETE SET NULL,
+      FOREIGN KEY (classYearId) REFERENCES class_years(id) ON DELETE SET NULL,
+      FOREIGN KEY (sectionId) REFERENCES sections(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.course_offering_enrollments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseOfferingId INTEGER NOT NULL,
+      studentId INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'dropped', 'completed')),
+      finalGrade TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(courseOfferingId, studentId),
+      FOREIGN KEY (courseOfferingId) REFERENCES course_offerings(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS learning.enrollments (
@@ -180,6 +277,32 @@ function createTables() {
       description TEXT DEFAULT '',
       createdAt TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.attendance_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseOfferingId INTEGER NOT NULL,
+      termId INTEGER NOT NULL,
+      sessionDate TEXT NOT NULL,
+      topic TEXT DEFAULT '',
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (courseOfferingId) REFERENCES course_offerings(id) ON DELETE CASCADE,
+      FOREIGN KEY (termId) REFERENCES academic_terms(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.attendance_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sessionId INTEGER NOT NULL,
+      studentId INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('present', 'absent', 'late', 'excused')),
+      note TEXT DEFAULT '',
+      markedBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(sessionId, studentId),
+      FOREIGN KEY (sessionId) REFERENCES attendance_sessions(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS assessment.questions (
@@ -251,6 +374,37 @@ function createTables() {
       FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS assessment.assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseOfferingId INTEGER NOT NULL,
+      termId INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      dueDate TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'closed')),
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.assignment_submissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      assignmentId INTEGER NOT NULL,
+      studentId INTEGER NOT NULL,
+      submissionText TEXT DEFAULT '',
+      submissionUrl TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'submitted' CHECK(status IN ('submitted', 'graded', 'returned')),
+      submittedAt TEXT DEFAULT (datetime('now')),
+      grade TEXT DEFAULT '',
+      feedback TEXT DEFAULT '',
+      gradedAt TEXT DEFAULT '',
+      gradedBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(assignmentId, studentId),
+      FOREIGN KEY (assignmentId) REFERENCES assignments(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS content.announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER NOT NULL,
@@ -277,14 +431,27 @@ function migrateExistingTables() {
   ensureColumn('users', 'users', 'username', 'username TEXT');
   ensureColumn('users', 'users', 'mustChangeCredentials', 'mustChangeCredentials INTEGER NOT NULL DEFAULT 0');
   ensureColumn('admin', 'admin_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
+  ensureColumn('admin', 'admin_profiles', 'facultyId', 'facultyId INTEGER');
+  ensureColumn('admin', 'admin_profiles', 'departmentId', 'departmentId INTEGER');
+  ensureColumn('admin', 'admin_profiles', 'adminTitle', 'adminTitle TEXT DEFAULT \'\'');
   ensureColumn('admin', 'admin_profiles', 'securityNotes', 'securityNotes TEXT DEFAULT \'\'');
   ensureColumn('admin', 'admin_profiles', 'lastCredentialRotationAt', 'lastCredentialRotationAt TEXT DEFAULT \'\'');
   ensureColumn('teacher', 'teacher_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
   ensureColumn('teacher', 'teacher_profiles', 'department', 'department TEXT DEFAULT \'\'');
+  ensureColumn('teacher', 'teacher_profiles', 'facultyId', 'facultyId INTEGER');
+  ensureColumn('teacher', 'teacher_profiles', 'departmentId', 'departmentId INTEGER');
+  ensureColumn('teacher', 'teacher_profiles', 'academicTitle', 'academicTitle TEXT DEFAULT \'\'');
+  ensureColumn('teacher', 'teacher_profiles', 'staffNumber', 'staffNumber TEXT DEFAULT \'\'');
   ensureColumn('teacher', 'teacher_profiles', 'officeHours', 'officeHours TEXT DEFAULT \'\'');
   ensureColumn('student', 'student_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
   ensureColumn('student', 'student_profiles', 'studentNumber', 'studentNumber TEXT DEFAULT \'\'');
   ensureColumn('student', 'student_profiles', 'cohort', 'cohort TEXT DEFAULT \'\'');
+  ensureColumn('student', 'student_profiles', 'facultyId', 'facultyId INTEGER');
+  ensureColumn('student', 'student_profiles', 'departmentId', 'departmentId INTEGER');
+  ensureColumn('student', 'student_profiles', 'classYearId', 'classYearId INTEGER');
+  ensureColumn('student', 'student_profiles', 'sectionId', 'sectionId INTEGER');
+  ensureColumn('learning', 'courses', 'departmentId', 'departmentId INTEGER');
+  ensureColumn('learning', 'courses', 'credits', 'credits INTEGER NOT NULL DEFAULT 3');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
   ensureColumn('assessment', 'questions', 'points', 'points REAL NOT NULL DEFAULT 1');
   ensureColumn('assessment', 'questions', 'createdBy', 'createdBy INTEGER');
@@ -508,6 +675,7 @@ function seedDatabase() {
   if (courseCount === 0) {
     seedLmsData(database);
   }
+  ensureAcademicSeed(database);
 
   const categoryCount = database.prepare('SELECT COUNT(*) as count FROM categories').get().count;
   if (categoryCount === 0) {
@@ -611,6 +779,151 @@ function seedLmsData(database) {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(courseId, 'Course syllabus', 'page', '', 'Weekly topics, assessment policy, and quiz rules.', teacher.id);
   }
+}
+
+function ensureAcademicSeed(database) {
+  database.prepare(`
+    INSERT OR IGNORE INTO faculties (name, code)
+    VALUES (?, ?)
+  `).run('Faculty of Engineering', 'ENG');
+
+  const faculty = database.prepare('SELECT id FROM faculties WHERE code = ?').get('ENG');
+  if (!faculty) return;
+
+  database.prepare(`
+    INSERT OR IGNORE INTO departments (facultyId, name, code)
+    VALUES (?, ?, ?)
+  `).run(faculty.id, 'Computer Engineering', 'CENG');
+
+  const department = database.prepare(`
+    SELECT id FROM departments WHERE facultyId = ? AND code = ?
+  `).get(faculty.id, 'CENG');
+  if (!department) return;
+
+  database.prepare(`
+    INSERT OR IGNORE INTO class_years (departmentId, yearNumber, name)
+    VALUES (?, ?, ?)
+  `).run(department.id, 1, 'First Year');
+
+  const classYear = database.prepare(`
+    SELECT id FROM class_years WHERE departmentId = ? AND yearNumber = ?
+  `).get(department.id, 1);
+
+  if (classYear) {
+    database.prepare(`
+      INSERT OR IGNORE INTO sections (classYearId, name)
+      VALUES (?, ?)
+    `).run(classYear.id, 'A');
+  }
+
+  const section = classYear
+    ? database.prepare('SELECT id FROM sections WHERE classYearId = ? AND name = ?').get(classYear.id, 'A')
+    : null;
+
+  let activeTerm = database.prepare('SELECT id FROM academic_terms WHERE isActive = 1 ORDER BY id DESC LIMIT 1').get();
+  if (!activeTerm) {
+    const termCount = database.prepare('SELECT COUNT(*) as count FROM academic_terms').get().count;
+    if (termCount === 0) {
+      database.prepare(`
+        INSERT INTO academic_terms (name, academicYear, semesterType, startDate, endDate, isActive)
+        VALUES (?, ?, ?, ?, ?, 1)
+      `).run('2025-2026 Spring', '2025-2026', 'spring', '2026-02-02', '2026-06-12');
+    } else {
+      database.prepare('UPDATE academic_terms SET isActive = 1 WHERE id = (SELECT id FROM academic_terms ORDER BY id DESC LIMIT 1)').run();
+    }
+    activeTerm = database.prepare('SELECT id FROM academic_terms WHERE isActive = 1 ORDER BY id DESC LIMIT 1').get();
+  }
+
+  database.prepare(`
+    UPDATE courses
+    SET departmentId = COALESCE(departmentId, ?),
+      credits = CASE WHEN credits IS NULL OR credits < 1 THEN 3 ELSE credits END
+    WHERE departmentId IS NULL OR credits IS NULL OR credits < 1
+  `).run(department.id);
+
+  database.prepare(`
+    UPDATE teacher_profiles
+    SET facultyId = COALESCE(facultyId, ?),
+      departmentId = COALESCE(departmentId, ?),
+      academicTitle = CASE WHEN TRIM(COALESCE(academicTitle, '')) = '' THEN 'Instructor' ELSE academicTitle END,
+      department = CASE WHEN TRIM(COALESCE(department, '')) = '' OR department = 'General' THEN 'Computer Engineering' ELSE department END,
+      updatedAt = datetime('now')
+    WHERE facultyId IS NULL OR departmentId IS NULL OR TRIM(COALESCE(academicTitle, '')) = ''
+  `).run(faculty.id, department.id);
+
+  database.prepare(`
+    UPDATE student_profiles
+    SET facultyId = COALESCE(facultyId, ?),
+      departmentId = COALESCE(departmentId, ?),
+      classYearId = COALESCE(classYearId, ?),
+      sectionId = COALESCE(sectionId, ?),
+      cohort = CASE WHEN TRIM(COALESCE(cohort, '')) = '' THEN '2025' ELSE cohort END,
+      updatedAt = datetime('now')
+    WHERE facultyId IS NULL OR departmentId IS NULL OR classYearId IS NULL OR sectionId IS NULL
+  `).run(faculty.id, department.id, classYear ? classYear.id : null, section ? section.id : null);
+
+  database.prepare(`
+    UPDATE admin_profiles
+    SET adminTitle = CASE WHEN TRIM(COALESCE(adminTitle, '')) = '' THEN 'System Administrator' ELSE adminTitle END,
+      updatedAt = datetime('now')
+    WHERE TRIM(COALESCE(adminTitle, '')) = ''
+  `).run();
+
+  if (!activeTerm) return;
+
+  const defaultTeacher = database.prepare(`
+    SELECT u.id
+    FROM users u
+    LEFT JOIN teacher_profiles tp ON tp.userId = u.id
+    WHERE u.role = 'teacher' AND u.status = 'active'
+    ORDER BY CASE WHEN tp.departmentId = ? THEN 0 ELSE 1 END, u.id ASC
+    LIMIT 1
+  `).get(department.id);
+
+  const courses = database.prepare('SELECT id, departmentId FROM courses ORDER BY id ASC').all();
+  const existingOffering = database.prepare(`
+    SELECT id FROM course_offerings WHERE courseId = ? AND termId = ? LIMIT 1
+  `);
+  const insertOffering = database.prepare(`
+    INSERT INTO course_offerings (
+      courseId, termId, instructorId, departmentId, classYearId, sectionId, capacity, status
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  courses.forEach(course => {
+    const offering = existingOffering.get(course.id, activeTerm.id);
+    if (offering) return;
+    insertOffering.run(
+      course.id,
+      activeTerm.id,
+      defaultTeacher ? defaultTeacher.id : null,
+      course.departmentId || department.id,
+      classYear ? classYear.id : null,
+      section ? section.id : null,
+      40,
+      'active'
+    );
+  });
+
+  const activeOfferings = database.prepare(`
+    SELECT co.id, co.courseId
+    FROM course_offerings co
+    WHERE co.termId = ?
+  `).all(activeTerm.id);
+  const insertOfferingEnrollment = database.prepare(`
+    INSERT OR IGNORE INTO course_offering_enrollments (courseOfferingId, studentId, status)
+    VALUES (?, ?, 'active')
+  `);
+
+  activeOfferings.forEach(offering => {
+    const students = database.prepare(`
+      SELECT userId
+      FROM enrollments
+      WHERE courseId = ? AND role = 'student' AND status = 'active'
+    `).all(offering.courseId);
+    students.forEach(student => insertOfferingEnrollment.run(offering.id, student.userId));
+  });
 }
 
 function seedQuestionBank(database) {

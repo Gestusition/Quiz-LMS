@@ -18,9 +18,12 @@ export const CoursesPage = {
               <h2>${this.esc(course.title)}</h2>
               <p>${this.esc(course.description || 'No description')}</p>
               <div class="metric-strip">
+                <span>${this.esc(course.departmentCode || course.departmentName || 'No dept')}</span>
+                <span>${course.credits || 0} credits</span>
                 <span>${course.teacherCount} teachers</span>
                 <span>${course.studentCount} students</span>
                 <span>${course.quizCount} quizzes</span>
+                <span>${course.offeringCount || 0} offerings</span>
               </div>
               <div class="card-actions">
                 <a class="btn btn-primary btn-sm" href="#/courses/${course.id}">Open</a>
@@ -40,15 +43,25 @@ export const CoursesPage = {
 
   async showCourseForm(id) {
     const isEdit = !!id;
-    const course = isEdit ? await API.getCourse(id) : {
-      code: '', title: '', description: '', visibility: 'private', startDate: '', endDate: ''
-    };
+    const [course, departments] = await Promise.all([
+      isEdit ? API.getCourse(id) : Promise.resolve({
+        code: '', title: '', description: '', visibility: 'private', startDate: '', endDate: '', credits: 3, departmentId: ''
+      }),
+      API.getDepartments().catch(() => [])
+    ]);
 
     this.openModal(isEdit ? 'Edit course' : 'New course', `
       <form id="course-form" class="stack">
         ${this.input('course-code', 'Code', course.code, 'text', 'WEB101')}
         ${this.input('course-title', 'Title', course.title)}
         ${this.textarea('course-description', 'Description', course.description)}
+        <div class="form-grid">
+          <label class="form-field"><span>Department</span><select class="form-select" id="course-department">
+            <option value="">None</option>
+            ${departments.map(department => `<option value="${department.id}" ${Number(course.departmentId) === Number(department.id) ? 'selected' : ''}>${this.esc(department.code)} - ${this.esc(department.name)}</option>`).join('')}
+          </select></label>
+          ${this.input('course-credits', 'Credits', course.credits || 3, 'number')}
+        </div>
         <label class="form-field"><span>Visibility</span><select class="form-select" id="course-visibility">
           ${['private', 'published', 'archived'].map(option => `<option value="${option}" ${course.visibility === option ? 'selected' : ''}>${option}</option>`).join('')}
         </select></label>
@@ -65,6 +78,8 @@ export const CoursesPage = {
         code: value('course-code'),
         title: value('course-title'),
         description: value('course-description'),
+        departmentId: value('course-department') ? Number(value('course-department')) : null,
+        credits: Number(value('course-credits')),
         visibility: value('course-visibility')
       };
       try {

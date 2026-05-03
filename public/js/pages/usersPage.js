@@ -58,7 +58,14 @@ export const UsersPage = {
   },
 
   async showUserForm(id) {
-    const user = id ? (await API.getUsers()).find(item => item.id === id) : {
+    const [users, faculties, departments, classYears, sections] = await Promise.all([
+      API.getUsers(),
+      API.getFaculties().catch(() => []),
+      API.getDepartments().catch(() => []),
+      API.getClassYears().catch(() => []),
+      API.getSections().catch(() => [])
+    ]);
+    const user = id ? users.find(item => item.id === id) : {
       name: '', username: '', email: '', role: 'student', status: 'active', studentNumber: '', cohort: ''
     };
     this.openModal(id ? 'Edit user' : 'New user', `
@@ -83,15 +90,28 @@ export const UsersPage = {
       if (role === 'student') {
         container.innerHTML = `
           ${this.input('user-student-number', 'Student number', user.studentNumber || '', 'text', 'STU-0001')}
+          ${this.selectField('user-faculty-id', 'Faculty', faculties, user.facultyId, row => row.name, true)}
+          ${this.selectField('user-department-id', 'Department', departments, user.departmentId, row => `${row.code} - ${row.name}`, true)}
+          ${this.selectField('user-class-year-id', 'Class year', classYears, user.classYearId, row => `${row.departmentCode} - ${row.name}`, true)}
+          ${this.selectField('user-section-id', 'Section', sections, user.sectionId, row => `${row.classYearName} - ${row.name}`, true)}
           ${this.input('user-cohort', 'Cohort', user.cohort || '', 'text', '2026')}
         `;
       } else if (role === 'teacher') {
         container.innerHTML = `
-          ${this.input('user-department', 'Department', user.department || '')}
+          ${this.input('user-academic-title', 'Academic title', user.academicTitle || '', 'text', 'Instructor')}
+          ${this.input('user-staff-number', 'Staff number', user.staffNumber || '', 'text', 'EMP-1001')}
+          ${this.selectField('user-faculty-id', 'Faculty', faculties, user.facultyId, row => row.name, true)}
+          ${this.selectField('user-department-id', 'Department', departments, user.departmentId, row => `${row.code} - ${row.name}`, true)}
+          ${this.input('user-department', 'Legacy department label', user.department || user.departmentName || '')}
           ${this.input('user-office-hours', 'Office hours', user.officeHours || '')}
         `;
       } else {
-        container.innerHTML = this.input('user-display-name', 'Display name', user.displayName || '');
+        container.innerHTML = `
+          ${this.input('user-display-name', 'Display name', user.displayName || '')}
+          ${this.input('user-admin-title', 'Admin title', user.adminTitle || '', 'text', 'System Administrator')}
+          ${this.selectField('user-faculty-id', 'Faculty', faculties, user.facultyId, row => row.name, true)}
+          ${this.selectField('user-department-id', 'Department', departments, user.departmentId, row => `${row.code} - ${row.name}`, true)}
+        `;
       }
     };
 
@@ -113,11 +133,22 @@ export const UsersPage = {
       if (data.role === 'student') {
         data.studentNumber = value('user-student-number');
         data.cohort = value('user-cohort');
+        data.facultyId = value('user-faculty-id') ? Number(value('user-faculty-id')) : null;
+        data.departmentId = value('user-department-id') ? Number(value('user-department-id')) : null;
+        data.classYearId = value('user-class-year-id') ? Number(value('user-class-year-id')) : null;
+        data.sectionId = value('user-section-id') ? Number(value('user-section-id')) : null;
       } else if (data.role === 'teacher') {
         data.department = value('user-department');
         data.officeHours = value('user-office-hours');
+        data.academicTitle = value('user-academic-title');
+        data.staffNumber = value('user-staff-number');
+        data.facultyId = value('user-faculty-id') ? Number(value('user-faculty-id')) : null;
+        data.departmentId = value('user-department-id') ? Number(value('user-department-id')) : null;
       } else {
         data.displayName = value('user-display-name');
+        data.adminTitle = value('user-admin-title');
+        data.facultyId = value('user-faculty-id') ? Number(value('user-faculty-id')) : null;
+        data.departmentId = value('user-department-id') ? Number(value('user-department-id')) : null;
       }
       try {
         if (id) {
@@ -182,12 +213,13 @@ export const UsersPage = {
 
   academicIdentity(user) {
     if (user.role === 'student') {
-      return `<small>${this.esc(user.studentNumber || '-')} ${user.cohort ? `- ${this.esc(user.cohort)}` : ''}</small>`;
+      const academic = [user.departmentName, user.classYearName, user.sectionName].filter(Boolean).join(' / ');
+      return `<small>${this.esc(user.studentNumber || '-')} ${academic ? `- ${this.esc(academic)}` : ''}</small>`;
     }
     if (user.role === 'teacher') {
-      return `<small>${this.esc(user.department || '-')}</small>`;
+      return `<small>${this.esc(user.academicTitle || 'Instructor')} - ${this.esc(user.departmentName || user.department || '-')}</small>`;
     }
-    return `<small>${this.esc(user.displayName || 'Admin')}</small>`;
+    return `<small>${this.esc(user.adminTitle || user.displayName || 'Admin')}</small>`;
   },
 
   resetRequestRow(request) {

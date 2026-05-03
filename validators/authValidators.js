@@ -28,6 +28,15 @@ function validateStudentNumber(value) {
   return studentNumber;
 }
 
+function optionalPositiveId(value, fieldName) {
+  if (value === undefined || value === null || value === '') return null;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id < 1) {
+    throw new Error(`${fieldName} must be a positive integer.`);
+  }
+  return id;
+}
+
 function validateUserPayload(data, requirePassword) {
   const name = String(data.name || '').trim();
   const username = validateUsername(data.username || usernameFromEmail(data.email));
@@ -41,6 +50,13 @@ function validateUserPayload(data, requirePassword) {
   const officeHours = data.officeHours !== undefined ? String(data.officeHours || '').trim() : '';
   const cohort = data.cohort !== undefined ? String(data.cohort || '').trim() : '';
   const studentNumber = role === 'student' ? validateStudentNumber(data.studentNumber) : '';
+  const facultyId = optionalPositiveId(data.facultyId, 'facultyId');
+  const departmentId = optionalPositiveId(data.departmentId, 'departmentId');
+  const classYearId = optionalPositiveId(data.classYearId, 'classYearId');
+  const sectionId = optionalPositiveId(data.sectionId, 'sectionId');
+  const academicTitle = data.academicTitle !== undefined ? String(data.academicTitle || '').trim() : '';
+  const staffNumber = data.staffNumber !== undefined ? String(data.staffNumber || '').trim() : '';
+  const adminTitle = data.adminTitle !== undefined ? String(data.adminTitle || '').trim() : '';
 
   if (!name || name.length > 120) {
     throw new Error('User name is required and must be 120 characters or less.');
@@ -70,7 +86,14 @@ function validateUserPayload(data, requirePassword) {
     department,
     officeHours,
     studentNumber,
-    cohort
+    cohort,
+    facultyId,
+    departmentId,
+    classYearId: role === 'student' ? classYearId : null,
+    sectionId: role === 'student' ? sectionId : null,
+    academicTitle,
+    staffNumber,
+    adminTitle
   };
 }
 
@@ -84,5 +107,6 @@ module.exports = {
   validateStudentNumber,
   validateUserPayload,
   validateUsername,
-  usernameFromEmail
+  usernameFromEmail,
+  optionalPositiveId
 };

@@ -34,11 +34,18 @@ function getParticipants(courseId) {
   return getDatabase().prepare(`
     SELECT e.id as enrollmentId, e.role as courseRole, e.status as enrollmentStatus,
       e.createdAt as enrolledAt, u.id, u.name, u.email, u.role, u.status,
-      sp.studentNumber, sp.cohort, tp.department
+      sp.studentNumber, sp.cohort, sp.classYearId, sp.sectionId,
+      tp.department, tp.academicTitle,
+      f.name as facultyName, d.name as departmentName,
+      cy.name as classYearName, cy.yearNumber, sec.name as sectionName
     FROM enrollments e
     JOIN users u ON u.id = e.userId
     LEFT JOIN student_profiles sp ON sp.userId = u.id
     LEFT JOIN teacher_profiles tp ON tp.userId = u.id
+    LEFT JOIN faculties f ON f.id = COALESCE(sp.facultyId, tp.facultyId)
+    LEFT JOIN departments d ON d.id = COALESCE(sp.departmentId, tp.departmentId)
+    LEFT JOIN class_years cy ON cy.id = sp.classYearId
+    LEFT JOIN sections sec ON sec.id = sp.sectionId
     WHERE e.courseId = ?
     ORDER BY e.role DESC, u.name ASC
   `).all(courseId);
@@ -74,7 +81,7 @@ function deleteByUserId(userId) {
 }
 
 function insertCourseTeacher(courseId, userId) {
-  return getDatabase().prepare('INSERT INTO enrollments (courseId, userId, role) VALUES (?, ?, ?)')
+  return getDatabase().prepare('INSERT OR IGNORE INTO enrollments (courseId, userId, role) VALUES (?, ?, ?)')
     .run(courseId, userId, 'teacher');
 }
 

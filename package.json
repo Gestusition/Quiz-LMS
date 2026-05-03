@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "jest --verbose --forceExit"
+    "test": "jest --verbose --runInBand --forceExit"
   },
   "keywords": ["quiz", "lms", "education", "crud", "rest-api", "express"],
   "author": "",

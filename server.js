@@ -9,6 +9,8 @@ const courseRoutes = require('./routes/courseRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const questionRoutes = require('./routes/questionRoutes');
 const quizRoutes = require('./routes/quizRoutes');
+const academicRoutes = require('./routes/academicRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +30,8 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/quizzes', quizRoutes);
+app.use('/api/academic', academicRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Swagger API Documentation
 setupSwagger(app);
@@ -35,6 +39,11 @@ setupSwagger(app);
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Unknown API routes should fail fast instead of leaving the request open.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API route not found.' });
 });
 
 // SPA fallback — serve index.html for any non-API route
