@@ -1,5 +1,7 @@
 # Quiz LMS
 
+> **🚧 Work in Progress:** Development of this application is ongoing. The current README might reflect an older version of the application or lack details about newly added features and recent architectural changes.
+
 A vanilla JavaScript, Express, and SQLite learning management system focused on secure quiz delivery. It keeps the SAD project requirements intact: SPA frontend, REST API, full CRUD, validation, service-layer business logic, unit tests, Swagger documentation, and Git-friendly structure.
 
 ## Features
@@ -153,29 +155,18 @@ Authorization: Bearer <session-token>
 
 ```text
 quiz-web/
-├── database/db.js
+├── constants/                # Application constants and enums
 ├── data/                     # Local runtime SQLite files, ignored by Git
-├── middleware/
-│   ├── auth.js
-│   └── validation.js
-├── routes/
-│   ├── authRoutes.js
-│   ├── courseRoutes.js
-│   ├── quizRoutes.js
-│   ├── userRoutes.js
-│   ├── categoryRoutes.js
-│   └── questionRoutes.js
-├── services/
-│   ├── authService.js
-│   ├── contentService.js
-│   ├── courseService.js
-│   ├── quizService.js
-│   ├── categoryService.js
-│   └── questionService.js
-├── public/
-│   ├── index.html
-│   ├── css/style.css
-│   └── js/
-├── tests/
-└── server.js
+├── database/                 # Database connection and setup
+├── middleware/               # Express middleware (auth, validation)
+├── public/                   # Vanilla JS frontend SPA (HTML/CSS/JS)
+├── repositories/             # Data access layer
+├── routes/                   # Express API route definitions
+├── serializers/              # Response formatting and data transformation
+├── services/                 # Core business logic layer
+├── swagger/                  # OpenAPI/Swagger documentation configurations
+├── tests/                    # Jest unit tests
+├── utils/                    # Shared utility functions
+├── validators/               # Input validation schemas and logic
+└── server.js                 # Application entry point
 ```
