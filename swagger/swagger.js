@@ -52,7 +52,11 @@ const options = {
         ErrorResponse: {
           type: 'object',
           properties: {
-            error: { type: 'string' }
+            error: { type: 'string' },
+            field: { type: 'string' },
+            message: { type: 'string' },
+            code: { type: 'string' },
+            restriction_type: { type: 'string' }
           }
         },
         MessageResponse: {
@@ -65,7 +69,7 @@ const options = {
           type: 'object',
           required: ['identifier', 'password'],
           properties: {
-            identifier: { type: 'string', description: 'Username, email, or student number' },
+            identifier: { type: 'string', description: 'Role-based login identifier: student_number for students, email for teachers, email/username for admins' },
             password: { type: 'string' }
           }
         },
@@ -193,16 +197,34 @@ const options = {
           type: 'object',
           required: ['identifier'],
           properties: {
-            identifier: { type: 'string', description: 'Username, email, or student number' }
+            identifier: { type: 'string', description: 'Email or academic identifier' }
           }
         },
         PasswordResetCompleteRequest: {
           type: 'object',
-          required: ['username', 'code', 'newPassword'],
+          required: ['identifier', 'code', 'newPassword'],
           properties: {
-            username: { type: 'string', description: 'Username, email, or student number' },
+            identifier: { type: 'string', description: 'Email or academic identifier' },
             code: { type: 'string' },
             newPassword: { type: 'string' }
+          }
+        },
+        UserListResponse: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/User' }
+            },
+            pagination: {
+              type: 'object',
+              properties: {
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total: { type: 'integer' },
+                totalPages: { type: 'integer' }
+              }
+            }
           }
         },
         PasswordResetCodeResponse: {
@@ -685,7 +707,13 @@ const options = {
       { name: 'Categories', description: 'Question category management endpoints' },
       { name: 'Questions', description: 'Question bank endpoints' },
       { name: 'Academic', description: 'University hierarchy, terms, offerings, assignments, and attendance endpoints' },
-      { name: 'Analytics', description: 'Admin academic analytics endpoints' }
+      { name: 'Analytics', description: 'Admin academic analytics endpoints' },
+      { name: 'Restrictions', description: 'User restriction and partial access control endpoints' },
+      { name: 'Issues', description: 'Validation issue tracking endpoints' },
+      { name: 'Imports', description: 'Import batch and import error workflows' },
+      { name: 'Discussion', description: 'Course discussion threads and replies' },
+      { name: 'Weeks', description: 'Weekly course material and resources' },
+      { name: 'Audit', description: 'Audit log activity endpoints' }
     ]
   },
   apis: ['./routes/*.js']

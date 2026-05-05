@@ -1,74 +1,102 @@
 const { roleValues, userStatusValues } = require('../constants/enums');
+const { LIMITS } = require('../constants/limits');
+const { validationError } = require('../utils/appError');
+const {
+  optionalId,
+  optionalText,
+  requiredEmail,
+  requiredText
+} = require('../utils/validation');
 
 function validateUsername(value) {
   const username = String(value || '').trim().toLowerCase();
-  if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
-    throw new Error('Username must be 3-32 characters and use only letters, numbers, dots, underscores, or hyphens.');
+  const { usernameMin, usernameMax } = LIMITS.users;
+  if (!new RegExp(`^[a-z0-9._-]{${usernameMin},${usernameMax}}$`).test(username)) {
+    throw validationError(
+      'username',
+      `Username must be ${usernameMin}-${usernameMax} characters and use only letters, numbers, dots, underscores, or hyphens.`
+    );
   }
   return username;
 }
 
 function validatePassword(password) {
-  if (!password || password.length < 8 || password.length > 128) {
-    throw new Error('Password must be between 8 and 128 characters.');
+  const value = String(password || '');
+  const { passwordMin, passwordMax } = LIMITS.users;
+  if (value.length < passwordMin || value.length > passwordMax) {
+    throw validationError('password', `Password must be between ${passwordMin} and ${passwordMax} characters.`);
   }
-  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-    throw new Error('Password must include uppercase, lowercase, and number characters.');
+  if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value)) {
+    throw validationError('password', 'Password must include uppercase, lowercase, and number characters.');
   }
 }
 
 function validateStudentNumber(value) {
   const studentNumber = String(value || '').trim();
   if (!studentNumber) {
-    throw new Error('Student number is required for student users.');
+    throw validationError('student_number', 'Student number is required for student users.');
   }
-  if (!/^[A-Za-z0-9._-]{3,32}$/.test(studentNumber)) {
-    throw new Error('Student number must be 3-32 characters and use only letters, numbers, dots, underscores, or hyphens.');
+  const { studentNumberMin, studentNumberMax } = LIMITS.users;
+  if (!new RegExp(`^[A-Za-z0-9._-]{${studentNumberMin},${studentNumberMax}}$`).test(studentNumber)) {
+    throw validationError(
+      'student_number',
+      `Student number must be ${studentNumberMin}-${studentNumberMax} characters and use only letters, numbers, dots, underscores, or hyphens.`
+    );
   }
   return studentNumber;
 }
 
-function optionalPositiveId(value, fieldName) {
-  if (value === undefined || value === null || value === '') return null;
-  const id = Number(value);
-  if (!Number.isInteger(id) || id < 1) {
-    throw new Error(`${fieldName} must be a positive integer.`);
+function validateEmployeeNumber(value, required = false) {
+  const employeeNumber = String(value || '').trim();
+  if (!employeeNumber) {
+    if (required) {
+      throw validationError('employee_number', 'Employee number is required.');
+    }
+    return '';
   }
-  return id;
+  const { employeeNumberMin, employeeNumberMax } = LIMITS.users;
+  if (!new RegExp(`^[A-Za-z0-9._-]{${employeeNumberMin},${employeeNumberMax}}$`).test(employeeNumber)) {
+    throw validationError(
+      'employee_number',
+      `Employee number must be ${employeeNumberMin}-${employeeNumberMax} characters and use only letters, numbers, dots, underscores, or hyphens.`
+    );
+  }
+  return employeeNumber;
+}
+
+function optionalPositiveId(value, fieldName) {
+  return optionalId(value, fieldName);
 }
 
 function validateUserPayload(data, requirePassword) {
-  const name = String(data.name || '').trim();
+  const name = requiredText(data.name, 'name', {
+    min: LIMITS.users.nameMin,
+    max: LIMITS.users.nameMax
+  });
   const username = validateUsername(data.username || usernameFromEmail(data.email));
-  const email = String(data.email || '').trim().toLowerCase();
+  const email = requiredEmail(data.email);
   const role = String(data.role || '').trim();
   const status = data.status ? String(data.status).trim() : 'active';
   const mustChangeCredentials = !!data.mustChangeCredentials;
   const password = data.password !== undefined ? String(data.password) : undefined;
-  const displayName = data.displayName !== undefined ? String(data.displayName || '').trim() : '';
-  const department = data.department !== undefined ? String(data.department || '').trim() : '';
-  const officeHours = data.officeHours !== undefined ? String(data.officeHours || '').trim() : '';
-  const cohort = data.cohort !== undefined ? String(data.cohort || '').trim() : '';
+  const displayName = optionalText(data.displayName, 'display_name', LIMITS.profiles.displayNameMax);
+  const department = optionalText(data.department, 'department', LIMITS.profiles.departmentLabelMax);
+  const officeHours = optionalText(data.officeHours, 'office_hours', LIMITS.profiles.officeHoursMax);
+  const cohort = optionalText(data.cohort, 'cohort', LIMITS.profiles.cohortMax);
   const studentNumber = role === 'student' ? validateStudentNumber(data.studentNumber) : '';
   const facultyId = optionalPositiveId(data.facultyId, 'facultyId');
   const departmentId = optionalPositiveId(data.departmentId, 'departmentId');
   const classYearId = optionalPositiveId(data.classYearId, 'classYearId');
   const sectionId = optionalPositiveId(data.sectionId, 'sectionId');
-  const academicTitle = data.academicTitle !== undefined ? String(data.academicTitle || '').trim() : '';
-  const staffNumber = data.staffNumber !== undefined ? String(data.staffNumber || '').trim() : '';
-  const adminTitle = data.adminTitle !== undefined ? String(data.adminTitle || '').trim() : '';
+  const academicTitle = optionalText(data.academicTitle, 'academic_title', LIMITS.profiles.titleMax);
+  const staffNumber = validateEmployeeNumber(data.staffNumber, false);
+  const adminTitle = optionalText(data.adminTitle, 'admin_title', LIMITS.profiles.titleMax);
 
-  if (!name || name.length > 120) {
-    throw new Error('User name is required and must be 120 characters or less.');
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new Error('A valid email is required.');
-  }
   if (!roleValues.includes(role)) {
-    throw new Error(`Role must be one of: ${roleValues.join(', ')}.`);
+    throw validationError('role', `Role must be one of: ${roleValues.join(', ')}.`);
   }
   if (!userStatusValues.includes(status)) {
-    throw new Error('Status must be active or disabled.');
+    throw validationError('status', `Status must be one of: ${userStatusValues.join(', ')}.`);
   }
   if (requirePassword || password) {
     validatePassword(password);
@@ -103,6 +131,7 @@ function usernameFromEmail(email) {
 }
 
 module.exports = {
+  validateEmployeeNumber,
   validatePassword,
   validateStudentNumber,
   validateUserPayload,

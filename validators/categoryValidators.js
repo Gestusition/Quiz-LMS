@@ -1,19 +1,13 @@
-function validateCategory(data) {
-  const name = data.name;
-  const description = data.description;
-  const courseId = data.courseId;
+const { LIMITS } = require('../constants/limits');
+const { optionalText, requiredText } = require('../utils/validation');
 
-  if (!name || typeof name !== 'string' || name.trim().length === 0) {
-    throw new Error('Category name is required and must be a non-empty string.');
-  }
-  if (name.trim().length > 100) {
-    throw new Error('Category name must be 100 characters or less.');
-  }
+function validateCategory(data) {
+  const courseId = data.courseId;
 
   return {
     courseId,
-    name: name.trim(),
-    description: (description || '').trim()
+    name: requiredText(data.name, 'name', { min: 2, max: 100 }),
+    description: optionalText(data.description, 'description', LIMITS.courses.descriptionMax)
   };
 }
 

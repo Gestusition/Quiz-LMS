@@ -286,6 +286,7 @@ export const AcademicPage = {
       API.getSections(),
       API.getUsers()
     ]);
+    const allUsers = users.items || users;
     const activeTerm = terms.find(term => term.isActive) || terms[0] || {};
     const item = id ? offerings.find(row => row.id === id) : {
       courseId: courses[0]?.id || '',
@@ -297,7 +298,7 @@ export const AcademicPage = {
       capacity: 40,
       status: 'active'
     };
-    const teachers = users.filter(user => user.role === 'teacher' && user.status === 'active');
+    const teachers = allUsers.filter(user => user.role === 'teacher' && user.status === 'active');
     this.openModal(id ? 'Edit course offering' : 'New course offering', `
       <form id="offering-form" class="stack">
         ${this.selectField('offering-course', 'Course', courses, item.courseId, row => `${row.code} - ${row.title}`)}
@@ -340,8 +341,9 @@ export const AcademicPage = {
       API.getOfferingEnrollments(courseOfferingId),
       API.getUsers({ role: 'student' })
     ]);
+    const userList = users.items || users;
     const enrolledIds = new Set(enrollments.map(item => Number(item.studentId)));
-    const students = users.filter(user => user.role === 'student' && !enrolledIds.has(Number(user.id)));
+    const students = userList.filter(user => user.role === 'student' && !enrolledIds.has(Number(user.id)));
     this.openModal('Offering enrollments', `
       <form id="offering-enrollment-form" class="stack">
         <div class="list">${enrollments.map(item => `

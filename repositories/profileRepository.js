@@ -100,6 +100,23 @@ function findDuplicateStudentNumber(studentNumber, excludeUserId) {
   `).get(studentNumber) || null;
 }
 
+function findDuplicateStaffNumber(staffNumber, excludeUserId) {
+  if (!String(staffNumber || '').trim()) return null;
+  const db = getDatabase();
+  if (excludeUserId) {
+    return db.prepare(`
+      SELECT userId
+      FROM teacher_profiles
+      WHERE LOWER(staffNumber) = LOWER(?) AND userId != ?
+    `).get(staffNumber, excludeUserId) || null;
+  }
+  return db.prepare(`
+    SELECT userId
+    FROM teacher_profiles
+    WHERE LOWER(staffNumber) = LOWER(?)
+  `).get(staffNumber) || null;
+}
+
 function touchAdminCredentialRotation(userId, timestamp) {
   return getDatabase().prepare(`
     UPDATE admin_profiles
@@ -110,6 +127,7 @@ function touchAdminCredentialRotation(userId, timestamp) {
 
 module.exports = {
   deleteForUser,
+  findDuplicateStaffNumber,
   findDuplicateStudentNumber,
   getForUser,
   replaceForUser,

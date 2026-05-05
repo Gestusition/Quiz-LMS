@@ -1,49 +1,81 @@
 const { quizStatusValues } = require('../constants/enums');
+const { LIMITS } = require('../constants/limits');
+const {
+  booleanValue,
+  dateValue,
+  ensureDateOrder,
+  enumValue,
+  intInRange,
+  numberInRange,
+  optionalText,
+  requiredId,
+  requiredText
+} = require('../utils/validation');
+
+const SHOW_RESULT_POLICIES = ['immediately', 'after_close', 'after_manual_release', 'never'];
+const GRADING_MODES = ['standard', 'negative_marking', 'manual_review'];
+const ATTEMPT_STATUSES = ['in_progress', 'submitted', 'expired', 'graded', 'pending_review'];
 
 function validateQuiz(data) {
-  const courseId = Number(data.courseId);
-  const title = String(data.title || '').trim();
-  const description = String(data.description || '').trim();
-  const status = data.status ? String(data.status).trim() : 'draft';
-  const openAt = data.openAt ? String(data.openAt).trim() : '';
-  const closeAt = data.closeAt ? String(data.closeAt).trim() : '';
-  const timeLimitMinutes = Number(data.timeLimitMinutes || 0);
-  const attemptsAllowed = Number(data.attemptsAllowed || 1);
+  const startAt = dateValue(data.startAt !== undefined ? data.startAt : data.openAt, 'startAt');
+  const endAt = dateValue(data.endAt !== undefined ? data.endAt : data.closeAt, 'endAt');
+  ensureDateOrder(startAt, endAt, 'startAt', 'endAt');
 
-  if (!courseId) {
-    throw new Error('Course is required.');
-  }
-  if (!title || title.length > 160) {
-    throw new Error('Quiz title is required and must be 160 characters or less.');
-  }
-  if (description.length > 1000) {
-    throw new Error('Quiz description must be 1000 characters or less.');
-  }
-  if (!quizStatusValues.includes(status)) {
-    throw new Error('Quiz status must be draft, published, or closed.');
-  }
-  if (!Number.isInteger(timeLimitMinutes) || timeLimitMinutes < 0 || timeLimitMinutes > 600) {
-    throw new Error('Time limit must be between 0 and 600 minutes.');
-  }
-  if (!Number.isInteger(attemptsAllowed) || attemptsAllowed < 1 || attemptsAllowed > 20) {
-    throw new Error('Attempts allowed must be between 1 and 20.');
-  }
-  if (openAt && closeAt && new Date(openAt).getTime() > new Date(closeAt).getTime()) {
-    throw new Error('Open date must be before close date.');
-  }
+  const durationInput = data.durationMinutes !== undefined
+    ? data.durationMinutes
+    : (data.timeLimitMinutes !== undefined ? data.timeLimitMinutes : LIMITS.quizzes.durationMin);
 
-  return {
-    courseId,
-    title,
-    description,
-    status,
-    openAt,
-    closeAt,
-    timeLimitMinutes,
-    attemptsAllowed,
-    shuffleQuestions: !!data.shuffleQuestions,
+  const payload = {
+    courseId: requiredId(data.courseId, 'courseId'),
+    title: requiredText(data.title, 'title', { min: 2, max: LIMITS.quizzes.titleMax }),
+    description: optionalText(data.description, 'description', LIMITS.quizzes.descriptionMax),
+    status: enumValue(data.status, 'status', quizStatusValues, 'draft'),
+    startAt,
+    endAt,
+    durationMinutes: intInRange(
+      durationInput,
+      'duration_minutes',
+      LIMITS.quizzes.durationMin,
+      LIMITS.quizzes.durationMax
+    ),
+    maxAttempts: intInRange(
+      data.maxAttempts !== undefined ? data.maxAttempts : data.attemptsAllowed,
+      'max_attempts',
+      LIMITS.quizzes.attemptsMin,
+      LIMITS.quizzes.attemptsMax,
+      { required: false, defaultValue: LIMITS.quizzes.attemptsMin }
+    ),
+    shuffleQuestions: booleanValue(data.shuffleQuestions, false),
+    shuffleOptions: booleanValue(data.shuffleOptions, false),
+    showResultPolicy: enumValue(data.showResultPolicy, 'show_result_policy', SHOW_RESULT_POLICIES, 'immediately'),
+    gradingMode: enumValue(data.gradingMode, 'grading_mode', GRADING_MODES, 'standard'),
+    penaltyEnabled: booleanValue(data.penaltyEnabled, false),
+    penaltyPerWrong: numberInRange(data.penaltyPerWrong, 'penalty_per_wrong', 0, LIMITS.quizzes.penaltyMax, {
+      required: false,
+      defaultValue: 0
+    }),
+    penaltyRatio: numberInRange(data.penaltyRatio, 'penalty_ratio', 0, 1, {
+      required: false,
+      defaultValue: 0
+    }),
+    requiresSeb: booleanValue(data.requiresSeb, false),
+    sebConfigName: optionalText(data.sebConfigName, 'seb_config_name', LIMITS.quizzes.sebConfigMax),
+    sebConfigUrl: optionalText(data.sebConfigUrl, 'seb_config_url', LIMITS.quizzes.sebConfigMax),
     showCorrectAnswers: data.showCorrectAnswers !== false
   };
+
+  if (payload.gradingMode !== 'negative_marking') {
+    payload.penaltyEnabled = false;
+    payload.penaltyPerWrong = 0;
+    payload.penaltyRatio = 0;
+  }
+
+  return payload;
 }
 
-module.exports = { validateQuiz };
+module.exports = {
+  ATTEMPT_STATUSES,
+  GRADING_MODES,
+  SHOW_RESULT_POLICIES,
+  validateQuiz
+};

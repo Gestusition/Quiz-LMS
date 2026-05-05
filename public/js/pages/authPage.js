@@ -16,13 +16,14 @@ export const AuthPage = {
           </div>
           <form id="login-form" class="stack">
             <label class="form-field">
-              <span>Username, email, or student number</span>
-              <input class="form-input" id="login-identifier" type="text" autocomplete="username" placeholder="Username, email, or student number" required>
+              <span>Email or Academic ID</span>
+              <input class="form-input" id="login-identifier" type="text" autocomplete="username" placeholder="STU-0001 or teacher@example.edu" required>
             </label>
             <label class="form-field">
               <span>Password</span>
               <input class="form-input" id="login-password" type="password" autocomplete="current-password" required>
             </label>
+            <p class="muted">Students must sign in with student number. Teachers must sign in with email.</p>
             <button class="btn btn-primary full" type="submit">Sign in</button>
           </form>
           <div class="login-actions">
@@ -74,7 +75,7 @@ export const AuthPage = {
     const currentIdentifier = document.getElementById('login-identifier')?.value || '';
     this.openModal('Request password reset', `
       <form id="reset-request-form" class="stack">
-        ${this.input('reset-request-username', 'Username, email, or student number', currentIdentifier, 'text', 'student.username')}
+        ${this.input('reset-request-username', 'Email or Academic ID', currentIdentifier, 'text', 'student@example.edu')}
         <p class="muted">The request will appear for an admin. Admins can issue a one-time code for teacher and student accounts.</p>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
@@ -99,7 +100,7 @@ export const AuthPage = {
     const currentIdentifier = document.getElementById('login-identifier')?.value || '';
     this.openModal('Use reset code', `
       <form id="reset-complete-form" class="stack">
-        ${this.input('reset-username', 'Username, email, or student number', currentIdentifier, 'text', 'student.username')}
+        ${this.input('reset-username', 'Email or Academic ID', currentIdentifier, 'text', 'student@example.edu')}
         ${this.input('reset-code', 'One-time code', '', 'text', 'A1B2C3D4')}
         ${this.input('reset-new-password', 'New password', '', 'password')}
         ${this.input('reset-confirm-password', 'Confirm new password', '', 'password')}
@@ -112,7 +113,7 @@ export const AuthPage = {
 
     document.getElementById('reset-complete-form').addEventListener('submit', async event => {
       event.preventDefault();
-      const username = value('reset-username');
+        const username = value('reset-username');
       const newPassword = value('reset-new-password');
       if (newPassword !== value('reset-confirm-password')) {
         this.toast('New password confirmation does not match.', 'error');
@@ -121,7 +122,7 @@ export const AuthPage = {
 
       try {
         const result = await API.completePasswordReset({
-          username,
+          identifier: username,
           code: value('reset-code'),
           newPassword
         });

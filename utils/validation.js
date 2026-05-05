@@ -1,0 +1,143 @@
+const { LIMITS } = require('../constants/limits');
+const { validationError } = require('./appError');
+
+function asTrimmedString(value) {
+  return String(value === undefined || value === null ? '' : value).trim();
+}
+
+function requiredText(value, field, { min = 1, max = 255 } = {}) {
+  const text = asTrimmedString(value);
+  if (!text) throw validationError(field, `${field} is required.`);
+  if (text.length < min || text.length > max) {
+    throw validationError(field, `${field} must be between ${min} and ${max} characters.`);
+  }
+  return text;
+}
+
+function optionalText(value, field, max = 255) {
+  const text = asTrimmedString(value);
+  if (!text) return '';
+  if (text.length > max) throw validationError(field, `${field} must be ${max} characters or less.`);
+  return text;
+}
+
+function requiredEmail(value) {
+  const email = asTrimmedString(value).toLowerCase();
+  if (!email) throw validationError('email', 'Email is required.');
+  if (email.length > LIMITS.users.emailMax) {
+    throw validationError('email', `Email must be ${LIMITS.users.emailMax} characters or less.`);
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw validationError('email', 'Email format is invalid.');
+  }
+  return email;
+}
+
+function optionalId(value, field) {
+  if (value === undefined || value === null || value === '') return null;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id < 1) {
+    throw validationError(field, `${field} must be a positive integer.`);
+  }
+  return id;
+}
+
+function requiredId(value, field) {
+  const id = optionalId(value, field);
+  if (!id) throw validationError(field, `${field} is required.`);
+  return id;
+}
+
+function intInRange(value, field, min, max, { required = true, defaultValue = null } = {}) {
+  if ((value === undefined || value === null || value === '') && !required) {
+    return defaultValue;
+  }
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < min || numeric > max) {
+    throw validationError(field, `${field} must be an integer between ${min} and ${max}.`);
+  }
+  return numeric;
+}
+
+function numberInRange(value, field, min, max, { required = true, defaultValue = null } = {}) {
+  if ((value === undefined || value === null || value === '') && !required) {
+    return defaultValue;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < min || numeric > max) {
+    throw validationError(field, `${field} must be between ${min} and ${max}.`);
+  }
+  return numeric;
+}
+
+function booleanValue(value, defaultValue = false) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  if (typeof value === 'boolean') return value;
+  if (value === 1 || value === '1' || value === 'true') return true;
+  if (value === 0 || value === '0' || value === 'false') return false;
+  return Boolean(value);
+}
+
+function enumValue(value, field, allowed, defaultValue) {
+  const normalized = asTrimmedString(value || defaultValue);
+  if (!allowed.includes(normalized)) {
+    throw validationError(field, `${field} must be one of: ${allowed.join(', ')}.`);
+  }
+  return normalized;
+}
+
+function dateValue(value, field, { required = false } = {}) {
+  const text = asTrimmedString(value);
+  if (!text) {
+    if (required) throw validationError(field, `${field} is required.`);
+    return '';
+  }
+  const ts = Date.parse(text);
+  if (Number.isNaN(ts)) throw validationError(field, `${field} must be a valid date/time.`);
+  return new Date(ts).toISOString();
+}
+
+function ensureDateOrder(start, end, startField, endField) {
+  if (!start || !end) return;
+  if (new Date(start).getTime() > new Date(end).getTime()) {
+    throw validationError(endField, `${endField} must be later than or equal to ${startField}.`);
+  }
+}
+
+function parsePagination(query = {}) {
+  const page = intInRange(query.page, 'page', 1, 100000, {
+    required: false,
+    defaultValue: LIMITS.pagination.defaultPage
+  });
+  const limit = intInRange(query.limit, 'limit', 1, LIMITS.pagination.maxPageSize, {
+    required: false,
+    defaultValue: LIMITS.pagination.defaultPageSize
+  });
+
+  return {
+    page,
+    limit,
+    offset: (page - 1) * limit
+  };
+}
+
+function stripInvisible(value) {
+  return asTrimmedString(value).replace(/\s+/g, ' ');
+}
+
+module.exports = {
+  asTrimmedString,
+  booleanValue,
+  dateValue,
+  ensureDateOrder,
+  enumValue,
+  intInRange,
+  numberInRange,
+  optionalId,
+  optionalText,
+  parsePagination,
+  requiredEmail,
+  requiredId,
+  requiredText,
+  stripInvisible
+};

@@ -1,34 +1,19 @@
 const { resourceTypeValues } = require('../constants/enums');
+const { LIMITS } = require('../constants/limits');
+const { enumValue, optionalText, requiredText } = require('../utils/validation');
 
 function validateAnnouncement(data) {
-  const title = String(data.title || '').trim();
-  const body = String(data.body || '').trim();
-
-  if (!title || title.length > 160) {
-    throw new Error('Announcement title is required and must be 160 characters or less.');
-  }
-  if (!body || body.length > 2000) {
-    throw new Error('Announcement body is required and must be 2000 characters or less.');
-  }
+  const title = requiredText(data.title, 'title', { min: 2, max: LIMITS.announcements.titleMax });
+  const body = requiredText(data.body, 'body', { min: 2, max: LIMITS.announcements.bodyMax });
 
   return { title, body };
 }
 
 function validateResource(data) {
-  const title = String(data.title || '').trim();
-  const type = data.type ? String(data.type).trim() : 'link';
-  const url = data.url ? String(data.url).trim() : '';
-  const description = data.description ? String(data.description).trim() : '';
-
-  if (!title || title.length > 160) {
-    throw new Error('Resource title is required and must be 160 characters or less.');
-  }
-  if (!resourceTypeValues.includes(type)) {
-    throw new Error('Resource type must be link, file, or page.');
-  }
-  if (url.length > 500 || description.length > 1000) {
-    throw new Error('Resource URL or description is too long.');
-  }
+  const title = requiredText(data.title, 'title', { min: 2, max: LIMITS.resources.titleMax });
+  const type = enumValue(data.type, 'type', resourceTypeValues, 'link');
+  const url = optionalText(data.url, 'url', LIMITS.resources.urlMax);
+  const description = optionalText(data.description, 'description', LIMITS.resources.descriptionMax);
 
   return { title, type, url, description };
 }

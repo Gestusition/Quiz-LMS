@@ -58,20 +58,37 @@ function insert(payload, userId) {
   return getDatabase().prepare(`
     INSERT INTO quizzes (
       courseId, title, description, status, openAt, closeAt, timeLimitMinutes,
-      attemptsAllowed, shuffleQuestions, showCorrectAnswers, createdBy
+      attemptsAllowed, shuffleQuestions, showCorrectAnswers,
+      startAt, endAt, durationMinutes, maxAttempts, shuffleOptions, showResultPolicy,
+      gradingMode, penaltyEnabled, penaltyPerWrong, penaltyRatio, requiresSeb, sebConfigName, sebConfigUrl,
+      templateName, createdBy
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     payload.courseId,
     payload.title,
     payload.description,
     payload.status,
-    payload.openAt,
-    payload.closeAt,
-    payload.timeLimitMinutes,
-    payload.attemptsAllowed,
+    payload.startAt || payload.openAt || '',
+    payload.endAt || payload.closeAt || '',
+    payload.durationMinutes || payload.timeLimitMinutes || 0,
+    payload.maxAttempts || payload.attemptsAllowed || 1,
     payload.shuffleQuestions ? 1 : 0,
     payload.showCorrectAnswers ? 1 : 0,
+    payload.startAt || payload.openAt || '',
+    payload.endAt || payload.closeAt || '',
+    payload.durationMinutes || payload.timeLimitMinutes || 0,
+    payload.maxAttempts || payload.attemptsAllowed || 1,
+    payload.shuffleOptions ? 1 : 0,
+    payload.showResultPolicy || 'immediately',
+    payload.gradingMode || 'standard',
+    payload.penaltyEnabled ? 1 : 0,
+    Number(payload.penaltyPerWrong || 0),
+    Number(payload.penaltyRatio || 0),
+    payload.requiresSeb ? 1 : 0,
+    payload.sebConfigName || '',
+    payload.sebConfigUrl || '',
+    payload.templateName || '',
     userId
   );
 }
@@ -81,6 +98,9 @@ function update(id, payload, updatedAt) {
     UPDATE quizzes
     SET courseId = ?, title = ?, description = ?, status = ?, openAt = ?, closeAt = ?,
       timeLimitMinutes = ?, attemptsAllowed = ?, shuffleQuestions = ?, showCorrectAnswers = ?,
+      startAt = ?, endAt = ?, durationMinutes = ?, maxAttempts = ?, shuffleOptions = ?, showResultPolicy = ?,
+      gradingMode = ?, penaltyEnabled = ?, penaltyPerWrong = ?, penaltyRatio = ?, requiresSeb = ?,
+      sebConfigName = ?, sebConfigUrl = ?, templateName = ?,
       updatedAt = ?
     WHERE id = ?
   `).run(
@@ -88,12 +108,26 @@ function update(id, payload, updatedAt) {
     payload.title,
     payload.description,
     payload.status,
-    payload.openAt,
-    payload.closeAt,
-    payload.timeLimitMinutes,
-    payload.attemptsAllowed,
+    payload.startAt || payload.openAt || '',
+    payload.endAt || payload.closeAt || '',
+    payload.durationMinutes || payload.timeLimitMinutes || 0,
+    payload.maxAttempts || payload.attemptsAllowed || 1,
     payload.shuffleQuestions ? 1 : 0,
     payload.showCorrectAnswers ? 1 : 0,
+    payload.startAt || payload.openAt || '',
+    payload.endAt || payload.closeAt || '',
+    payload.durationMinutes || payload.timeLimitMinutes || 0,
+    payload.maxAttempts || payload.attemptsAllowed || 1,
+    payload.shuffleOptions ? 1 : 0,
+    payload.showResultPolicy || 'immediately',
+    payload.gradingMode || 'standard',
+    payload.penaltyEnabled ? 1 : 0,
+    Number(payload.penaltyPerWrong || 0),
+    Number(payload.penaltyRatio || 0),
+    payload.requiresSeb ? 1 : 0,
+    payload.sebConfigName || '',
+    payload.sebConfigUrl || '',
+    payload.templateName || '',
     updatedAt,
     id
   );
@@ -146,11 +180,11 @@ function countSubmittedAttempts(quizId, userId) {
   `).get(quizId, userId).count;
 }
 
-function createAttempt(quizId, userId, attemptNumber, maxScore) {
+function createAttempt(quizId, userId, attemptNumber, maxScore, expiresAt) {
   return getDatabase().prepare(`
-    INSERT INTO quiz_attempts (quizId, userId, attemptNumber, maxScore)
-    VALUES (?, ?, ?, ?)
-  `).run(quizId, userId, attemptNumber, maxScore);
+    INSERT INTO quiz_attempts (quizId, userId, attemptNumber, maxScore, expiresAt, lifecycleStatus)
+    VALUES (?, ?, ?, ?, ?, 'in_progress')
+  `).run(quizId, userId, attemptNumber, maxScore, expiresAt || '');
 }
 
 function findAttemptById(attemptId) {
@@ -181,9 +215,25 @@ function insertAttemptAnswer(attemptId, questionId, answer, isCorrect, pointsAwa
 function submitAttempt(attemptId, submittedAt, score, maxScore, percentage, timeSpentSeconds) {
   return getDatabase().prepare(`
     UPDATE quiz_attempts
-    SET status = 'submitted', submittedAt = ?, score = ?, maxScore = ?, percentage = ?, timeSpentSeconds = ?
+    SET status = 'submitted', lifecycleStatus = 'submitted', submittedAt = ?, score = ?, maxScore = ?, percentage = ?, timeSpentSeconds = ?
     WHERE id = ?
   `).run(submittedAt, score, maxScore, percentage, timeSpentSeconds, attemptId);
+}
+
+function markAttemptExpired(attemptId, submittedAt, score, maxScore, percentage, timeSpentSeconds) {
+  return getDatabase().prepare(`
+    UPDATE quiz_attempts
+    SET status = 'submitted', lifecycleStatus = 'expired', submittedAt = ?, score = ?, maxScore = ?, percentage = ?, timeSpentSeconds = ?
+    WHERE id = ?
+  `).run(submittedAt, score, maxScore, percentage, timeSpentSeconds, attemptId);
+}
+
+function setAttemptGradeStatus(attemptId, payload) {
+  return getDatabase().prepare(`
+    UPDATE quiz_attempts
+    SET letterGrade = ?, gradeStatus = ?, gradeMessage = ?, lifecycleStatus = ?
+    WHERE id = ?
+  `).run(payload.letterGrade || '', payload.gradeStatus || 'ready', payload.gradeMessage || '', payload.lifecycleStatus || 'graded', attemptId);
 }
 
 function getAttemptAnswers(attemptId) {
@@ -243,6 +293,22 @@ function getBestGrade(quizId, userId) {
   `).get(quizId, userId);
 }
 
+function listExamTemplates() {
+  return getDatabase().prepare(`
+    SELECT *
+    FROM exam_templates
+    ORDER BY isSystem DESC, name ASC
+  `).all();
+}
+
+function findExamTemplateByName(name) {
+  return getDatabase().prepare(`
+    SELECT *
+    FROM exam_templates
+    WHERE LOWER(name) = LOWER(?)
+  `).get(name) || null;
+}
+
 function deleteAttemptsByUserId(userId) {
   return getDatabase().prepare('DELETE FROM quiz_attempts WHERE userId = ?').run(userId);
 }
@@ -274,6 +340,7 @@ module.exports = {
   deleteById,
   findActiveAttempt,
   findAttemptById,
+  findExamTemplateByName,
   findById,
   getAttempt,
   getAttemptAnswers,
@@ -283,11 +350,14 @@ module.exports = {
   getGradebookQuizzes,
   getGradebookStudents,
   getQuestions,
+  listExamTemplates,
+  markAttemptExpired,
   insert,
   insertAttemptAnswer,
   list,
   replaceQuestions,
   submitAttempt,
+  setAttemptGradeStatus,
   update,
   withTransaction
 };

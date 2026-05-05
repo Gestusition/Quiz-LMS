@@ -21,25 +21,45 @@ const {
 } = require('../validators/authValidators');
 const { roles } = require('../constants/enums');
 const { serializeCurrentUser } = require('../serializers/userSerializer');
+const restrictionService = require('./restrictionService');
+const {
+  AppError,
+  conflictError,
+  notFoundError,
+  unauthorizedError,
+  validationError
+} = require('../utils/appError');
 
 const RESETTABLE_ROLES = [roles.teacher, roles.student];
 const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
+const LOGIN_MATCH_TYPES_BY_ROLE = Object.freeze({
+  [roles.admin]: ['email', 'username'],
+  [roles.teacher]: ['email'],
+  [roles.student]: ['student_number']
+});
 
 class AuthService {
   login(identifier, password) {
     if (!identifier || !password) {
-      throw new Error('Username/email/student number and password are required.');
+      throw validationError('identifier', 'Email or academic identifier and password are required.');
     }
 
-    const user = userRepository.findByIdentifier(identifier);
+    const user = this.resolveLoginIdentifier(identifier);
 
     if (!user || user.status !== 'active') {
-      throw new Error('Invalid email or password.');
+      throw unauthorizedError('Invalid credentials.');
     }
 
     if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) {
-      throw new Error('Invalid email or password.');
+      throw unauthorizedError('Invalid credentials.');
     }
+
+    restrictionService.assertAccessAllowed({
+      user,
+      restrictionType: 'account_suspended',
+      scopeType: 'global',
+      safeMessage: 'Your account access is restricted. Please contact your instructor or administrator.'
+    });
 
     const token = createSessionToken();
     const tokenHash = hashSessionToken(token);
@@ -76,16 +96,25 @@ class AuthService {
   }
 
   requestPasswordReset(identifier) {
-    const requestedUsername = String(identifier || '').trim().toLowerCase();
-    if (!requestedUsername) {
-      throw new Error('Username, email, or student number is required.');
+    const requestedIdentifier = String(identifier || '').trim().toLowerCase();
+    if (!requestedIdentifier) {
+      throw validationError('identifier', 'Email or academic identifier is required.');
     }
 
-    const user = userRepository.findResettableByIdentifier(requestedUsername);
+    let user;
+    try {
+      user = this.resolveLoginIdentifier(requestedIdentifier, { forReset: true });
+    } catch (err) {
+      if (err instanceof AppError && err.status === 409) {
+        user = null;
+      } else {
+        throw err;
+      }
+    }
 
     if (user && user.status === 'active' && RESETTABLE_ROLES.includes(user.role)) {
       passwordResetRepository.expireActiveForUser(user.id);
-      passwordResetRepository.createRequested(user.id, user.username || requestedUsername);
+      passwordResetRepository.createRequested(user.id, user.username || requestedIdentifier);
     }
 
     return {
@@ -102,10 +131,10 @@ class AuthService {
     const user = userRepository.findResettableById(userId);
 
     if (!user) {
-      throw new Error('User not found.');
+      throw notFoundError('User not found.');
     }
     if (user.status !== 'active' || !RESETTABLE_ROLES.includes(user.role)) {
-      throw new Error('Password reset codes can only be issued for active teachers and students.');
+      throw validationError('user', 'Password reset codes can only be issued for active teachers and students.');
     }
 
     const code = createOneTimeCode();
@@ -131,28 +160,28 @@ class AuthService {
   }
 
   completePasswordReset(data) {
-    const username = String(data.username || '').trim().toLowerCase();
+    const identifier = String(data.identifier || data.username || data.login || '').trim().toLowerCase();
     const code = String(data.code || '').trim();
     const newPassword = String(data.newPassword || '');
 
-    if (!username || !code || !newPassword) {
-      throw new Error('Username, reset code, and new password are required.');
+    if (!identifier || !code || !newPassword) {
+      throw validationError('identifier', 'Identifier, reset code, and new password are required.');
     }
     validatePassword(newPassword);
 
     this.expireResetCodes();
 
-    const user = userRepository.findByIdentifier(username);
+    const user = this.resolveLoginIdentifier(identifier, { forReset: true });
     if (!user || user.status !== 'active' || !RESETTABLE_ROLES.includes(user.role)) {
-      throw new Error('Invalid or expired reset code.');
+      throw validationError('code', 'Invalid or expired reset code.');
     }
     if (verifyPassword(newPassword, user.passwordSalt, user.passwordHash)) {
-      throw new Error('New password must be different from the current password.');
+      throw validationError('new_password', 'New password must be different from the current password.');
     }
 
     const reset = passwordResetRepository.findLatestIssuedForUser(user.id, nowIso());
     if (!reset || !verifyOneTimeCode(code, reset.codeHash)) {
-      throw new Error('Invalid or expired reset code.');
+      throw validationError('code', 'Invalid or expired reset code.');
     }
 
     const hashed = hashPassword(newPassword);
@@ -168,7 +197,7 @@ class AuthService {
   changeOwnCredentials(userId, token, data) {
     const existing = userRepository.findById(userId);
     if (!existing || existing.status !== 'active') {
-      throw new Error('User not found.');
+      throw notFoundError('User not found.');
     }
 
     const username = validateUsername(data.username);
@@ -176,20 +205,20 @@ class AuthService {
     const newPassword = String(data.newPassword || '');
 
     if (!verifyPassword(currentPassword, existing.passwordSalt, existing.passwordHash)) {
-      throw new Error('Current password is incorrect.');
+      throw validationError('current_password', 'Current password is incorrect.');
     }
     if (username.toLowerCase() === String(existing.username || '').toLowerCase()) {
-      throw new Error('New username must be different from the current username.');
+      throw validationError('username', 'New username must be different from the current username.');
     }
     if (verifyPassword(newPassword, existing.passwordSalt, existing.passwordHash)) {
-      throw new Error('New password must be different from the current password.');
+      throw validationError('new_password', 'New password must be different from the current password.');
     }
 
     validatePassword(newPassword);
 
     const duplicateUsername = userRepository.findDuplicateUsername(username, userId);
     if (duplicateUsername) {
-      throw new Error('A user with this username already exists.');
+      throw conflictError('username', 'A user with this username already exists.');
     }
 
     const hashed = hashPassword(newPassword);
@@ -240,6 +269,38 @@ class AuthService {
 
   expireResetCodes() {
     passwordResetRepository.expireIssuedBefore(nowIso());
+  }
+
+  resolveLoginIdentifier(identifier, { forReset = false } = {}) {
+    const value = String(identifier || '').trim();
+    const candidates = userRepository.findLoginCandidates(value);
+    const uniqueUsers = [...new Map(candidates.map(item => [item.id, item])).values()];
+    if (uniqueUsers.length > 1) {
+      throw conflictError(
+        'identifier',
+        'This login identifier is ambiguous. Please use your email or contact administrator.'
+      );
+    }
+    const priority = ['email', 'student_number', 'employee_number', 'username'];
+
+    for (const type of priority) {
+      const matches = candidates.filter(candidate => candidate.matchType === type);
+      if (matches.length === 0) continue;
+      const selected = matches[0];
+      if (!forReset && !this.isAllowedLoginMatchType(selected.role, type)) {
+        throw unauthorizedError('Invalid credentials.');
+      }
+      return forReset
+        ? userRepository.findResettableById(selected.id)
+        : selected;
+    }
+
+    return null;
+  }
+
+  isAllowedLoginMatchType(role, matchType) {
+    const allowed = LOGIN_MATCH_TYPES_BY_ROLE[role] || ['email'];
+    return allowed.includes(matchType);
   }
 }
 

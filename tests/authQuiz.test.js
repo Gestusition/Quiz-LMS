@@ -3,6 +3,7 @@ const fs = require('fs');
 const { initDatabase, seedDatabase, closeDatabase, getDatabase, getDatabaseFiles, resolveDatabaseFiles } = require('../database/db');
 const authService = require('../services/authService');
 const quizService = require('../services/quizService');
+const restrictionService = require('../services/restrictionService');
 const { hashPassword, verifyPassword } = require('../utils/security');
 const request = require('supertest');
 const app = require('../server');
@@ -109,7 +110,7 @@ describe('Auth and quiz attempt flow', () => {
   test('logs in seeded role accounts with salted and spiced password hashes', () => {
     const admin = authService.login('admin', 'Admin123!');
     const teacher = authService.login('teacher@example.com', 'Teacher123!');
-    const student = authService.login('student@example.com', 'Student123!');
+    const student = authService.login('STU-0003', 'Student123!');
 
     expect(admin.user.role).toBe('admin');
     expect(admin.user.username).toBe('admin');
@@ -142,12 +143,12 @@ describe('Auth and quiz attempt flow', () => {
   });
 
   test('rejects invalid passwords', () => {
-    expect(() => authService.login('student@example.com', 'wrong-password')).toThrow('Invalid email or password');
+    expect(() => authService.login('STU-0003', 'wrong-password')).toThrow('Invalid credentials');
   });
 
   test('lets admins issue one-time reset codes without storing plaintext codes', () => {
     const db = getDatabase();
-    const requestResult = authService.requestPasswordReset('teacher');
+    const requestResult = authService.requestPasswordReset('teacher@example.com');
     expect(requestResult.message).toMatch(/admin reset request/);
 
     const pendingRequests = authService.getPasswordResetRequests();
@@ -168,21 +169,21 @@ describe('Auth and quiz attempt flow', () => {
     expect(stored.codeHash).not.toBe(issued.code);
 
     expect(() => authService.completePasswordReset({
-      username: 'teacher',
+      identifier: 'teacher@example.com',
       code: '00000000',
       newPassword: 'TeacherReset123!'
     })).toThrow('Invalid or expired reset code');
 
     const completed = authService.completePasswordReset({
-      username: 'teacher',
+      identifier: 'teacher@example.com',
       code: issued.code,
       newPassword: 'TeacherReset123!'
     });
     expect(completed.message).toMatch(/Password updated/);
-    expect(authService.login('teacher', 'TeacherReset123!').user.role).toBe('teacher');
-    expect(() => authService.login('teacher', 'Teacher123!')).toThrow('Invalid email or password');
+    expect(authService.login('teacher@example.com', 'TeacherReset123!').user.role).toBe('teacher');
+    expect(() => authService.login('teacher@example.com', 'Teacher123!')).toThrow('Invalid credentials');
     expect(() => authService.completePasswordReset({
-      username: 'teacher',
+      identifier: 'teacher@example.com',
       code: issued.code,
       newPassword: 'TeacherAgain123!'
     })).toThrow('Invalid or expired reset code');
@@ -190,7 +191,7 @@ describe('Auth and quiz attempt flow', () => {
 
   test('admin can list password reset requests through the API', async () => {
     const adminSession = createAdminSession();
-    authService.requestPasswordReset('student');
+    authService.requestPasswordReset('STU-0003');
 
     await request(app)
       .get('/api/users/password-reset-requests')
@@ -242,8 +243,8 @@ describe('Auth and quiz attempt flow', () => {
       .send({ password: 'ManagedNew123!' })
       .expect(200);
 
-    expect(authService.login('managed-student', 'ManagedNew123!').user.id).toBe(student.id);
-    expect(() => authService.login('managed-student', 'ManagedOld123!')).toThrow('Invalid email or password');
+    expect(authService.login('MNG-0001', 'ManagedNew123!').user.id).toBe(student.id);
+    expect(() => authService.login('MNG-0001', 'ManagedOld123!')).toThrow('Invalid credentials');
 
     const stored = db.prepare('SELECT passwordHash, passwordSalt FROM users WHERE id = ?').get(student.id);
     expect(stored.passwordHash).not.toBe('ManagedNew123!');
@@ -293,9 +294,9 @@ describe('Auth and quiz attempt flow', () => {
         password: 'Duplicate123!',
         studentNumber: 'DUP-1001'
       })
-      .expect(400)
+      .expect(409)
       .expect(response => {
-        expect(response.body.error).toMatch(/student number already exists/i);
+        expect(response.body.message).toMatch(/student number already exists/i);
       });
   });
 
@@ -313,6 +314,35 @@ describe('Auth and quiz attempt flow', () => {
     const session = authService.login('LOGIN-1001', 'NumberLogin123!');
     expect(session.user.id).toBe(student.id);
     expect(session.user.studentNumber).toBe('LOGIN-1001');
+  });
+
+  test('student email login is rejected even with correct password', () => {
+    const student = authService.createUser({
+      name: 'Strict Login Student',
+      username: 'strict-login-student',
+      email: 'strict-login-student@example.com',
+      role: 'student',
+      password: 'StrictLogin123!',
+      studentNumber: 'STRICT-1001'
+    });
+
+    expect(() => authService.login(student.email, 'StrictLogin123!')).toThrow('Invalid credentials');
+    expect(authService.login(student.studentNumber, 'StrictLogin123!').user.id).toBe(student.id);
+  });
+
+  test('teacher must log in with email (employee number/username are rejected)', () => {
+    const teacher = authService.createUser({
+      name: 'Strict Login Teacher',
+      username: 'strict-login-teacher',
+      email: 'strict-login-teacher@example.com',
+      role: 'teacher',
+      password: 'StrictTeacher123!',
+      staffNumber: 'EMP-STRICT-1001'
+    });
+
+    expect(() => authService.login(teacher.staffNumber, 'StrictTeacher123!')).toThrow('Invalid credentials');
+    expect(() => authService.login(teacher.username, 'StrictTeacher123!')).toThrow('Invalid credentials');
+    expect(authService.login(teacher.email, 'StrictTeacher123!').user.id).toBe(teacher.id);
   });
 
   test('password reset request can identify studentNumber', () => {
@@ -349,9 +379,101 @@ describe('Auth and quiz attempt flow', () => {
       .set('Authorization', `Bearer ${adminSession.token}`)
       .expect(200)
       .expect(response => {
-        expect(response.body.some(user => user.username === 'search-number-student')).toBe(true);
-        expect(response.body[0]).toHaveProperty('studentNumber');
+        expect(response.body.items.some(user => user.username === 'search-number-student')).toBe(true);
+        expect(response.body.items[0]).toHaveProperty('studentNumber');
+        expect(response.body.pagination).toBeDefined();
       });
+  });
+
+  test('duplicate email returns 409 conflict', async () => {
+    const adminSession = createAdminSession();
+    await request(app)
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .send({
+        name: 'Duplicate Email One',
+        username: 'dup-email-1',
+        email: 'duplicate-email@example.com',
+        role: 'student',
+        password: 'DuplicateEmail123!',
+        studentNumber: 'DUP-EMAIL-1001'
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .send({
+        name: 'Duplicate Email Two',
+        username: 'dup-email-2',
+        email: 'duplicate-email@example.com',
+        role: 'student',
+        password: 'DuplicateEmail123!',
+        studentNumber: 'DUP-EMAIL-1002'
+      })
+      .expect(409)
+      .expect(response => {
+        expect(response.body.field).toBe('email');
+      });
+  });
+
+  test('admin users endpoint supports pagination, role filter, and status filter', async () => {
+    const adminSession = createAdminSession();
+    const response = await request(app)
+      .get('/api/users?role=student&status=active&page=1&limit=5')
+      .set('Authorization', `Bearer ${adminSession.token}`)
+      .expect(200);
+
+    expect(Array.isArray(response.body.items)).toBe(true);
+    expect(response.body.items.length).toBeLessThanOrEqual(5);
+    response.body.items.forEach(user => {
+      expect(user.role).toBe('student');
+      expect(user.status).toBe('active');
+    });
+    expect(response.body.pagination.page).toBe(1);
+  });
+
+  test('login identifier is rejected when ambiguous across academic identifiers', () => {
+    const stamp = Date.now();
+    authService.createUser({
+      name: 'Ambiguous Student',
+      username: `amb-student-${stamp}`,
+      email: `amb-student-${stamp}@example.com`,
+      role: 'student',
+      password: 'Ambiguous123!',
+      studentNumber: `AMB-${stamp}`
+    });
+    authService.createUser({
+      name: 'Ambiguous Teacher',
+      username: `amb-teacher-${stamp}`,
+      email: `amb-teacher-${stamp}@example.com`,
+      role: 'teacher',
+      password: 'Ambiguous123!',
+      staffNumber: `AMB-${stamp}`
+    });
+
+    expect(() => authService.login(`AMB-${stamp}`, 'Ambiguous123!')).toThrow('ambiguous');
+  });
+
+  test('restricted/suspended user cannot login', () => {
+    const stamp = Date.now();
+    const blocked = authService.createUser({
+      name: 'Blocked Student',
+      username: `blocked-student-${stamp}`,
+      email: `blocked-student-${stamp}@example.com`,
+      role: 'student',
+      password: 'Blocked123!',
+      studentNumber: `BLK-${stamp}`
+    });
+
+    restrictionService.create({
+      userId: blocked.id,
+      restrictionType: 'account_suspended',
+      scopeType: 'global',
+      reason: 'Testing restriction'
+    }, null);
+
+    expect(() => authService.login(blocked.studentNumber, 'Blocked123!')).toThrow('restricted');
   });
 
   test('course participants include studentNumber', async () => {
@@ -385,7 +507,7 @@ describe('Auth and quiz attempt flow', () => {
   });
 
   test('student can submit a published quiz attempt for server-side grading', () => {
-    const session = authService.login('student@example.com', 'Student123!');
+    const session = authService.login('STU-0003', 'Student123!');
     const quizzes = quizService.getAll(session.user);
     expect(quizzes.length).toBeGreaterThan(0);
 

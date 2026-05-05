@@ -91,7 +91,9 @@ function getRandom(opts = {}, validDifficulties = []) {
 
 function insert(payload, userId) {
   return getDatabase().prepare(
-    'INSERT INTO questions (categoryId, text, type, options, correctAnswer, difficulty, points, createdBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    `INSERT INTO questions (
+      categoryId, text, type, options, correctAnswer, difficulty, points, createdBy, status, acceptedAnswers, caseSensitive
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'valid', ?, ?)`
   ).run(
     payload.categoryId,
     payload.text,
@@ -100,13 +102,18 @@ function insert(payload, userId) {
     payload.correctAnswer,
     payload.difficulty,
     payload.points,
-    userId || null
+    userId || null,
+    JSON.stringify(payload.acceptedAnswers || []),
+    payload.caseSensitive ? 1 : 0
   );
 }
 
 function update(id, payload) {
   return getDatabase().prepare(
-    'UPDATE questions SET categoryId = ?, text = ?, type = ?, options = ?, correctAnswer = ?, difficulty = ?, points = ? WHERE id = ?'
+    `UPDATE questions
+    SET categoryId = ?, text = ?, type = ?, options = ?, correctAnswer = ?, difficulty = ?, points = ?,
+      acceptedAnswers = ?, caseSensitive = ?, status = 'valid', validationMessage = ''
+    WHERE id = ?`
   ).run(
     payload.categoryId,
     payload.text,
@@ -115,8 +122,18 @@ function update(id, payload) {
     payload.correctAnswer,
     payload.difficulty,
     payload.points,
+    JSON.stringify(payload.acceptedAnswers || []),
+    payload.caseSensitive ? 1 : 0,
     id
   );
+}
+
+function setValidationStatus(id, status, message) {
+  return getDatabase().prepare(`
+    UPDATE questions
+    SET status = ?, validationMessage = ?
+    WHERE id = ?
+  `).run(status, message || '', id);
 }
 
 function deleteById(id) {
@@ -158,5 +175,6 @@ module.exports = {
   getRandom,
   insert,
   list,
+  setValidationStatus,
   update
 };

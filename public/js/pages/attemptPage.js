@@ -8,15 +8,23 @@ export const AttemptPage = {
       const attempt = await API.getAttempt(attemptId);
       if (attempt.status === 'submitted') return this.renderAttemptResult(attempt);
 
+      const timerBlock = attempt.expiresAt
+        ? `<span class="status-chip planned" id="attempt-timer">Time remaining: --:--</span>`
+        : '<span class="status-chip active">No time limit</span>';
+
       this.setApp(`
         <header class="page-header">
-          <div><h1>${this.esc(attempt.quizTitle)}</h1><p>Attempt ${attempt.attemptNumber}</p></div>
+          <div><h1>${this.esc(attempt.quizTitle)}</h1><p>Attempt ${attempt.attemptNumber} - ${this.esc(attempt.lifecycleStatus || attempt.status)}</p></div>
+          <div class="header-actions">${timerBlock}
           <button class="btn btn-primary" id="btn-submit-attempt">Submit</button>
+          </div>
         </header>
         <form id="attempt-form" class="attempt-stack">
           ${attempt.questions.map((question, index) => this.attemptQuestion(question, index)).join('')}
         </form>
       `);
+
+      if (attempt.expiresAt) this.startAttemptTimer(attempt);
 
       document.getElementById('btn-submit-attempt').addEventListener('click', async () => {
         const answers = this.collectAttemptAnswers(attempt.questions);
@@ -34,16 +42,27 @@ export const AttemptPage = {
   },
 
   renderAttemptResult(attempt) {
+    const policyMessage = attempt.hiddenByPolicy ? `<p class="muted">${this.esc(attempt.policyMessage || 'Result visibility is restricted by policy.')}</p>` : '';
+    const gradeMessage = attempt.gradeStatus === 'pending_review'
+      ? `<p class="muted">${this.esc(attempt.gradeMessage || 'Your numeric score has been saved, but letter grade is pending instructor/admin review.')}</p>`
+      : '';
+    const score = attempt.score === null || attempt.score === undefined ? '-' : attempt.score;
+    const maxScore = attempt.maxScore === null || attempt.maxScore === undefined ? '-' : attempt.maxScore;
+    const percentage = attempt.percentage === null || attempt.percentage === undefined ? '-' : `${attempt.percentage}%`;
+
     this.setApp(`
       <header class="page-header">
         <div><h1>${this.esc(attempt.quizTitle)}</h1><p>Submitted result</p></div>
         <a class="btn btn-primary" href="#/quizzes">Back to quizzes</a>
       </header>
       <section class="result-panel">
-        <div class="score-ring">${attempt.percentage}%</div>
+        <div class="score-ring">${percentage}</div>
         <div>
-          <h2>${attempt.score} / ${attempt.maxScore} points</h2>
-          <p>Attempt ${attempt.attemptNumber} submitted at ${this.formatDate(attempt.submittedAt)}</p>
+          <h2>${score} / ${maxScore} points</h2>
+          <p>Attempt ${attempt.attemptNumber} - ${this.esc(attempt.lifecycleStatus || attempt.status)} - submitted at ${this.formatDate(attempt.submittedAt)}</p>
+          ${attempt.letterGrade ? `<p>Letter grade: <strong>${this.esc(attempt.letterGrade)}</strong></p>` : ''}
+          ${gradeMessage}
+          ${policyMessage}
         </div>
       </section>
       <section class="panel">
@@ -57,6 +76,36 @@ export const AttemptPage = {
         </div>
       </section>
     `);
+  },
+
+  startAttemptTimer(attempt) {
+    const target = document.getElementById('attempt-timer');
+    if (!target) return;
+    const expiresAt = new Date(attempt.expiresAt).getTime();
+    if (!Number.isFinite(expiresAt)) return;
+
+    let interval = null;
+    const tick = async () => {
+      const remaining = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+      const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+      const seconds = String(remaining % 60).padStart(2, '0');
+      target.textContent = `Time remaining: ${minutes}:${seconds}`;
+      if (remaining <= 0) {
+        clearInterval(interval);
+        target.textContent = 'Time expired';
+        const answers = this.collectAttemptAnswers(attempt.questions);
+        try {
+          const submitted = await API.submitAttempt(attempt.id, answers);
+          this.renderAttemptResult(submitted);
+          this.toast('Time expired. Attempt submitted.', 'error');
+        } catch (err) {
+          this.toast(err.message, 'error');
+        }
+      }
+    };
+
+    tick();
+    interval = setInterval(tick, 1000);
   },
 
   collectAttemptAnswers(questions) {

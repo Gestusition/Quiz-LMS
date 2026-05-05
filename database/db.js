@@ -424,6 +424,163 @@ function createTables() {
       createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS assessment.grade_schemes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'invalid', 'pending_review')),
+      isDefault INTEGER NOT NULL DEFAULT 0,
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.grade_thresholds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gradeSchemeId INTEGER NOT NULL,
+      letterGrade TEXT NOT NULL,
+      minScore REAL NOT NULL,
+      maxScore REAL NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (gradeSchemeId) REFERENCES grade_schemes(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.exam_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT DEFAULT '',
+      defaultsJson TEXT NOT NULL DEFAULT '{}',
+      isSystem INTEGER NOT NULL DEFAULT 1,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS users.user_restrictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      restrictionType TEXT NOT NULL CHECK(restrictionType IN (
+        'account_suspended',
+        'quiz_blocked',
+        'assignment_blocked',
+        'chat_muted',
+        'course_access_blocked',
+        'manual_review_required'
+      )),
+      scopeType TEXT NOT NULL DEFAULT 'global' CHECK(scopeType IN ('global', 'course', 'quiz', 'assignment')),
+      scopeId INTEGER,
+      reason TEXT DEFAULT '',
+      startsAt TEXT DEFAULT (datetime('now')),
+      endsAt TEXT DEFAULT '',
+      createdBy INTEGER,
+      isActive INTEGER NOT NULL DEFAULT 1,
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS users.validation_issues (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entityType TEXT NOT NULL,
+      entityId INTEGER,
+      severity TEXT NOT NULL CHECK(severity IN ('info', 'warning', 'error', 'critical')),
+      field TEXT DEFAULT '',
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved', 'ignored')),
+      visibleToUser INTEGER NOT NULL DEFAULT 0,
+      relatedCourseId INTEGER,
+      relatedUserId INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      resolvedAt TEXT DEFAULT '',
+      resolvedBy INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS users.import_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL CHECK(type IN ('users', 'students', 'teachers', 'questions', 'enrollments')),
+      uploadedBy INTEGER,
+      fileName TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'processed' CHECK(status IN ('processed', 'partially_failed', 'failed', 'completed')),
+      totalRows INTEGER NOT NULL DEFAULT 0,
+      successCount INTEGER NOT NULL DEFAULT 0,
+      failedCount INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS users.import_errors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batchId INTEGER NOT NULL,
+      rowNumber INTEGER NOT NULL,
+      rawDataJson TEXT DEFAULT '',
+      errorField TEXT DEFAULT '',
+      errorMessage TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'unresolved' CHECK(status IN ('unresolved', 'fixed', 'ignored')),
+      fixedDataJson TEXT DEFAULT '',
+      resolvedBy INTEGER,
+      resolvedAt TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (batchId) REFERENCES import_batches(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS users.audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actorUserId INTEGER,
+      action TEXT NOT NULL,
+      entityType TEXT NOT NULL,
+      entityId INTEGER,
+      detailsJson TEXT DEFAULT '{}',
+      createdAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.course_weeks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      weekNumber INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      startsAt TEXT DEFAULT '',
+      endsAt TEXT DEFAULT '',
+      visible INTEGER NOT NULL DEFAULT 1,
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(courseId, weekNumber),
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS content.week_resources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      weekId INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'link' CHECK(type IN ('link', 'file', 'page')),
+      content TEXT DEFAULT '',
+      visibleFrom TEXT DEFAULT '',
+      visibleUntil TEXT DEFAULT '',
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS content.course_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      createdBy INTEGER,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'locked', 'archived')),
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS content.course_thread_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      threadId INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      createdBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (threadId) REFERENCES course_threads(id) ON DELETE CASCADE
+    );
   `);
 }
 
@@ -455,9 +612,172 @@ function migrateExistingTables() {
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
   ensureColumn('assessment', 'questions', 'points', 'points REAL NOT NULL DEFAULT 1');
   ensureColumn('assessment', 'questions', 'createdBy', 'createdBy INTEGER');
+  ensureColumn('assessment', 'questions', 'status', 'status TEXT NOT NULL DEFAULT \'valid\'');
+  ensureColumn('assessment', 'questions', 'validationMessage', 'validationMessage TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'questions', 'acceptedAnswers', 'acceptedAnswers TEXT DEFAULT \'[]\'');
+  ensureColumn('assessment', 'questions', 'caseSensitive', 'caseSensitive INTEGER NOT NULL DEFAULT 0');
+
+  ensureColumn('assessment', 'quizzes', 'startAt', 'startAt TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quizzes', 'endAt', 'endAt TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quizzes', 'durationMinutes', 'durationMinutes INTEGER NOT NULL DEFAULT 30');
+  ensureColumn('assessment', 'quizzes', 'maxAttempts', 'maxAttempts INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('assessment', 'quizzes', 'shuffleOptions', 'shuffleOptions INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('assessment', 'quizzes', 'showResultPolicy', 'showResultPolicy TEXT NOT NULL DEFAULT \'immediately\'');
+  ensureColumn('assessment', 'quizzes', 'gradingMode', 'gradingMode TEXT NOT NULL DEFAULT \'standard\'');
+  ensureColumn('assessment', 'quizzes', 'penaltyEnabled', 'penaltyEnabled INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('assessment', 'quizzes', 'penaltyPerWrong', 'penaltyPerWrong REAL NOT NULL DEFAULT 0');
+  ensureColumn('assessment', 'quizzes', 'penaltyRatio', 'penaltyRatio REAL NOT NULL DEFAULT 0');
+  ensureColumn('assessment', 'quizzes', 'requiresSeb', 'requiresSeb INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('assessment', 'quizzes', 'sebConfigName', 'sebConfigName TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quizzes', 'sebConfigUrl', 'sebConfigUrl TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quizzes', 'manualResultReleasedAt', 'manualResultReleasedAt TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quizzes', 'templateName', 'templateName TEXT DEFAULT \'\'');
+
+  ensureColumn('assessment', 'quiz_attempts', 'expiresAt', 'expiresAt TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quiz_attempts', 'lifecycleStatus', 'lifecycleStatus TEXT NOT NULL DEFAULT \'in_progress\'');
+  ensureColumn('assessment', 'quiz_attempts', 'letterGrade', 'letterGrade TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quiz_attempts', 'gradeStatus', 'gradeStatus TEXT NOT NULL DEFAULT \'ready\'');
+  ensureColumn('assessment', 'quiz_attempts', 'gradeMessage', 'gradeMessage TEXT DEFAULT \'\'');
+
+  ensureColumn('assessment', 'attempt_answers', 'selectedOptionIndex', 'selectedOptionIndex INTEGER');
+  ensureColumn('assessment', 'attempt_answers', 'gradedAt', 'gradedAt TEXT DEFAULT \'\'');
+
+  ensureColumn('assessment', 'assignment_submissions', 'late', 'late INTEGER NOT NULL DEFAULT 0');
+
+  ensureColumn('content', 'announcements', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
+  ensureColumn('content', 'resources', 'weekId', 'weekId INTEGER');
+  ensureColumn('content', 'resources', 'visibleFrom', 'visibleFrom TEXT DEFAULT \'\'');
+  ensureColumn('content', 'resources', 'visibleUntil', 'visibleUntil TEXT DEFAULT \'\'');
+  ensureColumn('content', 'resources', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
+
   normalizeUserIdentityState();
   normalizeAcademicProfileState();
+  ensureAdvancedIndexes();
+  backfillQuizAdvancedColumns();
+  seedExamTemplates();
   migrateLegacyIdentityDatabase();
+}
+
+function ensureAdvancedIndexes() {
+  const database = getDatabase();
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS student.idx_student_profiles_student_number_ci
+    ON student_profiles(LOWER(studentNumber))
+    WHERE TRIM(studentNumber) != ''
+  `);
+
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS teacher.idx_teacher_profiles_staff_number_ci
+    ON teacher_profiles(LOWER(staffNumber))
+    WHERE TRIM(staffNumber) != ''
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS users.idx_users_email_ci
+    ON users(LOWER(email))
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS users.idx_users_status_role
+    ON users(status, role)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS users.idx_user_restrictions_lookup
+    ON user_restrictions(userId, restrictionType, scopeType, scopeId, isActive)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS users.idx_validation_issues_lookup
+    ON validation_issues(entityType, entityId, status, severity)
+  `);
+}
+
+function backfillQuizAdvancedColumns() {
+  const database = getDatabase();
+  database.exec(`
+    UPDATE quizzes
+    SET startAt = COALESCE(NULLIF(startAt, ''), openAt),
+      endAt = COALESCE(NULLIF(endAt, ''), closeAt),
+      durationMinutes = CASE
+        WHEN durationMinutes IS NULL OR durationMinutes < 1 THEN
+          CASE WHEN timeLimitMinutes IS NOT NULL AND timeLimitMinutes > 0 THEN timeLimitMinutes ELSE 30 END
+        ELSE durationMinutes
+      END,
+      maxAttempts = CASE
+        WHEN maxAttempts IS NULL OR maxAttempts < 1 THEN
+          CASE WHEN attemptsAllowed IS NOT NULL AND attemptsAllowed > 0 THEN attemptsAllowed ELSE 1 END
+        ELSE maxAttempts
+      END
+  `);
+
+  database.exec(`
+    UPDATE quiz_attempts
+    SET expiresAt = CASE
+      WHEN TRIM(COALESCE(expiresAt, '')) = '' AND TRIM(COALESCE(startedAt, '')) != ''
+      THEN datetime(startedAt, '+' || COALESCE((SELECT durationMinutes FROM quizzes q WHERE q.id = quiz_attempts.quizId), 0) || ' minutes')
+      ELSE expiresAt
+    END
+  `);
+}
+
+function seedExamTemplates() {
+  const database = getDatabase();
+  const insertTemplate = database.prepare(`
+    INSERT OR IGNORE INTO exam_templates (name, description, defaultsJson, isSystem)
+    VALUES (?, ?, ?, 1)
+  `);
+
+  insertTemplate.run('Practice Quiz', 'Low-stakes practice settings.', JSON.stringify({
+    status: 'published',
+    durationMinutes: 30,
+    maxAttempts: 3,
+    shuffleQuestions: true,
+    shuffleOptions: true,
+    showResultPolicy: 'immediately',
+    gradingMode: 'standard',
+    requiresSeb: false
+  }));
+  insertTemplate.run('Midterm Exam', 'Default midterm settings.', JSON.stringify({
+    status: 'draft',
+    durationMinutes: 90,
+    maxAttempts: 1,
+    shuffleQuestions: true,
+    shuffleOptions: true,
+    showResultPolicy: 'after_close',
+    gradingMode: 'standard',
+    requiresSeb: false
+  }));
+  insertTemplate.run('Final Exam', 'Default final exam settings.', JSON.stringify({
+    status: 'draft',
+    durationMinutes: 120,
+    maxAttempts: 1,
+    shuffleQuestions: true,
+    shuffleOptions: true,
+    showResultPolicy: 'after_manual_release',
+    gradingMode: 'manual_review',
+    requiresSeb: true
+  }));
+  insertTemplate.run('Homework Quiz', 'Reusable homework quiz settings.', JSON.stringify({
+    status: 'published',
+    durationMinutes: 45,
+    maxAttempts: 2,
+    shuffleQuestions: true,
+    shuffleOptions: false,
+    showResultPolicy: 'after_close',
+    gradingMode: 'standard',
+    requiresSeb: false
+  }));
+  insertTemplate.run('SEB Required Exam', 'Exam defaults that require SEB compatible mode.', JSON.stringify({
+    status: 'draft',
+    durationMinutes: 90,
+    maxAttempts: 1,
+    shuffleQuestions: true,
+    shuffleOptions: true,
+    showResultPolicy: 'after_manual_release',
+    gradingMode: 'standard',
+    requiresSeb: true
+  }));
 }
 
 function ensureColumn(schema, tableName, columnName, columnSql) {

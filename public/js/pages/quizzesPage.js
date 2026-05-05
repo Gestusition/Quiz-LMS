@@ -42,15 +42,29 @@ export const QuizzesPage = {
         title: '',
         description: '',
         status: 'draft',
-        timeLimitMinutes: 0,
-        attemptsAllowed: 1,
+        durationMinutes: 30,
+        maxAttempts: 1,
+        startAt: '',
+        endAt: '',
         shuffleQuestions: false,
+        shuffleOptions: false,
+        gradingMode: 'standard',
+        showResultPolicy: 'immediately',
+        penaltyEnabled: false,
+        penaltyPerWrong: 0,
+        requiresSeb: false,
+        sebConfigName: '',
         showCorrectAnswers: true
       })
     ]);
+    const templates = this.canManageLearning() ? await API.request('/quizzes/templates').catch(() => []) : [];
 
     this.openModal(id ? 'Edit quiz' : 'New quiz', `
       <form id="quiz-form" class="stack">
+        <label class="form-field"><span>Template</span><select class="form-select" id="quiz-template">
+          <option value="">Custom</option>
+          ${(templates || []).map(template => `<option value="${this.esc(template.name)}">${this.esc(template.name)}</option>`).join('')}
+        </select></label>
         <label class="form-field"><span>Course</span><select class="form-select" id="quiz-course" ${fixedCourseId ? 'disabled' : ''}>
           ${courses.map(course => `<option value="${course.id}" ${Number(quiz.courseId) === Number(course.id) ? 'selected' : ''}>${this.esc(course.code)} - ${this.esc(course.title)}</option>`).join('')}
         </select></label>
@@ -60,10 +74,23 @@ export const QuizzesPage = {
           <label class="form-field"><span>Status</span><select class="form-select" id="quiz-status">
             ${['draft', 'published', 'closed'].map(status => `<option value="${status}" ${quiz.status === status ? 'selected' : ''}>${status}</option>`).join('')}
           </select></label>
-          ${this.input('quiz-attempts', 'Attempts', quiz.attemptsAllowed, 'number')}
-          ${this.input('quiz-time', 'Time limit minutes', quiz.timeLimitMinutes, 'number')}
+          ${this.input('quiz-attempts', 'Attempts', quiz.maxAttempts || quiz.attemptsAllowed || 1, 'number')}
+          ${this.input('quiz-time', 'Duration minutes', quiz.durationMinutes || quiz.timeLimitMinutes || 30, 'number')}
+          ${this.input('quiz-start', 'Start at', this.toDateTimeLocal(quiz.startAt || quiz.openAt), 'datetime-local')}
+          ${this.input('quiz-end', 'End at', this.toDateTimeLocal(quiz.endAt || quiz.closeAt), 'datetime-local')}
+          <label class="form-field"><span>Result visibility</span><select class="form-select" id="quiz-result-policy">
+            ${['immediately', 'after_close', 'after_manual_release', 'never'].map(policy => `<option value="${policy}" ${(quiz.showResultPolicy || 'immediately') === policy ? 'selected' : ''}>${policy}</option>`).join('')}
+          </select></label>
+          <label class="form-field"><span>Grading mode</span><select class="form-select" id="quiz-grading-mode">
+            ${['standard', 'negative_marking', 'manual_review'].map(mode => `<option value="${mode}" ${(quiz.gradingMode || 'standard') === mode ? 'selected' : ''}>${mode}</option>`).join('')}
+          </select></label>
+          ${this.input('quiz-penalty', 'Penalty per wrong', quiz.penaltyPerWrong || 0, 'number')}
         </div>
         <label class="check-field"><input type="checkbox" id="quiz-shuffle" ${quiz.shuffleQuestions ? 'checked' : ''}> Shuffle questions</label>
+        <label class="check-field"><input type="checkbox" id="quiz-shuffle-options" ${quiz.shuffleOptions ? 'checked' : ''}> Shuffle options</label>
+        <label class="check-field"><input type="checkbox" id="quiz-penalty-enabled" ${quiz.penaltyEnabled ? 'checked' : ''}> Enable negative marking</label>
+        <label class="check-field"><input type="checkbox" id="quiz-requires-seb" ${quiz.requiresSeb ? 'checked' : ''}> Requires Safe Exam Browser compatible mode</label>
+        ${this.input('quiz-seb-name', 'SEB config name', quiz.sebConfigName || '')}
         <label class="check-field"><input type="checkbox" id="quiz-show-correct" ${quiz.showCorrectAnswers ? 'checked' : ''}> Show correct answers after submit</label>
         <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary">Save</button></div>
       </form>
@@ -76,9 +103,19 @@ export const QuizzesPage = {
         title: value('quiz-title'),
         description: value('quiz-description'),
         status: value('quiz-status'),
-        attemptsAllowed: Number(value('quiz-attempts')),
-        timeLimitMinutes: Number(value('quiz-time')),
+        maxAttempts: Number(value('quiz-attempts')),
+        durationMinutes: Number(value('quiz-time')),
+        startAt: value('quiz-start') ? new Date(value('quiz-start')).toISOString() : '',
+        endAt: value('quiz-end') ? new Date(value('quiz-end')).toISOString() : '',
+        showResultPolicy: value('quiz-result-policy'),
+        gradingMode: value('quiz-grading-mode'),
+        penaltyEnabled: document.getElementById('quiz-penalty-enabled').checked,
+        penaltyPerWrong: Number(value('quiz-penalty') || 0),
         shuffleQuestions: document.getElementById('quiz-shuffle').checked,
+        shuffleOptions: document.getElementById('quiz-shuffle-options').checked,
+        requiresSeb: document.getElementById('quiz-requires-seb').checked,
+        sebConfigName: value('quiz-seb-name'),
+        templateName: value('quiz-template'),
         showCorrectAnswers: document.getElementById('quiz-show-correct').checked
       };
       try {
@@ -143,7 +180,7 @@ export const QuizzesPage = {
       <div class="list-row">
         <div>
           <strong>${this.esc(quiz.title)}</strong>
-          <small>${showCourse ? `${this.esc(quiz.courseCode || '')} - ` : ''}${quiz.questionCount || 0} questions, ${quiz.maxScore || 0} points</small>
+          <small>${showCourse ? `${this.esc(quiz.courseCode || '')} - ` : ''}${quiz.questionCount || 0} questions, ${quiz.maxScore || 0} points | ${this.esc(quiz.showResultPolicy || 'immediately')} results | ${this.esc(quiz.durationMinutes || quiz.timeLimitMinutes || 0)} min</small>
         </div>
         <div class="row-actions">
           <span class="status ${quiz.status}">${this.esc(quiz.status)}</span>
@@ -151,5 +188,18 @@ export const QuizzesPage = {
         </div>
       </div>
     `;
+  },
+
+  toDateTimeLocal(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = number => String(number).padStart(2, '0');
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hour = pad(date.getHours());
+    const minute = pad(date.getMinutes());
+    return `${year}-${month}-${day}T${hour}:${minute}`;
   }
 };

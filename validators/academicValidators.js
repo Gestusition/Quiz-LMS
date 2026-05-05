@@ -4,44 +4,44 @@ const OFFERING_ENROLLMENT_STATUSES = ['active', 'dropped', 'completed'];
 const ASSIGNMENT_STATUSES = ['draft', 'published', 'closed'];
 const SUBMISSION_STATUSES = ['submitted', 'graded', 'returned'];
 const ATTENDANCE_STATUSES = ['present', 'absent', 'late', 'excused'];
+const { LIMITS } = require('../constants/limits');
+const { validationError } = require('../utils/appError');
+const {
+  dateValue,
+  ensureDateOrder,
+  enumValue,
+  intInRange,
+  optionalId: parseOptionalId,
+  optionalText,
+  requiredId: parseRequiredId,
+  requiredText
+} = require('../utils/validation');
 
 function optionalId(value, field) {
-  if (value === undefined || value === null || value === '') return null;
-  const id = Number(value);
-  if (!Number.isInteger(id) || id < 1) {
-    throw new Error(`${field} must be a positive integer.`);
-  }
-  return id;
+  return parseOptionalId(value, field);
 }
 
 function requiredId(value, field) {
-  const id = optionalId(value, field);
-  if (!id) throw new Error(`${field} is required.`);
-  return id;
+  return parseRequiredId(value, field);
 }
 
 function shortText(value, field, max = 120, required = true) {
-  const text = String(value || '').trim();
-  if (required && !text) throw new Error(`${field} is required.`);
-  if (text.length > max) throw new Error(`${field} must be ${max} characters or less.`);
-  return text;
+  if (required) {
+    return requiredText(value, field, { min: 1, max });
+  }
+  return optionalText(value, field, max);
 }
 
 function code(value, field = 'Code') {
   const text = shortText(value, field, 32).toUpperCase();
   if (!/^[A-Z0-9_-]+$/.test(text)) {
-    throw new Error(`${field} may only contain letters, numbers, underscores, or hyphens.`);
+    throw validationError(field, `${field} may only contain letters, numbers, underscores, or hyphens.`);
   }
   return text;
 }
 
 function dateText(value, field, required = false) {
-  const text = String(value || '').trim();
-  if (required && !text) throw new Error(`${field} is required.`);
-  if (text && Number.isNaN(Date.parse(text))) {
-    throw new Error(`${field} must be a valid date.`);
-  }
-  return text;
+  return dateValue(value, field, { required });
 }
 
 function validateFaculty(data) {
@@ -60,10 +60,7 @@ function validateDepartment(data) {
 }
 
 function validateClassYear(data) {
-  const yearNumber = Number(data.yearNumber);
-  if (!Number.isInteger(yearNumber) || yearNumber < 1 || yearNumber > 8) {
-    throw new Error('yearNumber must be an integer between 1 and 8.');
-  }
+  const yearNumber = intInRange(data.yearNumber, 'yearNumber', 1, 8);
   return {
     departmentId: requiredId(data.departmentId, 'departmentId'),
     yearNumber,
@@ -79,18 +76,18 @@ function validateSection(data) {
 }
 
 function validateTerm(data) {
-  const semesterType = String(data.semesterType || '').trim().toLowerCase();
-  if (!SEMESTER_TYPES.includes(semesterType)) {
-    throw new Error(`semesterType must be one of: ${SEMESTER_TYPES.join(', ')}.`);
-  }
+  const semesterType = enumValue(
+    String(data.semesterType || '').trim().toLowerCase(),
+    'semesterType',
+    SEMESTER_TYPES,
+    'fall'
+  );
   const startDate = dateText(data.startDate, 'startDate');
   const endDate = dateText(data.endDate, 'endDate');
-  if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-    throw new Error('startDate must be before endDate.');
-  }
+  ensureDateOrder(startDate, endDate, 'startDate', 'endDate');
   return {
-    name: shortText(data.name, 'Term name', 120),
-    academicYear: shortText(data.academicYear, 'Academic year', 24),
+    name: shortText(data.name, 'Term name', LIMITS.terms.nameMax),
+    academicYear: shortText(data.academicYear, 'Academic year', LIMITS.terms.yearMax),
     semesterType,
     startDate,
     endDate,
@@ -99,16 +96,11 @@ function validateTerm(data) {
 }
 
 function validateCourseOffering(data) {
-  const status = String(data.status || 'planned').trim();
-  if (!OFFERING_STATUSES.includes(status)) {
-    throw new Error(`status must be one of: ${OFFERING_STATUSES.join(', ')}.`);
-  }
-  const capacity = data.capacity === undefined || data.capacity === ''
-    ? 0
-    : Number(data.capacity);
-  if (!Number.isInteger(capacity) || capacity < 0) {
-    throw new Error('capacity must be a non-negative integer.');
-  }
+  const status = enumValue(data.status, 'status', OFFERING_STATUSES, 'planned');
+  const capacity = intInRange(data.capacity, 'capacity', 0, LIMITS.offerings.capacityMax, {
+    required: false,
+    defaultValue: 0
+  });
   return {
     courseId: requiredId(data.courseId, 'courseId'),
     termId: requiredId(data.termId, 'termId'),
@@ -122,10 +114,7 @@ function validateCourseOffering(data) {
 }
 
 function validateOfferingEnrollment(data) {
-  const status = String(data.status || 'active').trim();
-  if (!OFFERING_ENROLLMENT_STATUSES.includes(status)) {
-    throw new Error(`status must be one of: ${OFFERING_ENROLLMENT_STATUSES.join(', ')}.`);
-  }
+  const status = enumValue(data.status, 'status', OFFERING_ENROLLMENT_STATUSES, 'active');
   return {
     courseOfferingId: requiredId(data.courseOfferingId, 'courseOfferingId'),
     studentId: requiredId(data.studentId, 'studentId'),
@@ -135,36 +124,30 @@ function validateOfferingEnrollment(data) {
 }
 
 function validateAssignment(data) {
-  const status = String(data.status || 'draft').trim();
-  if (!ASSIGNMENT_STATUSES.includes(status)) {
-    throw new Error(`status must be one of: ${ASSIGNMENT_STATUSES.join(', ')}.`);
-  }
+  const status = enumValue(data.status, 'status', ASSIGNMENT_STATUSES, 'draft');
   return {
     courseOfferingId: requiredId(data.courseOfferingId, 'courseOfferingId'),
-    title: shortText(data.title, 'Assignment title', 160),
-    description: shortText(data.description, 'Assignment description', 3000, false),
+    title: shortText(data.title, 'Assignment title', LIMITS.assignments.titleMax),
+    description: shortText(data.description, 'Assignment description', LIMITS.assignments.descriptionMax, false),
     dueDate: dateText(data.dueDate, 'dueDate'),
     status
   };
 }
 
 function validateSubmission(data) {
-  const submissionText = shortText(data.submissionText, 'Submission text', 5000, false);
-  const submissionUrl = shortText(data.submissionUrl, 'Submission URL', 500, false);
+  const submissionText = shortText(data.submissionText, 'Submission text', LIMITS.assignments.submissionTextMax, false);
+  const submissionUrl = shortText(data.submissionUrl, 'Submission URL', LIMITS.assignments.submissionUrlMax, false);
   if (!submissionText && !submissionUrl) {
-    throw new Error('Submission text or URL is required.');
+    throw validationError('submission', 'Submission text or URL is required.');
   }
   return { submissionText, submissionUrl };
 }
 
 function validateSubmissionGrade(data) {
-  const status = String(data.status || 'graded').trim();
-  if (!SUBMISSION_STATUSES.includes(status)) {
-    throw new Error(`status must be one of: ${SUBMISSION_STATUSES.join(', ')}.`);
-  }
+  const status = enumValue(data.status, 'status', SUBMISSION_STATUSES, 'graded');
   return {
-    grade: shortText(data.grade, 'Grade', 40, false),
-    feedback: shortText(data.feedback, 'Feedback', 3000, false),
+    grade: shortText(data.grade, 'Grade', LIMITS.assignments.gradeMax, false),
+    feedback: shortText(data.feedback, 'Feedback', LIMITS.assignments.feedbackMax, false),
     status
   };
 }
@@ -173,19 +156,16 @@ function validateAttendanceSession(data) {
   return {
     courseOfferingId: requiredId(data.courseOfferingId, 'courseOfferingId'),
     sessionDate: dateText(data.sessionDate, 'sessionDate', true),
-    topic: shortText(data.topic, 'Topic', 160, false)
+    topic: shortText(data.topic, 'Topic', LIMITS.attendance.topicMax, false)
   };
 }
 
 function validateAttendanceRecord(data) {
-  const status = String(data.status || '').trim();
-  if (!ATTENDANCE_STATUSES.includes(status)) {
-    throw new Error(`status must be one of: ${ATTENDANCE_STATUSES.join(', ')}.`);
-  }
+  const status = enumValue(data.status, 'status', ATTENDANCE_STATUSES);
   return {
     studentId: requiredId(data.studentId, 'studentId'),
     status,
-    note: shortText(data.note, 'Note', 500, false)
+    note: shortText(data.note, 'Note', LIMITS.attendance.noteMax, false)
   };
 }
 

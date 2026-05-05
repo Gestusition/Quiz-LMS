@@ -1,5 +1,6 @@
 const authService = require('../services/authService');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
+const restrictionService = require('../services/restrictionService');
 
 function getBearerToken(req) {
   const header = req.headers.authorization || '';
@@ -24,6 +25,21 @@ function requireAuth(req, res, next) {
 
   req.authToken = token;
   req.user = user;
+
+  try {
+    restrictionService.assertAccessAllowed({
+      user,
+      restrictionType: 'account_suspended',
+      scopeType: 'global',
+      safeMessage: 'Your account is currently restricted. Please contact your instructor or administrator.'
+    });
+  } catch (err) {
+    return res.status(403).json({
+      error: 'Access restricted',
+      restriction_type: 'account_suspended',
+      message: 'Your account is currently restricted. Please contact your instructor or administrator.'
+    });
+  }
 
   if (user.mustChangeCredentials && !isCredentialRotationRoute(req)) {
     return res.status(403).json({

@@ -94,7 +94,7 @@ describe('QuestionService', () => {
   test('should reject MC with fewer than 2 options', () => {
     expect(() => {
       questionService.create({ categoryId: testCategoryId, text: 'Test?', type: 'MC', options: ['Only one'], correctAnswer: '0' });
-    }).toThrow('at least 2');
+    }).toThrow('between 2 and 6');
   });
 
   test('should reject MC with invalid correct answer index', () => {

@@ -88,8 +88,8 @@ describe('Academic management system', () => {
     });
 
     adminSession = authService.login(admin.username, 'AcademicAdmin123!');
-    teacherSession = authService.login(teacher.username, 'AcademicTeacher123!');
-    studentSession = authService.login(student.username, 'AcademicStudent123!');
+    teacherSession = authService.login(teacher.email, 'AcademicTeacher123!');
+    studentSession = authService.login(student.studentNumber, 'AcademicStudent123!');
 
     expect(adminSession.user.role).toBe('admin');
     expect(teacherSession.user.academicTitle).toBe('Lecturer');

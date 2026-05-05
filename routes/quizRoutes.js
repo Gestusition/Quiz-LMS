@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const quizService = require('../services/quizService');
 const { requireAuth, canAccessCourse, canManageCourse } = require('../middleware/auth');
+const { sendError } = require('../utils/appError');
 
 router.use(requireAuth);
 
@@ -72,7 +73,7 @@ router.get('/', (req, res) => {
       search: req.query.search
     }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -109,7 +110,7 @@ router.post('/', (req, res) => {
   try {
     res.status(201).json(quizService.create(req.body, req.user));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -154,8 +155,7 @@ router.get('/attempts/:id', (req, res) => {
     }
     res.json(attempt);
   } catch (err) {
-    if (err.message === 'Attempt not found.') return res.status(404).json({ error: err.message });
-    res.status(403).json({ error: err.message });
+    sendError(res, err, 403);
   }
 });
 
@@ -197,8 +197,40 @@ router.post('/attempts/:id/submit', (req, res) => {
     const attempt = quizService.submitAttempt(attemptId, req.user, req.body);
     res.json(attempt);
   } catch (err) {
-    if (err.message === 'Attempt not found.') return res.status(404).json({ error: err.message });
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
+  }
+});
+
+router.get('/templates', (req, res) => {
+  try {
+    if (req.user.role === 'student') {
+      return res.status(403).json({ error: 'Teacher or admin course access required.' });
+    }
+    res.json(quizService.getExamTemplates());
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.get('/grade-schemes', (req, res) => {
+  try {
+    if (req.user.role === 'student') {
+      return res.status(403).json({ error: 'Teacher or admin course access required.' });
+    }
+    res.json(quizService.getGradeSchemes(req.query.courseId));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.put('/grade-schemes/:id/thresholds', (req, res) => {
+  try {
+    if (req.user.role === 'student') {
+      return res.status(403).json({ error: 'Teacher or admin course access required.' });
+    }
+    res.json(quizService.updateGradeSchemeThresholds(req.params.id, req.body.thresholds, req.user.id));
+  } catch (err) {
+    sendError(res, err, 400);
   }
 });
 
@@ -231,7 +263,7 @@ router.get('/:id', loadQuiz, requireQuizAccess, (req, res) => {
     const includeCorrect = canManageCourse(req.user, req.quiz.courseId);
     res.json(quizService.getById(req.quizId, { includeQuestions: true, includeCorrect }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -269,9 +301,9 @@ router.get('/:id', loadQuiz, requireQuizAccess, (req, res) => {
  */
 router.put('/:id', loadQuiz, requireQuizManager, (req, res) => {
   try {
-    res.json(quizService.update(req.quizId, req.body));
+    res.json(quizService.update(req.quizId, req.body, req.user));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -304,7 +336,7 @@ router.delete('/:id', loadQuiz, requireQuizManager, (req, res) => {
     quizService.delete(req.quizId);
     res.json({ message: 'Quiz deleted successfully.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -342,9 +374,9 @@ router.delete('/:id', loadQuiz, requireQuizManager, (req, res) => {
  */
 router.put('/:id/questions', loadQuiz, requireQuizManager, (req, res) => {
   try {
-    res.json(quizService.setQuestions(req.quizId, req.body.questionIds));
+    res.json(quizService.setQuestions(req.quizId, req.body.questionIds, req.user.id));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -382,7 +414,7 @@ router.get('/:id/attempts', loadQuiz, requireQuizAccess, (req, res) => {
   try {
     res.json(quizService.getAttemptsForQuiz(req.quizId, req.user));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -414,9 +446,12 @@ router.get('/:id/attempts', loadQuiz, requireQuizAccess, (req, res) => {
  */
 router.post('/:id/attempts', loadQuiz, requireQuizAccess, (req, res) => {
   try {
-    res.status(201).json(quizService.startAttempt(req.quizId, req.user));
+    res.status(201).json(quizService.startAttempt(req.quizId, req.user, {
+      headers: req.headers,
+      userAgent: req.headers['user-agent'] || ''
+    }));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 

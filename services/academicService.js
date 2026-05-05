@@ -2,6 +2,10 @@ const academicRepository = require('../repositories/academicRepository');
 const courseRepository = require('../repositories/courseRepository');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const userRepository = require('../repositories/userRepository');
+const restrictionService = require('./restrictionService');
+const auditService = require('./auditService');
+const validationIssueService = require('./validationIssueService');
+const importService = require('./importService');
 const { nowIso } = require('../utils/security');
 const {
   validateAssignment,
@@ -367,11 +371,28 @@ class AcademicService {
     if (!academicRepository.findOfferingEnrollmentByStudent(assignment.courseOfferingId, user.id)) {
       throw forbidden();
     }
+
+    restrictionService.assertAccessAllowed({
+      user,
+      restrictionType: 'assignment_blocked',
+      scopeType: 'assignment',
+      scopeId: assignment.id,
+      safeMessage: 'Your assignment submission access is restricted. Please contact your instructor or administrator.'
+    });
+
     const payload = validateSubmission(data);
     const timestamp = nowIso();
     const result = academicRepository.upsertSubmission(assignmentId, user.id, payload, timestamp);
-    return academicRepository.findSubmissionByAssignmentStudent(assignmentId, user.id) ||
+    const saved = academicRepository.findSubmissionByAssignmentStudent(assignmentId, user.id) ||
       academicRepository.findSubmission(result.lastInsertRowid);
+    auditService.log({
+      actorUserId: user.id,
+      action: 'ASSIGNMENT_SUBMITTED',
+      entityType: 'assignment_submission',
+      entityId: saved.id,
+      details: { assignmentId: assignment.id }
+    });
+    return saved;
   }
 
   gradeSubmission(submissionId, data, user) {
@@ -379,7 +400,15 @@ class AcademicService {
     if (!this.canManageOffering(user, submission)) throw forbidden();
     const payload = validateSubmissionGrade(data);
     academicRepository.gradeSubmission(submissionId, payload, nowIso(), user.id);
-    return academicRepository.findSubmission(submissionId);
+    const graded = academicRepository.findSubmission(submissionId);
+    auditService.log({
+      actorUserId: user.id,
+      action: 'ASSIGNMENT_GRADED',
+      entityType: 'assignment_submission',
+      entityId: graded.id,
+      details: { status: graded.status, grade: graded.grade }
+    });
+    return graded;
   }
 
   listAttendanceSessions(user, filters = {}) {
@@ -417,6 +446,13 @@ class AcademicService {
     academicRepository.withTransaction(() => {
       payloads.forEach(record => academicRepository.upsertAttendanceRecord(sessionId, record, user.id, nowIso()));
     });
+    auditService.log({
+      actorUserId: user.id,
+      action: 'ATTENDANCE_MARKED',
+      entityType: 'attendance_session',
+      entityId: sessionId,
+      details: { recordCount: payloads.length }
+    });
     return {
       ...session,
       records: academicRepository.listAttendanceRecords(sessionId)
@@ -440,7 +476,16 @@ class AcademicService {
   }
 
   adminAnalytics() {
-    return academicRepository.adminAnalytics();
+    const base = academicRepository.adminAnalytics();
+    return {
+      ...base,
+      systemHealth: {
+        openValidationIssues: validationIssueService.countOpen(),
+        openImportErrors: importService.countOpenErrors(),
+        restrictedUsers: restrictionService.countActive()
+      },
+      recentAuditLogs: auditService.recent(15)
+    };
   }
 
   canManageOffering(user, offering) {

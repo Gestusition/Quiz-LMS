@@ -2,12 +2,13 @@ const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
 const { requireAuth } = require('../middleware/auth');
+const { sendError } = require('../utils/appError');
 
 /**
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Login with username, email, or student number and password
+ *     summary: Login with email or academic identifier and password
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -28,11 +29,11 @@ const { requireAuth } = require('../middleware/auth');
  */
 router.post('/login', (req, res) => {
   try {
-    const identifier = req.body.username || req.body.email || req.body.identifier;
+    const identifier = req.body.identifier || req.body.login || req.body.email || req.body.student_number;
     const session = authService.login(identifier, req.body.password);
     res.json(session);
   } catch (err) {
-    res.status(401).json({ error: err.message });
+    sendError(res, err, 401);
   }
 });
 
@@ -61,10 +62,10 @@ router.post('/login', (req, res) => {
  */
 router.post('/password-reset/request', (req, res) => {
   try {
-    const identifier = req.body.username || req.body.identifier;
+    const identifier = req.body.identifier || req.body.login || req.body.username;
     res.json(authService.requestPasswordReset(identifier));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -95,7 +96,7 @@ router.post('/password-reset/complete', (req, res) => {
   try {
     res.json(authService.completePasswordReset(req.body));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -128,7 +129,7 @@ router.post('/change-credentials', requireAuth, (req, res) => {
     const user = authService.changeOwnCredentials(req.user.id, req.authToken, req.body);
     res.json(user);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 

@@ -40,7 +40,7 @@ export const API = {
 
     if (!response.ok) {
       if (response.status === 401) this.clearSession();
-      throw new Error(data.error || `Request failed with status ${response.status}`);
+      throw new Error(data.message || data.error || `Request failed with status ${response.status}`);
     }
 
     return data;
@@ -48,7 +48,7 @@ export const API = {
 
   login(identifier, password) { return this.request('/auth/login', { method: 'POST', body: { identifier, password } }); },
   changeCredentials(data) { return this.request('/auth/change-credentials', { method: 'POST', body: data }); },
-  requestPasswordReset(username) { return this.request('/auth/password-reset/request', { method: 'POST', body: { username } }); },
+  requestPasswordReset(identifier) { return this.request('/auth/password-reset/request', { method: 'POST', body: { identifier } }); },
   completePasswordReset(data) { return this.request('/auth/password-reset/complete', { method: 'POST', body: data }); },
   logout() { return this.request('/auth/logout', { method: 'POST' }); },
   me() { return this.request('/auth/me'); },
@@ -57,6 +57,12 @@ export const API = {
     const params = new URLSearchParams();
     if (filters.role) params.set('role', filters.role);
     if (filters.search) params.set('search', filters.search);
+    if (filters.status) params.set('status', filters.status);
+    if (filters.departmentId) params.set('departmentId', filters.departmentId);
+    if (filters.classYearId) params.set('classYearId', filters.classYearId);
+    if (filters.sectionId) params.set('sectionId', filters.sectionId);
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
     return this.request(`/users${params.toString() ? `?${params}` : ''}`);
   },
   createUser(data) { return this.request('/users', { method: 'POST', body: data }); },
@@ -159,6 +165,90 @@ export const API = {
   getMyAttendance() { return this.request('/academic/attendance/my'); },
   getAttendanceSummary(courseOfferingId) { return this.request(`/academic/attendance/offerings/${courseOfferingId}/summary`); },
   getAdminAnalytics() { return this.request('/analytics/admin'); },
+  getAuditLogs(limit = 20) { return this.request(`/audit?limit=${encodeURIComponent(limit)}`); },
+
+  getValidationIssues(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.entityType) params.set('entityType', filters.entityType);
+    if (filters.entityId) params.set('entityId', filters.entityId);
+    if (filters.severity) params.set('severity', filters.severity);
+    if (filters.status) params.set('status', filters.status);
+    if (filters.relatedCourseId) params.set('relatedCourseId', filters.relatedCourseId);
+    if (filters.relatedUserId) params.set('relatedUserId', filters.relatedUserId);
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
+    return this.request(`/issues${params.toString() ? `?${params}` : ''}`);
+  },
+  createValidationIssue(data) { return this.request('/issues', { method: 'POST', body: data }); },
+  updateValidationIssueStatus(id, status) { return this.request(`/issues/${id}/status`, { method: 'PUT', body: { status } }); },
+
+  getRestrictions(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.userId) params.set('userId', filters.userId);
+    if (filters.restrictionType) params.set('restrictionType', filters.restrictionType);
+    if (filters.scopeType) params.set('scopeType', filters.scopeType);
+    if (filters.scopeId) params.set('scopeId', filters.scopeId);
+    if (filters.activeOnly) params.set('activeOnly', 'true');
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
+    return this.request(`/restrictions${params.toString() ? `?${params}` : ''}`);
+  },
+  createRestriction(data) { return this.request('/restrictions', { method: 'POST', body: data }); },
+  deactivateRestriction(id) { return this.request(`/restrictions/${id}/deactivate`, { method: 'PUT' }); },
+
+  getImportBatches(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.type) params.set('type', filters.type);
+    if (filters.status) params.set('status', filters.status);
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
+    return this.request(`/imports/batches${params.toString() ? `?${params}` : ''}`);
+  },
+  createImportBatch(data) { return this.request('/imports/batches', { method: 'POST', body: data }); },
+  getImportErrors(batchId, filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
+    return this.request(`/imports/batches/${batchId}/errors${params.toString() ? `?${params}` : ''}`);
+  },
+  createImportError(batchId, data) { return this.request(`/imports/batches/${batchId}/errors`, { method: 'POST', body: data }); },
+  resolveImportError(id, data) { return this.request(`/imports/errors/${id}/resolve`, { method: 'PUT', body: data }); },
+
+  getCourseWeeks(courseId, filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
+    return this.request(`/weeks/courses/${courseId}/weeks${params.toString() ? `?${params}` : ''}`);
+  },
+  createCourseWeek(courseId, data) { return this.request(`/weeks/courses/${courseId}/weeks`, { method: 'POST', body: data }); },
+  updateCourseWeek(id, data) { return this.request(`/weeks/weeks/${id}`, { method: 'PUT', body: data }); },
+  deleteCourseWeek(id) { return this.request(`/weeks/weeks/${id}`, { method: 'DELETE' }); },
+  getWeekResources(weekId, filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
+    return this.request(`/weeks/weeks/${weekId}/resources${params.toString() ? `?${params}` : ''}`);
+  },
+  createWeekResource(weekId, data) { return this.request(`/weeks/weeks/${weekId}/resources`, { method: 'POST', body: data }); },
+  deleteWeekResource(id) { return this.request(`/weeks/week-resources/${id}`, { method: 'DELETE' }); },
+
+  getThreads(courseId, filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
+    return this.request(`/discussion/courses/${courseId}/threads${params.toString() ? `?${params}` : ''}`);
+  },
+  createThread(courseId, data) { return this.request(`/discussion/courses/${courseId}/threads`, { method: 'POST', body: data }); },
+  updateThreadStatus(id, status) { return this.request(`/discussion/threads/${id}/status`, { method: 'PUT', body: { status } }); },
+  getThreadReplies(id, filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.page) params.set('page', filters.page);
+    if (filters.limit) params.set('limit', filters.limit);
+    return this.request(`/discussion/threads/${id}/replies${params.toString() ? `?${params}` : ''}`);
+  },
+  createThreadReply(id, data) { return this.request(`/discussion/threads/${id}/replies`, { method: 'POST', body: data }); },
 
   getCategories(filters = {}) {
     const params = new URLSearchParams();

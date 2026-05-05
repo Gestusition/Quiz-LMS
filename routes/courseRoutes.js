@@ -6,6 +6,7 @@ const quizService = require('../services/quizService');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const contentRepository = require('../repositories/contentRepository');
 const { requireAuth, requireRole, canAccessCourse, canManageCourse } = require('../middleware/auth');
+const { sendError } = require('../utils/appError');
 
 router.use(requireAuth);
 
@@ -73,7 +74,7 @@ router.get('/', (req, res) => {
       visibility: req.query.visibility
     }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -105,7 +106,7 @@ router.post('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     res.status(201).json(courseService.create(req.body, req.user));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -151,7 +152,7 @@ router.put('/enrollments/:id', (req, res) => {
   try {
     res.json(courseService.updateEnrollment(enrollmentId, req.body.status));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -192,7 +193,7 @@ router.delete('/enrollments/:id', (req, res) => {
     courseService.deleteEnrollment(enrollmentId);
     res.json({ message: 'Enrollment deleted successfully.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -233,7 +234,7 @@ router.delete('/announcements/:id', (req, res) => {
     contentService.deleteAnnouncement(id);
     res.json({ message: 'Announcement deleted successfully.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -274,7 +275,7 @@ router.delete('/resources/:id', (req, res) => {
     contentService.deleteResource(id);
     res.json({ message: 'Resource deleted successfully.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -306,7 +307,7 @@ router.get('/:courseId/participants', requireCourseAccess, (req, res) => {
   try {
     res.json(courseService.getParticipants(req.courseId));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -344,7 +345,7 @@ router.post('/:courseId/enrollments', requireCourseManager, (req, res) => {
   try {
     res.status(201).json(courseService.enroll(req.courseId, Number(req.body.userId), req.body.role));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -376,7 +377,7 @@ router.get('/:courseId/announcements', requireCourseAccess, (req, res) => {
   try {
     res.json(contentService.getAnnouncements(req.courseId));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -414,7 +415,7 @@ router.post('/:courseId/announcements', requireCourseManager, (req, res) => {
   try {
     res.status(201).json(contentService.createAnnouncement(req.courseId, req.body, req.user));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -446,7 +447,7 @@ router.get('/:courseId/resources', requireCourseAccess, (req, res) => {
   try {
     res.json(contentService.getResources(req.courseId));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -484,7 +485,7 @@ router.post('/:courseId/resources', requireCourseManager, (req, res) => {
   try {
     res.status(201).json(contentService.createResource(req.courseId, req.body, req.user));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -514,7 +515,7 @@ router.get('/:courseId/gradebook', requireCourseManager, (req, res) => {
   try {
     res.json(quizService.getGradebook(req.courseId));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -548,7 +549,7 @@ router.get('/:id', requireCourseAccess, (req, res) => {
     if (!course) return res.status(404).json({ error: 'Course not found.' });
     res.json(course);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -589,7 +590,7 @@ router.put('/:id', requireCourseManager, (req, res) => {
     res.json(courseService.update(req.courseId, req.body));
   } catch (err) {
     if (err.message === 'Course not found.') return res.status(404).json({ error: err.message });
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -623,8 +624,9 @@ router.delete('/:id', requireCourseManager, (req, res) => {
     res.json({ message: 'Course deleted successfully.' });
   } catch (err) {
     if (err.message === 'Course not found.') return res.status(404).json({ error: err.message });
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
 module.exports = router;
+

@@ -469,7 +469,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   background: var(--surface-strong);
 }
 
-.role-badge, .status {
+.role-badge, .status, .status-chip {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
@@ -481,12 +481,14 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 .role-badge { background: var(--primary-soft); color: var(--primary-dark); }
-.status.private, .status.draft { background: #ede9fe; color: #5b21b6; }
-.status.published, .status.active, .status.present, .status.graded { background: #dcfce7; color: var(--success); }
-.status.planned, .status.late, .status.submitted, .status.returned { background: #fef3c7; color: var(--warning); }
-.status.absent { background: var(--danger-soft); color: var(--danger); }
-.status.excused { background: #e0f2fe; color: #0369a1; }
-.status.archived, .status.closed, .status.completed, .status.cancelled, .status.inactive { background: #e5e7eb; color: var(--closed); }
+.status.private, .status.draft, .status-chip.private, .status-chip.draft { background: #ede9fe; color: #5b21b6; }
+.status.published, .status.active, .status.present, .status.graded, .status-chip.published, .status-chip.active, .status-chip.present, .status-chip.graded { background: #dcfce7; color: var(--success); }
+.status.planned, .status.late, .status.submitted, .status.returned, .status-chip.planned, .status-chip.late, .status-chip.submitted, .status-chip.returned, .status-chip.pending { background: #fef3c7; color: var(--warning); }
+.status.absent, .status-chip.absent { background: var(--danger-soft); color: var(--danger); }
+.status.excused, .status-chip.excused { background: #e0f2fe; color: #0369a1; }
+.status.archived, .status.closed, .status.completed, .status.cancelled, .status.inactive, .status-chip.archived, .status-chip.closed, .status-chip.completed, .status-chip.cancelled, .status-chip.inactive, .status-chip.not_submitted { background: #e5e7eb; color: var(--closed); }
+.status.invalid, .status-chip.invalid, .status-chip.restricted { background: #fee2e2; color: #991b1b; }
+.status.pending_review, .status-chip.pending_review { background: #fef9c3; color: #92400e; }
 
 .profile-list {
   display: grid;
