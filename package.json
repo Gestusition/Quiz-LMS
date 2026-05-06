@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "A role-based quiz LMS with secure accounts, course management, quiz attempts, REST API, and vanilla JavaScript SPA.",
   "main": "server.js",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",

@@ -6,7 +6,7 @@ A vanilla JavaScript + Express + SQLite LMS with layered architecture (`routes -
 
 - Role-based LMS: `admin`, `teacher`, `student`
 - Secure auth with salted+spiced passwords and session tokens
-- Login by **unique identifier**: `email` (primary), `student_number`, `employee_number` (teacher profile), legacy unique username fallback
+- Strict academic login identifiers by role: admins use `email` or `username`, teachers use `email`, students use `student_number`
 - Admin user management with search/filter/pagination and profile editing
 - Duplicate protection with safe conflict responses (`409`) for email/student number/employee number
 - Course + offering + enrollment + term/faculty/department/class/section management
@@ -34,21 +34,24 @@ No SQL in route handlers, no frontend-only fake logic for backend features.
 
 ## Security and Identity
 
-Authentication is based on unique academic identifiers, not display-name collisions.
+Authentication is based on role-specific academic identifiers, not display-name collisions.
 
-Login identifier resolution order:
-1. `email`
-2. `student_number`
-3. `employee_number`
-4. legacy `username` (only as compatibility fallback)
+Login identifiers are intentionally strict:
+1. Admins can log in with `email` or `username`.
+2. Teachers must log in with `email`.
+3. Students must log in with `student_number`.
 
-If an identifier is ambiguous, login is rejected with a safe message.
+Student email login, teacher employee-number login, and teacher username login are rejected even when the password is correct. If an identifier is ambiguous across academic identifiers, login is rejected with a safe message.
+
+This is a SPA bearer-token demo implementation. Production should use server-set HttpOnly, Secure, SameSite cookies and should not accept session tokens through query parameters.
 
 ## SEB Compatibility Note
 
 This project implements **SEB compatible mode checks** (request header/user-agent style gating) for quiz start restrictions. It does **not** claim full production-grade Safe Exam Browser hard security integration.
 
 ## Run
+
+Requires Node.js `>=22.13.0` because the database layer uses `node:sqlite`.
 
 ```bash
 npm install
