@@ -35,7 +35,7 @@ function sendSession(res, session) {
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Login with email or academic identifier and password
+ *     summary: Login with role-specific academic identifier and password
  *     tags: [Auth]
  *     security: []
  *     requestBody:

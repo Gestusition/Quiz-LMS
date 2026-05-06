@@ -111,6 +111,27 @@ describe('Auth and quiz attempt flow', () => {
     else process.env.PASSWORD_SPICE = originalSpice;
   });
 
+  test('requires PASSWORD_SPICE in production', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalSpice = process.env.PASSWORD_SPICE;
+
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.PASSWORD_SPICE;
+
+      expect(() => hashPassword('ProductionPassword123!')).toThrow('PASSWORD_SPICE is required in production.');
+
+      process.env.PASSWORD_SPICE = 'production-test-spice';
+      expect(() => hashPassword('ProductionPassword123!')).not.toThrow();
+    } finally {
+      if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = originalNodeEnv;
+
+      if (originalSpice === undefined) delete process.env.PASSWORD_SPICE;
+      else process.env.PASSWORD_SPICE = originalSpice;
+    }
+  });
+
   test('logs in seeded role accounts with salted and spiced password hashes', () => {
     const admin = authService.login('admin', 'Admin123!');
     const teacher = authService.login('teacher@example.com', 'Teacher123!');

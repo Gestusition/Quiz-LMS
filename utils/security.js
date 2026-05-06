@@ -4,6 +4,10 @@ const PASSWORD_KEY_LENGTH = 64;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
 
 function getPasswordSpice() {
+  if (process.env.NODE_ENV === 'production' && !process.env.PASSWORD_SPICE) {
+    throw new Error('PASSWORD_SPICE is required in production.');
+  }
+
   return process.env.PASSWORD_SPICE || 'quiz-web-local-development-spice';
 }
 

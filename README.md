@@ -45,6 +45,8 @@ Student email login, teacher employee-number login, and teacher username login a
 
 Browser sessions use server-set `HttpOnly`, `Secure`, `SameSite=Strict` cookies. The frontend does not store session tokens in `localStorage`, does not write readable auth cookies, and the backend does not accept session tokens through query parameters.
 
+Production requires `PASSWORD_SPICE`; startup/auth crypto fails fast if `NODE_ENV=production` is set without it.
+
 ## SEB Compatibility Note
 
 This project implements **SEB compatible mode checks** (request header/user-agent style gating) for quiz start restrictions. It does **not** claim full production-grade Safe Exam Browser hard security integration.
