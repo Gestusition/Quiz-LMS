@@ -40,7 +40,7 @@ export const AttemptPage = {
                   <span class="percentage-display">${attempt.percentage}%</span>
                   ${attempt.letterGrade ? `<span class="grade-display">${this.esc(attempt.letterGrade)}</span>` : ''}
                 </div>
-                <div style="height: 180px; margin-top: 16px;">
+                <div class="attempt-chart-wrap">
                   <canvas id="attempt-chart"></canvas>
                 </div>
               ` : ''}
