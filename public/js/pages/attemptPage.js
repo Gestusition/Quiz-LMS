@@ -40,6 +40,9 @@ export const AttemptPage = {
                   <span class="percentage-display">${attempt.percentage}%</span>
                   ${attempt.letterGrade ? `<span class="grade-display">${this.esc(attempt.letterGrade)}</span>` : ''}
                 </div>
+                <div style="height: 180px; margin-top: 16px;">
+                  <canvas id="attempt-chart"></canvas>
+                </div>
               ` : ''}
             </div>
             <div class="question-nav" id="question-nav">
@@ -66,6 +69,10 @@ export const AttemptPage = {
 
       this.renderLatexAll();
 
+      if (attempt.status === 'submitted') {
+        this.initAttemptChart(attempt, savedAnswers);
+      }
+
       if (isInProgress) {
         this.setupTimer(attempt);
         this.setupAnswerListeners(questions);
@@ -81,6 +88,57 @@ export const AttemptPage = {
     } catch (err) {
       this.renderError(err);
     }
+  },
+
+  initAttemptChart(attempt, savedAnswers) {
+    if (!document.getElementById('attempt-chart') || !attempt.questions || !attempt.questions.length) return;
+
+    let correct = 0;
+    let wrong = 0;
+    let partial = 0;
+
+    attempt.questions.forEach(q => {
+      const result = savedAnswers[q.id];
+      if (result) {
+        if (result.isCorrect) correct++;
+        else if (result.pointsAwarded > 0) partial++;
+        else wrong++;
+      } else {
+        wrong++; // Unanswered
+      }
+    });
+
+    const ctx = document.getElementById('attempt-chart').getContext('2d');
+    if (window.attemptChartInstance) {
+      window.attemptChartInstance.destroy();
+    }
+
+    const labels = [];
+    const data = [];
+    const bgColors = [];
+
+    if (correct > 0) { labels.push('Correct'); data.push(correct); bgColors.push('#16a34a'); }
+    if (partial > 0) { labels.push('Partial'); data.push(partial); bgColors.push('#d97706'); }
+    if (wrong > 0) { labels.push('Incorrect/Missed'); data.push(wrong); bgColors.push('#dc2626'); }
+
+    window.attemptChartInstance = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: bgColors,
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
+        }
+      }
+    });
   },
 
   renderQuestionCard(question, index, isInProgress, savedAnswers, attempt) {

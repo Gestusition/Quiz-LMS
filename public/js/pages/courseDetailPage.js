@@ -134,10 +134,58 @@ export const CourseDetailPage = {
             </div>
           </aside>
         </section>
+        </section>
       `);
+      
+      if (manager && gradebook) {
+        this.initGradebookChart(gradebook);
+      }
     } catch (err) {
       this.renderError(err);
     }
+  },
+
+  initGradebookChart(gradebook) {
+    if (!gradebook || !gradebook.quizzes || !gradebook.quizzes.length || !document.getElementById('gradebook-chart')) return;
+    
+    const quizAverages = gradebook.quizzes.map((quiz, index) => {
+      let sum = 0;
+      let count = 0;
+      gradebook.students.forEach(student => {
+        const val = student.quizzes[index]?.percentage;
+        if (val !== null && val !== undefined) {
+          sum += val;
+          count++;
+        }
+      });
+      return count > 0 ? (sum / count).toFixed(1) : 0;
+    });
+
+    const ctx = document.getElementById('gradebook-chart').getContext('2d');
+    if (window.gradebookChartInstance) {
+      window.gradebookChartInstance.destroy();
+    }
+    window.gradebookChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: gradebook.quizzes.map(q => q.title),
+        datasets: [{
+          label: 'Class Average (%)',
+          data: quizAverages,
+          backgroundColor: 'rgba(79, 70, 229, 0.6)',
+          borderColor: 'rgba(79, 70, 229, 1)',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, max: 100 }
+        }
+      }
+    });
   },
 
   async showWeekForm(courseId) {
@@ -458,6 +506,9 @@ export const CourseDetailPage = {
     return `
       <div class="panel">
         <div class="panel-header"><h2>Gradebook</h2><span>${gradebook.students.length} students</span></div>
+        <div style="height: 250px; margin-bottom: 20px;">
+          <canvas id="gradebook-chart"></canvas>
+        </div>
         <div class="table-wrap">
           <table class="table">
             <thead><tr><th>Student</th>${gradebook.quizzes.map(quiz => `<th>${this.esc(quiz.title)}</th>`).join('')}<th>Average</th></tr></thead>
