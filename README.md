@@ -5,7 +5,7 @@ A vanilla JavaScript + Express + SQLite LMS with layered architecture (`routes -
 ## What Is Implemented
 
 - Role-based LMS: `admin`, `teacher`, `student`
-- Secure auth with salted+spiced passwords and session tokens
+- Secure auth with salted+spiced passwords and HttpOnly session cookies
 - Strict academic login identifiers by role: admins use `email` or `username`, teachers use `email`, students use `student_number`
 - Admin user management with search/filter/pagination and profile editing
 - Duplicate protection with safe conflict responses (`409`) for email/student number/employee number
@@ -43,7 +43,7 @@ Login identifiers are intentionally strict:
 
 Student email login, teacher employee-number login, and teacher username login are rejected even when the password is correct. If an identifier is ambiguous across academic identifiers, login is rejected with a safe message.
 
-This is a SPA bearer-token demo implementation. Production should use server-set HttpOnly, Secure, SameSite cookies and should not accept session tokens through query parameters.
+Browser sessions use server-set `HttpOnly`, `Secure`, `SameSite=Strict` cookies. The frontend does not store session tokens in `localStorage`, does not write readable auth cookies, and the backend does not accept session tokens through query parameters.
 
 ## SEB Compatibility Note
 

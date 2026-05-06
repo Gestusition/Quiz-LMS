@@ -37,6 +37,10 @@ function createAdminSession() {
   return authService.login(admin.username, 'TestAdmin123!');
 }
 
+function cookie(session) {
+  return `auth_token=${session.token}`;
+}
+
 beforeAll(() => {
   removeDbFiles();
   initDatabase(TEST_DB);
@@ -120,12 +124,63 @@ describe('Auth and quiz attempt flow', () => {
     expect(student.token).toBeTruthy();
   });
 
+  test('login endpoint sets an HttpOnly session cookie without exposing the token', async () => {
+    const response = await request(app)
+      .post('/api/auth/login')
+      .send({ identifier: 'teacher@example.com', password: 'Teacher123!' })
+      .expect(200);
+
+    expect(response.body.token).toBeUndefined();
+    expect(response.body.user.role).toBe('teacher');
+
+    const setCookie = response.headers['set-cookie'] || [];
+    const sessionCookie = setCookie.find(item => item.startsWith('auth_token='));
+    expect(sessionCookie).toBeDefined();
+    expect(sessionCookie).toEqual(expect.stringContaining('HttpOnly'));
+    expect(sessionCookie).toEqual(expect.stringContaining('Secure'));
+    expect(sessionCookie).toEqual(expect.stringContaining('SameSite=Strict'));
+
+    const cookieHeader = sessionCookie.split(';')[0];
+    await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', cookieHeader)
+      .expect(200)
+      .expect(meResponse => {
+        expect(meResponse.body.role).toBe('teacher');
+      });
+
+    const logout = await request(app)
+      .post('/api/auth/logout')
+      .set('Cookie', cookieHeader)
+      .expect(200);
+    expect((logout.headers['set-cookie'] || []).some(item => item.startsWith('auth_token=;'))).toBe(true);
+  });
+
+  test('query string and header session tokens are rejected by HTTP auth middleware', async () => {
+    const session = authService.login('STU-0003', 'Student123!');
+
+    await request(app)
+      .get('/api/auth/me')
+      .query({ token: session.token })
+      .expect(401);
+
+    await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${session.token}`)
+      .expect(401);
+
+    await request(app)
+      .get('/api/auth/me')
+      .set('x-session-token', session.token)
+      .expect(401);
+  });
+
   test('blocks default admin from using the app until username and password are changed', async () => {
     const session = authService.login('admin', 'Admin123!');
 
     await request(app)
       .get('/api/courses')
-      .set('Authorization', `Bearer ${session.token}`)
+      .set('Cookie', cookie(session))
       .expect(403)
       .expect(response => {
         expect(response.body.code).toBe('CREDENTIAL_CHANGE_REQUIRED');
@@ -195,7 +250,7 @@ describe('Auth and quiz attempt flow', () => {
 
     await request(app)
       .get('/api/users/password-reset-requests')
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .expect(200)
       .expect(response => {
         expect(Array.isArray(response.body)).toBe(true);
@@ -210,7 +265,7 @@ describe('Auth and quiz attempt flow', () => {
 
     await request(app)
       .post(`/api/users/${student.id}/password-reset-code`)
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .expect(201)
       .expect(response => {
         expect(response.body.userId).toBe(student.id);
@@ -239,7 +294,7 @@ describe('Auth and quiz attempt flow', () => {
 
     await request(app)
       .put(`/api/users/${student.id}/password`)
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .send({ password: 'ManagedNew123!' })
       .expect(200);
 
@@ -256,7 +311,7 @@ describe('Auth and quiz attempt flow', () => {
     const adminSession = createAdminSession();
     const response = await request(app)
       .post('/api/users')
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .send({
         name: 'Academic Student',
         username: 'academic-student',
@@ -285,7 +340,7 @@ describe('Auth and quiz attempt flow', () => {
 
     await request(app)
       .post('/api/users')
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .send({
         name: 'Duplicate Student',
         username: 'duplicate-student-number',
@@ -376,7 +431,7 @@ describe('Auth and quiz attempt flow', () => {
 
     await request(app)
       .get('/api/users?search=SEARCH-1001')
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .expect(200)
       .expect(response => {
         expect(response.body.items.some(user => user.username === 'search-number-student')).toBe(true);
@@ -389,7 +444,7 @@ describe('Auth and quiz attempt flow', () => {
     const adminSession = createAdminSession();
     await request(app)
       .post('/api/users')
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .send({
         name: 'Duplicate Email One',
         username: 'dup-email-1',
@@ -402,7 +457,7 @@ describe('Auth and quiz attempt flow', () => {
 
     await request(app)
       .post('/api/users')
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .send({
         name: 'Duplicate Email Two',
         username: 'dup-email-2',
@@ -421,7 +476,7 @@ describe('Auth and quiz attempt flow', () => {
     const adminSession = createAdminSession();
     const response = await request(app)
       .get('/api/users?role=student&status=active&page=1&limit=5')
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .expect(200);
 
     expect(Array.isArray(response.body.items)).toBe(true);
@@ -483,7 +538,7 @@ describe('Auth and quiz attempt flow', () => {
 
     await request(app)
       .get(`/api/courses/${course.id}/participants`)
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .expect(200)
       .expect(response => {
         const student = response.body.find(participant => participant.courseRole === 'student');
@@ -498,7 +553,7 @@ describe('Auth and quiz attempt flow', () => {
 
     await request(app)
       .get(`/api/courses/${course.id}/gradebook`)
-      .set('Authorization', `Bearer ${adminSession.token}`)
+      .set('Cookie', cookie(adminSession))
       .expect(200)
       .expect(response => {
         expect(response.body.students.length).toBeGreaterThan(0);

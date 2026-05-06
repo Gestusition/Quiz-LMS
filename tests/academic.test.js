@@ -16,8 +16,8 @@ function removeDbFiles() {
   });
 }
 
-function token(session) {
-  return `Bearer ${session.token}`;
+function cookie(session) {
+  return `auth_token=${session.token}`;
 }
 
 beforeAll(() => {
@@ -99,25 +99,25 @@ describe('Academic management system', () => {
   test('admin manages faculty, department, class year, and section hierarchy', async () => {
     faculty = (await request(app)
       .post('/api/academic/faculties')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({ name: 'Faculty of Science', code: 'SCI' })
       .expect(201)).body;
 
     department = (await request(app)
       .post('/api/academic/departments')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({ facultyId: faculty.id, name: 'Mathematics', code: 'MATH' })
       .expect(201)).body;
 
     classYear = (await request(app)
       .post('/api/academic/class-years')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({ departmentId: department.id, yearNumber: 2, name: 'Second Year' })
       .expect(201)).body;
 
     section = (await request(app)
       .post('/api/academic/sections')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({ classYearId: classYear.id, name: 'B' })
       .expect(201)).body;
 
@@ -127,7 +127,7 @@ describe('Academic management system', () => {
 
     await request(app)
       .post('/api/academic/faculties')
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .send({ name: 'Forbidden Faculty', code: 'NOPE' })
       .expect(403);
   });
@@ -135,7 +135,7 @@ describe('Academic management system', () => {
   test('profile returns safe academic identity fields for the current user', async () => {
     await request(app)
       .get('/api/auth/me')
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .expect(200)
       .expect(response => {
         expect(response.body.studentNumber).toMatch(/^ASTU-/);
@@ -149,7 +149,7 @@ describe('Academic management system', () => {
   test('admin creates terms and marks exactly one term active', async () => {
     activeTerm = (await request(app)
       .post('/api/academic/terms')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({
         name: '2026-2027 Fall',
         academicYear: '2026-2027',
@@ -162,7 +162,7 @@ describe('Academic management system', () => {
 
     alternateTerm = (await request(app)
       .post('/api/academic/terms')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({
         name: '2026-2027 Spring',
         academicYear: '2026-2027',
@@ -175,12 +175,12 @@ describe('Academic management system', () => {
 
     await request(app)
       .post(`/api/academic/terms/${alternateTerm.id}/active`)
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .expect(200);
 
     await request(app)
       .get('/api/academic/terms')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .expect(200)
       .expect(response => {
         const active = response.body.filter(term => term.isActive);
@@ -190,7 +190,7 @@ describe('Academic management system', () => {
 
     await request(app)
       .put(`/api/academic/terms/${alternateTerm.id}`)
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({ isActive: false })
       .expect(400)
       .expect(response => {
@@ -201,7 +201,7 @@ describe('Academic management system', () => {
   test('course offerings and enrollments are term-based and role-protected', async () => {
     course = (await request(app)
       .post('/api/courses')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({
         code: 'MATH201',
         title: 'Discrete Mathematics',
@@ -214,7 +214,7 @@ describe('Academic management system', () => {
 
     offering = (await request(app)
       .post('/api/academic/offerings')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({
         courseId: course.id,
         termId: alternateTerm.id,
@@ -229,7 +229,7 @@ describe('Academic management system', () => {
 
     await request(app)
       .post('/api/academic/enrollments')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .send({
         courseOfferingId: offering.id,
         studentId: studentSession.user.id,
@@ -239,7 +239,7 @@ describe('Academic management system', () => {
 
     await request(app)
       .get('/api/academic/offerings')
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .expect(200)
       .expect(response => {
         expect(response.body.some(item => item.id === offering.id)).toBe(true);
@@ -249,7 +249,7 @@ describe('Academic management system', () => {
   test('assignment creation, student submission, and instructor grading work', async () => {
     assignment = (await request(app)
       .post('/api/academic/assignments')
-      .set('Authorization', token(teacherSession))
+      .set('Cookie', cookie(teacherSession))
       .send({
         courseOfferingId: offering.id,
         title: 'Set Theory Homework',
@@ -261,7 +261,7 @@ describe('Academic management system', () => {
 
     await request(app)
       .get('/api/academic/assignments')
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .expect(200)
       .expect(response => {
         expect(response.body.some(item => item.id === assignment.id)).toBe(true);
@@ -269,13 +269,13 @@ describe('Academic management system', () => {
 
     submission = (await request(app)
       .post(`/api/academic/assignments/${assignment.id}/submissions`)
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .send({ submissionText: 'My proof is included here.' })
       .expect(201)).body;
 
     await request(app)
       .get(`/api/academic/assignments/${assignment.id}/submissions`)
-      .set('Authorization', token(teacherSession))
+      .set('Cookie', cookie(teacherSession))
       .expect(200)
       .expect(response => {
         expect(response.body).toHaveLength(1);
@@ -284,7 +284,7 @@ describe('Academic management system', () => {
 
     await request(app)
       .put(`/api/academic/submissions/${submission.id}/grade`)
-      .set('Authorization', token(teacherSession))
+      .set('Cookie', cookie(teacherSession))
       .send({ grade: '95', feedback: 'Clear reasoning.', status: 'graded' })
       .expect(200)
       .expect(response => {
@@ -296,7 +296,7 @@ describe('Academic management system', () => {
   test('attendance sessions can be marked by instructors and viewed by students', async () => {
     attendanceSession = (await request(app)
       .post('/api/academic/attendance/sessions')
-      .set('Authorization', token(teacherSession))
+      .set('Cookie', cookie(teacherSession))
       .send({
         courseOfferingId: offering.id,
         sessionDate: '2027-02-10',
@@ -306,7 +306,7 @@ describe('Academic management system', () => {
 
     await request(app)
       .post(`/api/academic/attendance/sessions/${attendanceSession.id}/records`)
-      .set('Authorization', token(teacherSession))
+      .set('Cookie', cookie(teacherSession))
       .send({
         records: [
           { studentId: studentSession.user.id, status: 'present', note: 'On time' }
@@ -319,7 +319,7 @@ describe('Academic management system', () => {
 
     await request(app)
       .get('/api/academic/attendance/my')
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .expect(200)
       .expect(response => {
         expect(response.body.some(item => item.sessionId === attendanceSession.id && item.status === 'present')).toBe(true);
@@ -329,12 +329,12 @@ describe('Academic management system', () => {
   test('admin analytics are role protected and include academic totals', async () => {
     await request(app)
       .get('/api/analytics/admin')
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .expect(403);
 
     await request(app)
       .get('/api/analytics/admin')
-      .set('Authorization', token(adminSession))
+      .set('Cookie', cookie(adminSession))
       .expect(200)
       .expect(response => {
         expect(response.body.totals.users).toBeGreaterThanOrEqual(3);

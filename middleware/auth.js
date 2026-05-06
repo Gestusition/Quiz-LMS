@@ -2,21 +2,38 @@ const authService = require('../services/authService');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const restrictionService = require('../services/restrictionService');
 
-function getBearerToken(req) {
-  const header = req.headers.authorization || '';
-  if (header.startsWith('Bearer ')) return header.slice(7).trim();
-  if (req.headers['x-session-token']) return req.headers['x-session-token'];
-  
+const SESSION_COOKIE_NAME = 'auth_token';
+
+function parseCookies(cookieHeader = '') {
+  return cookieHeader
+    .split(';')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .reduce((cookies, part) => {
+      const separator = part.indexOf('=');
+      if (separator === -1) return cookies;
+
+      const name = part.slice(0, separator);
+      const rawValue = part.slice(separator + 1);
+      try {
+        cookies[name] = decodeURIComponent(rawValue);
+      } catch (err) {
+        cookies[name] = rawValue;
+      }
+      return cookies;
+    }, {});
+}
+
+function getSessionToken(req) {
   if (req.headers.cookie) {
-    const match = req.headers.cookie.match(/(?:^|;\s*)auth_token=([^;]*)/);
-    if (match) return match[1];
+    return parseCookies(req.headers.cookie)[SESSION_COOKIE_NAME] || '';
   }
-  
-  return req.query.token || '';
+
+  return '';
 }
 
 function requireAuth(req, res, next) {
-  const token = getBearerToken(req);
+  const token = getSessionToken(req);
   const user = authService.getUserByToken(token);
 
   if (!user) {
@@ -96,6 +113,8 @@ function requireCourseManager(paramName = 'courseId') {
 module.exports = {
   canAccessCourse,
   canManageCourse,
+  getSessionToken,
+  SESSION_COOKIE_NAME,
   requireAuth,
   requireCourseAccess,
   requireCourseManager,

@@ -49,15 +49,10 @@ const App = {
     });
     window.addEventListener('hashchange', () => this.route());
 
-    if (API.token()) {
-      try {
-        this.user = await API.me();
-        localStorage.setItem('quiz_lms_user', JSON.stringify(this.user));
-      } catch (e) {
-        this.user = null;
-      }
-    } else {
-      this.user = API.cachedUser();
+    try {
+      this.user = await API.me();
+    } catch (e) {
+      this.user = null;
     }
 
     this.renderShell();

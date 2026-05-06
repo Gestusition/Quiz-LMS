@@ -1,35 +1,21 @@
 export const API = {
   BASE: '/api',
 
-  token() {
-    return localStorage.getItem('quiz_lms_token') || '';
-  },
-
-  setSession(session) {
-    localStorage.setItem('quiz_lms_token', session.token);
-    localStorage.setItem('quiz_lms_user', JSON.stringify(session.user));
-    document.cookie = `auth_token=${session.token}; path=/; max-age=${7 * 24 * 3600}; SameSite=Strict`;
-  },
-
-  clearSession() {
-    localStorage.removeItem('quiz_lms_token');
-    localStorage.removeItem('quiz_lms_user');
-    document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Strict';
-  },
-
-  cachedUser() {
+  async clearSession() {
     try {
-      return JSON.parse(localStorage.getItem('quiz_lms_user') || 'null');
+      await fetch(`${this.BASE}/auth/logout`, {
+        method: 'POST',
+        credentials: 'same-origin'
+      });
     } catch (e) {
-      return null;
+      // The server-set HttpOnly cookie can only be cleared when the API is reachable.
     }
   },
 
   async request(endpoint, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-    if (this.token()) headers.Authorization = `Bearer ${this.token()}`;
 
-    const config = { ...options, headers };
+    const config = { ...options, headers, credentials: 'same-origin' };
     if (config.body && typeof config.body === 'object') {
       config.body = JSON.stringify(config.body);
     }
@@ -39,7 +25,7 @@ export const API = {
     const data = contentType.includes('application/json') ? await response.json() : {};
 
     if (!response.ok) {
-      if (response.status === 401) this.clearSession();
+      if (response.status === 401 && endpoint !== '/auth/logout') await this.clearSession();
       throw new Error(data.message || data.error || `Request failed with status ${response.status}`);
     }
 
@@ -311,9 +297,11 @@ export const API = {
   async uploadQuestionImage(file) {
     const form = new FormData();
     form.append('file', file);
-    const headers = {};
-    if (this.token()) headers.Authorization = `Bearer ${this.token()}`;
-    const response = await fetch(`${this.BASE}/questions/upload`, { method: 'POST', headers, body: form });
+    const response = await fetch(`${this.BASE}/questions/upload`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: form
+    });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Upload failed');
     return data;

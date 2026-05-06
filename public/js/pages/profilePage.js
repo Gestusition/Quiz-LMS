@@ -6,7 +6,6 @@ export const ProfilePage = {
     try {
       const user = await API.me();
       this.user = user;
-      localStorage.setItem('quiz_lms_user', JSON.stringify(user));
 
       const academicRows = this.profileAcademicRows(user);
       this.setApp(`

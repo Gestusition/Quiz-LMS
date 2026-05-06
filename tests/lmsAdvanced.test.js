@@ -19,8 +19,8 @@ function removeDbFiles() {
   });
 }
 
-function token(session) {
-  return `Bearer ${session.token}`;
+function cookie(session) {
+  return `auth_token=${session.token}`;
 }
 
 beforeAll(() => {
@@ -42,7 +42,7 @@ describe('Advanced LMS controls', () => {
 
     await request(app)
       .post(`/api/discussion/courses/${course.id}/threads`)
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .send({ title: 'Exam question', body: 'When is the midterm schedule published?' })
       .expect(201);
 
@@ -59,7 +59,7 @@ describe('Advanced LMS controls', () => {
 
     await request(app)
       .post(`/api/discussion/courses/${course.id}/threads`)
-      .set('Authorization', token(outsiderSession))
+      .set('Cookie', cookie(outsiderSession))
       .send({ title: 'Access test', body: 'I should not post here.' })
       .expect(403);
   });
@@ -87,7 +87,7 @@ describe('Advanced LMS controls', () => {
     const studentSession = authService.login('STU-0003', 'Student123!');
     await request(app)
       .post(`/api/discussion/courses/${course.id}/threads`)
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .send({ title: 'Muted post', body: 'This must be blocked.' })
       .expect(403)
       .expect(response => {
@@ -110,7 +110,7 @@ describe('Advanced LMS controls', () => {
 
     await request(app)
       .post(`/api/quizzes/${quiz.id}/attempts`)
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .expect(403)
       .expect(response => {
         expect(response.body.error).toMatch(/Access restricted/i);
@@ -132,7 +132,7 @@ describe('Advanced LMS controls', () => {
 
     const assignment = (await request(app)
       .post('/api/academic/assignments')
-      .set('Authorization', token(teacherSession))
+      .set('Cookie', cookie(teacherSession))
       .send({
         courseOfferingId: offering.id,
         title: `Restriction Assignment ${Date.now()}`,
@@ -152,7 +152,7 @@ describe('Advanced LMS controls', () => {
 
     await request(app)
       .post(`/api/academic/assignments/${assignment.id}/submissions`)
-      .set('Authorization', token(studentSession))
+      .set('Cookie', cookie(studentSession))
       .send({ submissionText: 'Attempted submission' })
       .expect(403)
       .expect(response => {

@@ -45,7 +45,7 @@ describe('API route mounts', () => {
     const db = getDatabase();
     const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
     const session = createAdminSession();
-    const authorization = `Bearer ${session.token}`;
+    const authCookie = `auth_token=${session.token}`;
 
     const mountedRoutes = [
       { name: 'health', path: '/api/health', auth: false },
@@ -67,7 +67,7 @@ describe('API route mounts', () => {
 
     for (const route of mountedRoutes) {
       let call = request(app).get(route.path);
-      if (route.auth) call = call.set('Authorization', authorization);
+      if (route.auth) call = call.set('Cookie', authCookie);
 
       await call.expect(200).expect(response => {
         expect(response.body).not.toEqual(expect.objectContaining({

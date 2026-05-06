@@ -46,7 +46,6 @@ export const AuthPage = {
         document.getElementById('login-identifier').value,
         document.getElementById('login-password').value
       );
-      API.setSession(session);
       this.user = session.user;
       document.body.classList.remove('login-page');
       this.renderShell();
@@ -63,8 +62,7 @@ export const AuthPage = {
   },
 
   async logout() {
-    try { await API.logout(); } catch (e) { /* session may already be gone */ }
-    API.clearSession();
+    try { await API.logout(); } catch (e) { await API.clearSession(); }
     this.user = null;
     this.renderShell();
     location.hash = '#/';
@@ -175,7 +173,6 @@ export const AuthPage = {
           newPassword
         });
         this.user = user;
-        localStorage.setItem('quiz_lms_user', JSON.stringify(user));
         this.renderShell();
         location.hash = '#/';
         await this.renderDashboard();

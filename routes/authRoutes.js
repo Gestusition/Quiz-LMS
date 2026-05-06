@@ -1,8 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, getSessionToken, SESSION_COOKIE_NAME } = require('../middleware/auth');
 const { sendError } = require('../utils/appError');
+
+function sessionCookieOptions(expiresAt) {
+  return {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/',
+    expires: new Date(expiresAt)
+  };
+}
+
+function clearSessionCookie(res) {
+  res.clearCookie(SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/'
+  });
+}
+
+function sendSession(res, session) {
+  res.cookie(SESSION_COOKIE_NAME, session.token, sessionCookieOptions(session.expiresAt));
+  res.json({
+    expiresAt: session.expiresAt,
+    user: session.user
+  });
+}
 
 /**
  * @swagger
@@ -31,7 +58,7 @@ router.post('/login', (req, res) => {
   try {
     const identifier = req.body.identifier || req.body.login || req.body.email || req.body.student_number;
     const session = authService.login(identifier, req.body.password);
-    res.json(session);
+    sendSession(res, session);
   } catch (err) {
     sendError(res, err, 401);
   }
@@ -149,8 +176,9 @@ router.post('/change-credentials', requireAuth, (req, res) => {
  *       401:
  *         $ref: '#/components/responses/401Unauthorized'
  */
-router.post('/logout', requireAuth, (req, res) => {
-  authService.logout(req.authToken);
+router.post('/logout', (req, res) => {
+  authService.logout(getSessionToken(req));
+  clearSessionCookie(res);
   res.json({ message: 'Logged out successfully.' });
 });
 

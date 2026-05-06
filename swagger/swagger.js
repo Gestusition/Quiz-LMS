@@ -21,9 +21,10 @@ const options = {
     ],
     components: {
       securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer'
+        cookieAuth: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'auth_token'
         }
       },
       responses: {
@@ -32,7 +33,7 @@ const options = {
           content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
         },
         '401Unauthorized': {
-          description: 'Unauthenticated or invalid token',
+          description: 'Unauthenticated or invalid session',
           content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
         },
         '403Forbidden': {
@@ -76,7 +77,6 @@ const options = {
         AuthSession: {
           type: 'object',
           properties: {
-            token: { type: 'string' },
             expiresAt: { type: 'string', format: 'date-time' },
             user: { $ref: '#/components/schemas/CurrentUser' }
           }
@@ -698,7 +698,7 @@ const options = {
         }
       }
     },
-    security: [{ bearerAuth: [] }],
+    security: [{ cookieAuth: [] }],
     tags: [
       { name: 'Auth', description: 'Login, logout, and current user endpoints' },
       { name: 'Users', description: 'Admin user management endpoints' },
