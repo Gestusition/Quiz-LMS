@@ -294,6 +294,29 @@ export const API = {
       method: 'POST',
       body: { answers, timeSpentSeconds }
     });
+  },
+
+  // Template CRUD
+  getTemplates(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.courseId) params.set('courseId', filters.courseId);
+    return this.request(`/quizzes/templates${params.toString() ? `?${params}` : ''}`);
+  },
+  createTemplate(data) { return this.request('/quizzes/templates', { method: 'POST', body: data }); },
+  deleteTemplate(id) { return this.request(`/quizzes/templates/${id}`, { method: 'DELETE' }); },
+  saveQuizAsTemplate(quizId, data) { return this.request(`/quizzes/${quizId}/save-as-template`, { method: 'POST', body: data }); },
+
+  // Question advanced
+  duplicateQuestion(id) { return this.request(`/questions/${id}/duplicate`, { method: 'POST' }); },
+  async uploadQuestionImage(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const headers = {};
+    if (this.token()) headers.Authorization = `Bearer ${this.token()}`;
+    const response = await fetch(`${this.BASE}/questions/upload`, { method: 'POST', headers, body: form });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Upload failed');
+    return data;
   }
 };
 

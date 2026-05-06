@@ -218,7 +218,7 @@ router.get('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => 
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
-router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId', 'text', 'type', 'correctAnswer']), sanitizeStrings(['text', 'correctAnswer']), (req, res) => {
+router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId', 'text', 'type']), sanitizeStrings(['text']), (req, res) => {
   try {
     // Ensure categoryId is a number
     req.body.categoryId = parseInt(req.body.categoryId);
@@ -317,6 +317,67 @@ router.delete('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) 
     }
     res.status(500).json({ error: err.message });
   }
+});
+
+/**
+ * @swagger
+ * /api/questions/{id}/duplicate:
+ *   post:
+ *     summary: Duplicate a question (Admin/Teacher only)
+ *     tags: [Questions]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       201:
+ *         description: Duplicated question
+ */
+router.post('/:id/duplicate', requireRole(['admin', 'teacher']), validateId, (req, res) => {
+  try {
+    const existing = questionService.getById(req.params.id);
+    if (!ensureQuestionManager(req, res, existing)) return;
+    const duplicate = questionService.duplicate(req.params.id);
+    res.status(201).json(duplicate);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const { upload } = require('../middleware/upload');
+
+/**
+ * @swagger
+ * /api/questions/upload:
+ *   post:
+ *     summary: Upload an image for a question (Admin/Teacher only)
+ *     tags: [Questions]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Upload successful
+ */
+router.post('/upload', requireRole(['admin', 'teacher']), upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded or invalid file type.' });
+  }
+  res.json({
+    url: `/uploads/${req.file.filename}`,
+    filename: req.file.filename,
+    originalName: req.file.originalname,
+    size: req.file.size
+  });
 });
 
 module.exports = router;

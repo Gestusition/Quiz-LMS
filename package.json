@@ -8,12 +8,20 @@
     "dev": "node server.js",
     "test": "jest --verbose --runInBand --forceExit"
   },
-  "keywords": ["quiz", "lms", "education", "crud", "rest-api", "express"],
+  "keywords": [
+    "quiz",
+    "lms",
+    "education",
+    "crud",
+    "rest-api",
+    "express"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.0",
+    "multer": "^2.1.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0"
   },

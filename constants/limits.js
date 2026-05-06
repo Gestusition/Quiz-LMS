@@ -44,7 +44,7 @@ const LIMITS = Object.freeze({
     durationMin: 5,
     durationMax: 240,
     attemptsMin: 1,
-    attemptsMax: 5,
+    attemptsMax: 999,
     totalQuestionsMax: 100,
     penaltyMax: 100,
     sebConfigMax: 500
@@ -54,7 +54,15 @@ const LIMITS = Object.freeze({
     optionTextMax: 500,
     minOptions: 2,
     maxOptions: 6,
-    pointsMax: 100
+    pointsMax: 100,
+    richTextMax: 10000,
+    hintMax: 1000,
+    explanationMax: 5000,
+    maxParts: 20,
+    maxTableRows: 15,
+    maxTableCols: 8,
+    maxOrderItems: 20,
+    maxMultiResponse: 10
   }),
   assignments: Object.freeze({
     titleMax: 160,

@@ -293,12 +293,16 @@ function getBestGrade(quizId, userId) {
   `).get(quizId, userId);
 }
 
-function listExamTemplates() {
-  return getDatabase().prepare(`
-    SELECT *
-    FROM exam_templates
-    ORDER BY isSystem DESC, name ASC
-  `).all();
+function listExamTemplates(filters = {}) {
+  const db = getDatabase();
+  let query = 'SELECT * FROM exam_templates WHERE 1=1';
+  const params = [];
+  if (filters.courseId) {
+    query += ' AND (courseId = ? OR courseId IS NULL)';
+    params.push(filters.courseId);
+  }
+  query += ' ORDER BY isSystem DESC, name ASC';
+  return db.prepare(query).all(...params);
 }
 
 function findExamTemplateByName(name) {
@@ -307,6 +311,35 @@ function findExamTemplateByName(name) {
     FROM exam_templates
     WHERE LOWER(name) = LOWER(?)
   `).get(name) || null;
+}
+
+function findExamTemplateById(id) {
+  return getDatabase().prepare('SELECT * FROM exam_templates WHERE id = ?').get(id) || null;
+}
+
+function insertExamTemplate(payload) {
+  return getDatabase().prepare(`
+    INSERT INTO exam_templates (name, description, defaultsJson, isSystem, courseId, createdBy)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    payload.name,
+    payload.description || '',
+    typeof payload.defaultsJson === 'string' ? payload.defaultsJson : JSON.stringify(payload.defaults || {}),
+    payload.isSystem ? 1 : 0,
+    payload.courseId || null,
+    payload.createdBy || null
+  );
+}
+
+function deleteExamTemplate(id) {
+  return getDatabase().prepare('DELETE FROM exam_templates WHERE id = ?').run(id);
+}
+
+function insertAttemptAnswerWithJson(attemptId, questionId, answer, isCorrect, pointsAwarded, answerJson) {
+  return getDatabase().prepare(`
+    INSERT INTO attempt_answers (attemptId, questionId, answer, isCorrect, pointsAwarded, answerJson)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(attemptId, questionId, String(answer), isCorrect ? 1 : 0, pointsAwarded, answerJson || '{}');
 }
 
 function deleteAttemptsByUserId(userId) {
@@ -338,8 +371,10 @@ module.exports = {
   deleteAttemptsByUserId,
   deleteByCourseId,
   deleteById,
+  deleteExamTemplate,
   findActiveAttempt,
   findAttemptById,
+  findExamTemplateById,
   findExamTemplateByName,
   findById,
   getAttempt,
@@ -350,6 +385,8 @@ module.exports = {
   getGradebookQuizzes,
   getGradebookStudents,
   getQuestions,
+  insertAttemptAnswerWithJson,
+  insertExamTemplate,
   listExamTemplates,
   markAttemptExpired,
   insert,

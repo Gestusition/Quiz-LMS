@@ -13,6 +13,7 @@ const restrictionService = require('./restrictionService');
 const validationIssueService = require('./validationIssueService');
 const auditService = require('./auditService');
 const gradeSchemeService = require('./gradeSchemeService');
+const questionService = require('./questionService');
 const { forbiddenError, notFoundError, validationError } = require('../utils/appError');
 const { LIMITS } = require('../constants/limits');
 
@@ -149,9 +150,12 @@ class QuizService {
     const rows = quizRepository.getQuestions(quizId);
 
     return rows.map(row => {
-      const complete = serializeQuizQuestion(row, { includeCorrect: true });
+      const complete = questionService.enrichQuestion(serializeQuizQuestion(row, { includeCorrect: true }));
       const normalized = this.validateQuestionIntegrity(complete);
-      const question = serializeQuizQuestion(row, options);
+      const question = questionService.enrichQuestion(serializeQuizQuestion(row, options));
+      if (!options.includeCorrect) {
+        this.stripQuestionCorrectData(question);
+      }
       return {
         ...question,
         status: normalized.valid ? (question.status || 'valid') : 'invalid',
@@ -407,11 +411,75 @@ class QuizService {
     return serializeGradebook({ quizzes, students: grades });
   }
 
-  getExamTemplates() {
-    return quizRepository.listExamTemplates().map(template => ({
+  getExamTemplates(filters = {}) {
+    return quizRepository.listExamTemplates(filters).map(template => ({
       ...template,
       defaults: parseJson(template.defaultsJson, {})
     }));
+  }
+
+  createExamTemplate(data, user) {
+    if (!data.name || !String(data.name).trim()) {
+      throw validationError('name', 'Template name is required.');
+    }
+    const result = quizRepository.insertExamTemplate({
+      name: String(data.name).trim(),
+      description: String(data.description || '').trim(),
+      defaults: data.defaults || {},
+      defaultsJson: JSON.stringify(data.defaults || {}),
+      isSystem: false,
+      courseId: data.courseId || null,
+      createdBy: user.id
+    });
+    return {
+      id: Number(result.lastInsertRowid),
+      name: data.name,
+      description: data.description || '',
+      defaults: data.defaults || {},
+      courseId: data.courseId || null,
+      createdBy: user.id,
+      isSystem: 0
+    };
+  }
+
+  deleteExamTemplate(id, user) {
+    const template = quizRepository.findExamTemplateById(id);
+    if (!template) {
+      throw notFoundError('Template not found.');
+    }
+    if (template.isSystem && user.role !== 'admin') {
+      throw forbiddenError('Only admins can delete system templates.');
+    }
+    if (!template.isSystem && template.createdBy !== user.id && user.role !== 'admin') {
+      throw forbiddenError('You can only delete your own templates.');
+    }
+    quizRepository.deleteExamTemplate(id);
+    return true;
+  }
+
+  saveQuizAsTemplate(quizId, data, user) {
+    const quiz = this.getById(quizId);
+    if (!quiz) {
+      throw notFoundError('Quiz not found.');
+    }
+    const defaults = {
+      durationMinutes: quiz.durationMinutes,
+      maxAttempts: quiz.maxAttempts,
+      shuffleQuestions: quiz.shuffleQuestions,
+      shuffleOptions: quiz.shuffleOptions,
+      showResultPolicy: quiz.showResultPolicy,
+      gradingMode: quiz.gradingMode,
+      penaltyEnabled: quiz.penaltyEnabled,
+      penaltyPerWrong: quiz.penaltyPerWrong,
+      requiresSeb: quiz.requiresSeb,
+      showCorrectAnswers: quiz.showCorrectAnswers
+    };
+    return this.createExamTemplate({
+      name: data.name || `${quiz.title} Template`,
+      description: data.description || `Template from quiz: ${quiz.title}`,
+      defaults,
+      courseId: quiz.courseId
+    }, user);
   }
 
   getGradeSchemes(courseId) {
@@ -439,9 +507,25 @@ class QuizService {
   }
 
   evaluateAnswer(question, answer, quiz) {
+    const points = Number(question.points || 1);
+
+    // Essay questions are always manually graded
+    if (question.type === 'ES') {
+      return { isCorrect: false, pointsAwarded: 0, needsReview: true };
+    }
+
+    // Multi-part questions: grade each part independently
+    if (question.type === 'MP' && question.parts && question.parts.length > 0) {
+      return this.evaluateMultiPartAnswer(question, answer);
+    }
+
+    // Math table questions: grade each cell independently
+    if (question.type === 'MT' && question.tableConfig) {
+      return this.evaluateTableAnswer(question, answer);
+    }
+
     const normalizedAnswer = String(answer === undefined || answer === null ? '' : answer).trim();
     const normalizedCorrect = String(question.correctAnswer || '').trim();
-    const points = Number(question.points || 1);
 
     if (!normalizedAnswer) {
       return { isCorrect: false, pointsAwarded: 0 };
@@ -456,12 +540,104 @@ class QuizService {
     return { isCorrect: false, pointsAwarded: -penalty };
   }
 
+  evaluateMultiPartAnswer(question, answer) {
+    const parts = question.parts || [];
+    const answerData = typeof answer === 'object' ? answer : parseJson(answer, {});
+    let totalPoints = 0;
+    let earnedPoints = 0;
+    let allCorrect = true;
+
+    parts.forEach((part, index) => {
+      const partPoints = Number(part.points || 1);
+      totalPoints += partPoints;
+      const userAnswer = String(answerData[`part_${index}`] || answerData[part.partLabel] || '').trim();
+      const correct = String(part.correctAnswer || '').trim();
+      if (!userAnswer || !correct) {
+        allCorrect = false;
+        return;
+      }
+
+      const accepted = Array.isArray(part.acceptedAnswers) ? part.acceptedAnswers : [];
+      const answers = [correct, ...accepted].map(a => String(a || '').trim()).filter(Boolean);
+      const match = answers.some(a => a.toLowerCase() === userAnswer.toLowerCase());
+      if (match) {
+        earnedPoints += partPoints;
+      } else {
+        allCorrect = false;
+      }
+    });
+
+    return {
+      isCorrect: allCorrect,
+      pointsAwarded: Math.round(earnedPoints * 100) / 100
+    };
+  }
+
+  evaluateTableAnswer(question, answer) {
+    const config = question.tableConfig;
+    const correctData = config.correctData || {};
+    const answerData = typeof answer === 'object' ? answer : parseJson(answer, {});
+    const totalCells = Object.keys(correctData).length;
+    if (totalCells === 0) return { isCorrect: false, pointsAwarded: 0, needsReview: true };
+
+    const points = Number(question.points || 1);
+    const pointsPerCell = points / totalCells;
+    let earned = 0;
+    let allCorrect = true;
+
+    Object.entries(correctData).forEach(([key, correctVal]) => {
+      const userVal = String(answerData[key] || '').trim();
+      const correct = String(correctVal || '').trim();
+      if (!userVal || !correct) {
+        allCorrect = false;
+        return;
+      }
+      // Allow asterisk for "unnecessary" fields
+      if (correct === '*' && userVal === '*') {
+        earned += pointsPerCell;
+        return;
+      }
+      // Numeric comparison with tolerance
+      const numUser = parseFloat(userVal);
+      const numCorrect = parseFloat(correct);
+      if (!isNaN(numUser) && !isNaN(numCorrect)) {
+        const tolerance = Math.abs(numCorrect) * 0.001; // 0.1% tolerance
+        if (Math.abs(numUser - numCorrect) <= tolerance) {
+          earned += pointsPerCell;
+          return;
+        }
+      }
+      // Exact string match fallback
+      if (userVal.toLowerCase() === correct.toLowerCase()) {
+        earned += pointsPerCell;
+      } else {
+        allCorrect = false;
+      }
+    });
+
+    return {
+      isCorrect: allCorrect,
+      pointsAwarded: Math.round(earned * 100) / 100
+    };
+  }
+
   compareAnswer(question, userAnswer, correctAnswer) {
-    if (question.type === 'FB') {
+    if (question.type === 'FB' || question.type === 'SA') {
       const accepted = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [];
       const answers = [correctAnswer, ...accepted]
         .map(item => String(item || '').trim())
         .filter(Boolean);
+
+      // For SA (numeric), do numeric comparison with tolerance
+      if (question.type === 'SA') {
+        const numUser = parseFloat(userAnswer);
+        const numCorrect = parseFloat(correctAnswer);
+        if (!isNaN(numUser) && !isNaN(numCorrect)) {
+          const tolerance = Math.abs(numCorrect) * 0.001;
+          if (Math.abs(numUser - numCorrect) <= tolerance) return true;
+        }
+      }
+
       const normalize = value => question.caseSensitive ? value : value.toLowerCase();
       const target = normalize(userAnswer.trim());
       return answers.some(answer => normalize(answer) === target);
@@ -469,6 +645,22 @@ class QuizService {
 
     if (question.type === 'TF') {
       return userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+    }
+
+    // MR (Multiple Response): compare sets of selected indices
+    if (question.type === 'MR') {
+      const userSet = new Set(String(userAnswer).split(',').map(s => s.trim()).filter(Boolean).sort());
+      const correctSet = new Set(String(correctAnswer).split(',').map(s => s.trim()).filter(Boolean).sort());
+      if (userSet.size !== correctSet.size) return false;
+      for (const item of userSet) {
+        if (!correctSet.has(item)) return false;
+      }
+      return true;
+    }
+
+    // OR (Ordering): compare ordered sequences
+    if (question.type === 'OR') {
+      return userAnswer.trim() === correctAnswer.trim();
     }
 
     return userAnswer.trim() === correctAnswer.trim();
@@ -513,7 +705,47 @@ class QuizService {
       }
     }
 
+    if (question.type === 'MP') {
+      if (!Array.isArray(question.parts) || question.parts.length === 0) {
+        return { valid: false, error: 'Multi-part question requires at least one part.' };
+      }
+      if (question.parts.some(part => !String(part.correctAnswer || '').trim())) {
+        return { valid: false, error: 'Every multi-part item needs a correct answer.' };
+      }
+    }
+
+    if (question.type === 'MT') {
+      const config = question.tableConfig;
+      if (!config || !Array.isArray(config.columns) || config.columns.length === 0) {
+        return { valid: false, error: 'Math table question requires table columns.' };
+      }
+      if (!config.correctData || Object.keys(config.correctData).length === 0) {
+        return { valid: false, error: 'Math table question requires correct cell data.' };
+      }
+    }
+
     return { valid: true, error: '' };
+  }
+
+  stripQuestionCorrectData(question) {
+    if (!question) return question;
+    delete question.correctAnswer;
+    if (Array.isArray(question.acceptedAnswers)) question.acceptedAnswers = [];
+    if (Array.isArray(question.parts)) {
+      question.parts = question.parts.map(part => {
+        const copy = { ...part };
+        delete copy.correctAnswer;
+        copy.acceptedAnswers = [];
+        return copy;
+      });
+    }
+    if (question.tableConfig && question.tableConfig.correctData) {
+      question.tableConfig = {
+        ...question.tableConfig,
+        correctData: {}
+      };
+    }
+    return question;
   }
 
   validateQuestionsForQuiz(quiz, actorUserId = null) {

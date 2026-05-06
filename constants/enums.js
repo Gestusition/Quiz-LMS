@@ -35,7 +35,13 @@ const resourceType = Object.freeze({
 const questionType = Object.freeze({
   multipleChoice: 'MC',
   trueFalse: 'TF',
-  fillBlank: 'FB'
+  fillBlank: 'FB',
+  mathTable: 'MT',
+  multiPart: 'MP',
+  shortAnswerNumeric: 'SA',
+  essay: 'ES',
+  ordering: 'OR',
+  multipleResponse: 'MR'
 });
 
 const questionDifficulty = Object.freeze({

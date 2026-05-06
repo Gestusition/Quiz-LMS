@@ -309,13 +309,43 @@ function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       categoryId INTEGER NOT NULL,
       text TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('MC', 'TF', 'FB')),
+      type TEXT NOT NULL CHECK(type IN ('MC', 'TF', 'FB', 'MT', 'MP', 'SA', 'ES', 'OR', 'MR')),
       options TEXT DEFAULT '[]',
-      correctAnswer TEXT NOT NULL,
+      correctAnswer TEXT NOT NULL DEFAULT '',
       difficulty TEXT NOT NULL DEFAULT 'MEDIUM' CHECK(difficulty IN ('EASY', 'MEDIUM', 'HARD')),
       points REAL NOT NULL DEFAULT 1,
+      richText TEXT DEFAULT '',
+      explanationText TEXT DEFAULT '',
+      hintText TEXT DEFAULT '',
+      mediaUrl TEXT DEFAULT '',
       createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.question_parts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      questionId INTEGER NOT NULL,
+      partLabel TEXT NOT NULL DEFAULT '',
+      partText TEXT NOT NULL DEFAULT '',
+      answerType TEXT NOT NULL DEFAULT 'text',
+      correctAnswer TEXT NOT NULL DEFAULT '',
+      acceptedAnswers TEXT DEFAULT '[]',
+      placeholder TEXT DEFAULT '',
+      validationRule TEXT DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0,
+      points REAL NOT NULL DEFAULT 1,
+      FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.question_table_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      questionId INTEGER NOT NULL UNIQUE,
+      columnsJson TEXT NOT NULL DEFAULT '[]',
+      rowCount INTEGER NOT NULL DEFAULT 1,
+      prefillJson TEXT DEFAULT '{}',
+      correctDataJson TEXT DEFAULT '{}',
+      validationJson TEXT DEFAULT '{}',
+      FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS assessment.quizzes (
@@ -449,10 +479,12 @@ function createTables() {
 
     CREATE TABLE IF NOT EXISTS assessment.exam_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
       description TEXT DEFAULT '',
       defaultsJson TEXT NOT NULL DEFAULT '{}',
-      isSystem INTEGER NOT NULL DEFAULT 1,
+      isSystem INTEGER NOT NULL DEFAULT 0,
+      courseId INTEGER,
+      createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now'))
     );
@@ -616,6 +648,15 @@ function migrateExistingTables() {
   ensureColumn('assessment', 'questions', 'validationMessage', 'validationMessage TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'questions', 'acceptedAnswers', 'acceptedAnswers TEXT DEFAULT \'[]\'');
   ensureColumn('assessment', 'questions', 'caseSensitive', 'caseSensitive INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('assessment', 'questions', 'richText', 'richText TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'questions', 'explanationText', 'explanationText TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'questions', 'hintText', 'hintText TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'questions', 'mediaUrl', 'mediaUrl TEXT DEFAULT \'\'');
+
+  ensureColumn('assessment', 'attempt_answers', 'answerJson', 'answerJson TEXT DEFAULT \'{}\'');
+
+  ensureColumn('assessment', 'exam_templates', 'courseId', 'courseId INTEGER');
+  ensureColumn('assessment', 'exam_templates', 'createdBy', 'createdBy INTEGER');
 
   ensureColumn('assessment', 'quizzes', 'startAt', 'startAt TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'quizzes', 'endAt', 'endAt TEXT DEFAULT \'\'');
@@ -654,6 +695,7 @@ function migrateExistingTables() {
   normalizeAcademicProfileState();
   ensureAdvancedIndexes();
   backfillQuizAdvancedColumns();
+  migrateQuestionTypeConstraint();
   seedExamTemplates();
   migrateLegacyIdentityDatabase();
 }
@@ -693,6 +735,66 @@ function ensureAdvancedIndexes() {
   `);
 }
 
+function migrateQuestionTypeConstraint() {
+  const database = getDatabase();
+  const table = database.prepare(`
+    SELECT sql
+    FROM assessment.sqlite_master
+    WHERE type = 'table' AND name = 'questions'
+  `).get();
+
+  if (!table || String(table.sql || '').includes("'MR'")) return;
+
+  database.exec('PRAGMA foreign_keys = OFF');
+  database.exec('BEGIN TRANSACTION');
+  try {
+    database.exec(`
+      DROP TABLE IF EXISTS assessment.questions_new;
+
+      CREATE TABLE assessment.questions_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        categoryId INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('MC', 'TF', 'FB', 'MT', 'MP', 'SA', 'ES', 'OR', 'MR')),
+        options TEXT DEFAULT '[]',
+        correctAnswer TEXT NOT NULL DEFAULT '',
+        difficulty TEXT NOT NULL DEFAULT 'MEDIUM' CHECK(difficulty IN ('EASY', 'MEDIUM', 'HARD')),
+        points REAL NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'valid',
+        validationMessage TEXT DEFAULT '',
+        acceptedAnswers TEXT DEFAULT '[]',
+        caseSensitive INTEGER NOT NULL DEFAULT 0,
+        richText TEXT DEFAULT '',
+        explanationText TEXT DEFAULT '',
+        hintText TEXT DEFAULT '',
+        mediaUrl TEXT DEFAULT '',
+        createdBy INTEGER,
+        createdAt TEXT DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO assessment.questions_new (
+        id, categoryId, text, type, options, correctAnswer, difficulty, points,
+        status, validationMessage, acceptedAnswers, caseSensitive,
+        richText, explanationText, hintText, mediaUrl, createdBy, createdAt
+      )
+      SELECT
+        id, categoryId, text, type, options, correctAnswer, difficulty, points,
+        status, validationMessage, acceptedAnswers, caseSensitive,
+        richText, explanationText, hintText, mediaUrl, createdBy, createdAt
+      FROM assessment.questions;
+
+      DROP TABLE assessment.questions;
+      ALTER TABLE assessment.questions_new RENAME TO questions;
+    `);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
 function backfillQuizAdvancedColumns() {
   const database = getDatabase();
   database.exec(`
@@ -723,9 +825,11 @@ function backfillQuizAdvancedColumns() {
 
 function seedExamTemplates() {
   const database = getDatabase();
+  const existing = database.prepare('SELECT COUNT(*) as count FROM exam_templates WHERE isSystem = 1').get();
+  if (existing.count > 0) return;
   const insertTemplate = database.prepare(`
-    INSERT OR IGNORE INTO exam_templates (name, description, defaultsJson, isSystem)
-    VALUES (?, ?, ?, 1)
+    INSERT INTO exam_templates (name, description, defaultsJson, isSystem, courseId, createdBy)
+    VALUES (?, ?, ?, 1, NULL, NULL)
   `);
 
   insertTemplate.run('Practice Quiz', 'Low-stakes practice settings.', JSON.stringify({
@@ -1005,6 +1109,7 @@ function seedDatabase() {
   }
 
   ensureDemoQuiz(database);
+  repairMissingQuizQuestionLinks(database);
 }
 
 function seedUsers(database) {
@@ -1378,6 +1483,67 @@ function ensureDemoQuiz(database) {
     database.exec('ROLLBACK');
     throw e;
   }
+}
+
+function repairMissingQuizQuestionLinks(database) {
+  const linkCount = database.prepare('SELECT COUNT(*) as count FROM quiz_questions').get().count;
+  if (linkCount > 0) return;
+
+  const quizzes = database.prepare(`
+    SELECT id, courseId, title, description
+    FROM quizzes
+    WHERE status = 'published'
+    ORDER BY id ASC
+  `).all();
+  if (quizzes.length === 0) return;
+
+  const insert = database.prepare(`
+    INSERT OR IGNORE INTO quiz_questions (quizId, questionId, points, position)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  database.exec('BEGIN TRANSACTION');
+  try {
+    quizzes.forEach(quiz => {
+      const questions = selectBackfillQuestions(database, quiz);
+      questions.forEach((question, index) => {
+        insert.run(quiz.id, question.id, question.points || 1, index + 1);
+      });
+    });
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+function selectBackfillQuestions(database, quiz) {
+  const title = `${quiz.title || ''} ${quiz.description || ''}`;
+  if (/full demo|all question types/i.test(title)) {
+    const rows = database.prepare(`
+      SELECT q.id, q.type, q.points
+      FROM questions q
+      JOIN categories c ON c.id = q.categoryId
+      WHERE c.courseId = ?
+      ORDER BY CASE WHEN LOWER(c.name) = 'advanced demo' THEN 0 ELSE 1 END, q.id DESC
+    `).all(quiz.courseId);
+    const byType = new Map();
+    rows.forEach(question => {
+      if (!byType.has(question.type)) byType.set(question.type, question);
+    });
+    const typeOrder = ['MC', 'TF', 'FB', 'SA', 'MR', 'OR', 'ES', 'MT', 'MP'];
+    const selected = typeOrder.map(type => byType.get(type)).filter(Boolean);
+    if (selected.length > 0) return selected;
+  }
+
+  return database.prepare(`
+    SELECT q.id, q.points
+    FROM questions q
+    JOIN categories c ON c.id = q.categoryId
+    WHERE c.courseId = ?
+    ORDER BY CASE WHEN LOWER(c.name) = 'advanced demo' THEN 1 ELSE 0 END, q.id ASC
+    LIMIT 5
+  `).all(quiz.courseId);
 }
 
 function escapeSqlPath(filePath) {

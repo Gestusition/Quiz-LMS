@@ -92,8 +92,9 @@ function getRandom(opts = {}, validDifficulties = []) {
 function insert(payload, userId) {
   return getDatabase().prepare(
     `INSERT INTO questions (
-      categoryId, text, type, options, correctAnswer, difficulty, points, createdBy, status, acceptedAnswers, caseSensitive
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'valid', ?, ?)`
+      categoryId, text, type, options, correctAnswer, difficulty, points, createdBy,
+      status, acceptedAnswers, caseSensitive, richText, explanationText, hintText, mediaUrl
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'valid', ?, ?, ?, ?, ?, ?)`
   ).run(
     payload.categoryId,
     payload.text,
@@ -104,7 +105,11 @@ function insert(payload, userId) {
     payload.points,
     userId || null,
     JSON.stringify(payload.acceptedAnswers || []),
-    payload.caseSensitive ? 1 : 0
+    payload.caseSensitive ? 1 : 0,
+    payload.richText || '',
+    payload.explanationText || '',
+    payload.hintText || '',
+    payload.mediaUrl || ''
   );
 }
 
@@ -112,7 +117,8 @@ function update(id, payload) {
   return getDatabase().prepare(
     `UPDATE questions
     SET categoryId = ?, text = ?, type = ?, options = ?, correctAnswer = ?, difficulty = ?, points = ?,
-      acceptedAnswers = ?, caseSensitive = ?, status = 'valid', validationMessage = ''
+      acceptedAnswers = ?, caseSensitive = ?, richText = ?, explanationText = ?, hintText = ?, mediaUrl = ?,
+      status = 'valid', validationMessage = ''
     WHERE id = ?`
   ).run(
     payload.categoryId,
@@ -124,9 +130,75 @@ function update(id, payload) {
     payload.points,
     JSON.stringify(payload.acceptedAnswers || []),
     payload.caseSensitive ? 1 : 0,
+    payload.richText || '',
+    payload.explanationText || '',
+    payload.hintText || '',
+    payload.mediaUrl || '',
     id
   );
 }
+
+// ── Question Parts (for MP type) ──
+
+function insertParts(questionId, parts) {
+  const db = getDatabase();
+  const stmt = db.prepare(`
+    INSERT INTO question_parts (questionId, partLabel, partText, answerType, correctAnswer, acceptedAnswers, placeholder, validationRule, position, points)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  parts.forEach((part, index) => {
+    stmt.run(
+      questionId,
+      part.partLabel || '',
+      part.partText || '',
+      part.answerType || 'text',
+      part.correctAnswer || '',
+      JSON.stringify(part.acceptedAnswers || []),
+      part.placeholder || '',
+      typeof part.validationRule === 'object' ? JSON.stringify(part.validationRule) : (part.validationRule || ''),
+      part.position !== undefined ? part.position : index,
+      part.points || 1
+    );
+  });
+}
+
+function getParts(questionId) {
+  return getDatabase().prepare(`
+    SELECT * FROM question_parts WHERE questionId = ? ORDER BY position ASC
+  `).all(questionId);
+}
+
+function deleteParts(questionId) {
+  return getDatabase().prepare('DELETE FROM question_parts WHERE questionId = ?').run(questionId);
+}
+
+// ── Table Config (for MT type) ──
+
+function insertTableConfig(questionId, config) {
+  return getDatabase().prepare(`
+    INSERT INTO question_table_config (questionId, columnsJson, rowCount, prefillJson, correctDataJson, validationJson)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    questionId,
+    JSON.stringify(config.columns || []),
+    config.rowCount || 1,
+    JSON.stringify(config.prefill || {}),
+    JSON.stringify(config.correctData || {}),
+    JSON.stringify(config.validation || {})
+  );
+}
+
+function getTableConfig(questionId) {
+  return getDatabase().prepare(`
+    SELECT * FROM question_table_config WHERE questionId = ?
+  `).get(questionId) || null;
+}
+
+function deleteTableConfig(questionId) {
+  return getDatabase().prepare('DELETE FROM question_table_config WHERE questionId = ?').run(questionId);
+}
+
+// ── Status ──
 
 function setValidationStatus(id, status, message) {
   return getDatabase().prepare(`
@@ -170,10 +242,16 @@ module.exports = {
   deleteByCategoryId,
   deleteByCategoryIds,
   deleteById,
+  deleteParts,
+  deleteTableConfig,
   findByIdsWithCourse,
   getById,
+  getParts,
   getRandom,
+  getTableConfig,
   insert,
+  insertParts,
+  insertTableConfig,
   list,
   setValidationStatus,
   update

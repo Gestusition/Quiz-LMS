@@ -4,124 +4,262 @@ import { value } from '../components/form.js';
 export const QuizzesPage = {
   async renderQuizzes() {
     this.setApp(this.loading('Loading quizzes'));
+
     try {
-      const [courses, quizzes] = await Promise.all([API.getCourses(), API.getQuizzes()]);
+      const courses = await API.getCourses();
+      const selectedCourseId = this.activeQuizCourseId || (courses[0] ? String(courses[0].id) : '');
+      this.activeQuizCourseId = selectedCourseId;
+      const [quizzes, templates] = await Promise.all([
+        API.getQuizzes({ courseId: selectedCourseId }),
+        this.canManageLearning() ? API.getTemplates({ courseId: selectedCourseId }) : []
+      ]);
+
       this.setApp(`
         <header class="page-header">
-          <div><h1>Quizzes</h1><p>${quizzes.length} quiz${quizzes.length === 1 ? '' : 'zes'}</p></div>
-          ${this.canManageLearning() ? '<button class="btn btn-primary" id="btn-new-quiz">New Quiz</button>' : ''}
+          <div><h1>Quizzes & Exams</h1><p>${quizzes.length} quiz${quizzes.length === 1 ? '' : 'zes'}</p></div>
+          ${this.canManageLearning() ? `<div class="header-actions">
+            <button class="btn btn-ghost" id="btn-manage-templates">Templates</button>
+            <button class="btn btn-primary" id="btn-new-quiz">New Quiz / Exam</button>
+          </div>` : ''}
         </header>
         <div class="toolbar">
           <select class="form-select" id="quiz-course-filter">
-            <option value="">All courses</option>
-            ${courses.map(course => `<option value="${course.id}">${this.esc(course.code)} - ${this.esc(course.title)}</option>`).join('')}
+            ${courses.map(course => `<option value="${course.id}" ${String(course.id) === selectedCourseId ? 'selected' : ''}>${this.esc(course.code)} - ${this.esc(course.title)}</option>`).join('')}
           </select>
+          <select class="form-select" id="quiz-status-filter">
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="closed">Closed</option>
+          </select>
+          <input class="form-input" id="quiz-search" placeholder="Search quizzes...">
         </div>
-        <section class="panel">
-          <div class="list" id="quiz-list">${quizzes.map(quiz => this.quizRow(quiz, true, this.canManageLearning())).join('') || this.emptyLine('No quizzes found.')}</div>
-        </section>
+        <div class="quiz-grid" id="quiz-list">
+          ${quizzes.map(quiz => this.quizCard(quiz)).join('') || this.emptyBlock('No quizzes found.')}
+        </div>
       `);
 
-      document.getElementById('quiz-course-filter').addEventListener('change', async event => {
-        const filtered = await API.getQuizzes({ courseId: event.target.value });
-        document.getElementById('quiz-list').innerHTML =
-          filtered.map(quiz => this.quizRow(quiz, true, this.canManageLearning())).join('') || this.emptyLine('No quizzes found.');
+      document.getElementById('quiz-course-filter').addEventListener('change', event => {
+        this.activeQuizCourseId = event.target.value;
+        this.renderQuizzes();
       });
-      const newQuiz = document.getElementById('btn-new-quiz');
-      if (newQuiz) newQuiz.addEventListener('click', () => this.showQuizForm());
+
+      const filterQuizzes = async () => {
+        const filtered = await API.getQuizzes({
+          courseId: this.activeQuizCourseId,
+          status: document.getElementById('quiz-status-filter').value,
+          search: document.getElementById('quiz-search').value
+        });
+        document.getElementById('quiz-list').innerHTML =
+          filtered.map(quiz => this.quizCard(quiz)).join('') || this.emptyBlock('No quizzes found.');
+      };
+      document.getElementById('quiz-search')?.addEventListener('input', filterQuizzes);
+      document.getElementById('quiz-status-filter')?.addEventListener('change', filterQuizzes);
+
+      document.getElementById('btn-new-quiz')?.addEventListener('click', () => this.showQuizForm(null, Number(selectedCourseId)));
+      document.getElementById('btn-manage-templates')?.addEventListener('click', () => this.showTemplateManager(Number(selectedCourseId)));
     } catch (err) {
       this.renderError(err);
     }
   },
 
-  async showQuizForm(id, fixedCourseId) {
-    const [courses, quiz] = await Promise.all([
-      API.getCourses(),
-      id ? API.getQuiz(id) : Promise.resolve({
-        courseId: fixedCourseId || '',
-        title: '',
-        description: '',
-        status: 'draft',
-        durationMinutes: 30,
-        maxAttempts: 1,
-        startAt: '',
-        endAt: '',
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        gradingMode: 'standard',
-        showResultPolicy: 'immediately',
-        penaltyEnabled: false,
-        penaltyPerWrong: 0,
-        requiresSeb: false,
-        sebConfigName: '',
-        showCorrectAnswers: true
-      })
-    ]);
-    const templates = this.canManageLearning() ? await API.request('/quizzes/templates').catch(() => []) : [];
+  quizCard(quiz) {
+    const statusMap = { draft: 'status-draft', published: 'status-published', closed: 'status-closed' };
+    const statusClass = statusMap[quiz.status] || '';
+    const isManager = this.canManageLearning();
 
-    this.openModal(id ? 'Edit quiz' : 'New quiz', `
-      <form id="quiz-form" class="stack">
-        <label class="form-field"><span>Template</span><select class="form-select" id="quiz-template">
-          <option value="">Custom</option>
-          ${(templates || []).map(template => `<option value="${this.esc(template.name)}">${this.esc(template.name)}</option>`).join('')}
-        </select></label>
-        <label class="form-field"><span>Course</span><select class="form-select" id="quiz-course" ${fixedCourseId ? 'disabled' : ''}>
-          ${courses.map(course => `<option value="${course.id}" ${Number(quiz.courseId) === Number(course.id) ? 'selected' : ''}>${this.esc(course.code)} - ${this.esc(course.title)}</option>`).join('')}
-        </select></label>
-        ${this.input('quiz-title', 'Title', quiz.title)}
-        ${this.textarea('quiz-description', 'Description', quiz.description)}
-        <div class="form-grid">
+    return `
+      <div class="quiz-card">
+        <div class="quiz-card-header">
+          <span class="status-badge ${statusClass}">${quiz.status}</span>
+          <span class="quiz-course-tag">${this.esc(quiz.courseCode || '')}</span>
+        </div>
+        <h3 class="quiz-card-title">${this.esc(quiz.title)}</h3>
+        <p class="quiz-card-desc">${this.esc((quiz.description || '').slice(0, 120))}</p>
+        <div class="quiz-card-meta">
+          <span title="Questions">📋 ${quiz.questionCount || 0}</span>
+          <span title="Duration">⏱ ${quiz.durationMinutes || quiz.timeLimitMinutes || 0}m</span>
+          <span title="Max score">⭐ ${quiz.maxScore || 0}</span>
+          <span title="Attempts">${quiz.maxAttempts || quiz.attemptsAllowed || 1} attempt${(quiz.maxAttempts || 1) > 1 ? 's' : ''}</span>
+        </div>
+        <div class="quiz-card-actions">
+          ${isManager ? `
+            <button class="btn btn-ghost btn-sm" onclick="App.showQuizForm(${quiz.id})">Edit</button>
+            <button class="btn btn-ghost btn-sm" onclick="App.showAssignQuestions(${quiz.id})">Questions</button>
+            <button class="btn btn-ghost btn-sm" onclick="App.showQuizAttempts(${quiz.id})">Attempts</button>
+            <button class="btn btn-ghost btn-sm" onclick="App.saveAsTemplate(${quiz.id})">Save as Template</button>
+            <button class="btn btn-danger btn-sm" onclick="App.deleteQuiz(${quiz.id})">Delete</button>
+          ` : `
+            ${quiz.isOpen ? `<button class="btn btn-primary btn-sm" onclick="App.startQuizAttempt(${quiz.id})">Start</button>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="App.showQuizAttempts(${quiz.id})">My Attempts</button>
+          `}
+        </div>
+      </div>
+    `;
+  },
+
+  quizRow(quiz, showCourse = false, manager = false) {
+    const duration = quiz.durationMinutes || quiz.timeLimitMinutes || 0;
+    const attempts = quiz.maxAttempts || quiz.attemptsAllowed || 1;
+    const detail = [
+      showCourse ? this.esc(quiz.courseCode || '') : '',
+      `${quiz.questionCount || 0} questions`,
+      `${quiz.maxScore || 0} points`,
+      `${duration} min`,
+      `${attempts} attempt${attempts > 1 ? 's' : ''}`
+    ].filter(Boolean).join(' - ');
+    const statusClass = quiz.status || 'draft';
+    const studentActions = this.user.role === 'student'
+      ? `${quiz.isOpen && Number(quiz.questionCount || 0) > 0
+        ? `<button class="btn btn-primary btn-sm" onclick="App.startQuizAttempt(${quiz.id})">Start</button>`
+        : `<button class="btn btn-ghost btn-sm" disabled>${Number(quiz.questionCount || 0) > 0 ? 'Closed' : 'No questions'}</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="App.showQuizAttempts(${quiz.id})">My Attempts</button>`
+      : '';
+    const managerActions = manager
+      ? `<button class="btn btn-ghost btn-sm" onclick="App.showQuizForm(${quiz.id})">Edit</button>
+        <button class="btn btn-primary btn-sm" onclick="App.showAssignQuestions(${quiz.id})">Questions</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.showQuizAttempts(${quiz.id})">Attempts</button>`
+      : '';
+
+    return `
+      <div class="list-row">
+        <div>
+          <strong>${this.esc(quiz.title)}</strong>
+          <small>${detail}</small>
+        </div>
+        <div class="row-actions">
+          <span class="status ${this.esc(statusClass)}">${this.esc(quiz.status || 'draft')}</span>
+          ${studentActions}${managerActions}
+        </div>
+      </div>
+    `;
+  },
+
+  async showQuizForm(id, courseId) {
+    const courses = await API.getCourses();
+    const templates = await API.getTemplates({ courseId });
+    const quiz = id ? await API.getQuiz(id) : {
+      courseId: courseId || '', title: '', description: '', status: 'draft',
+      startAt: '', endAt: '', durationMinutes: 30, maxAttempts: 1,
+      shuffleQuestions: false, shuffleOptions: false, showCorrectAnswers: false,
+      showResultPolicy: 'immediately', gradingMode: 'standard',
+      penaltyEnabled: false, penaltyPerWrong: 0, requiresSeb: false, templateName: ''
+    };
+
+    this.openModal(id ? 'Edit quiz' : 'New quiz / exam', `
+      <form id="quiz-form" class="stack quiz-form-advanced">
+        <div class="form-section">
+          <h3>Template</h3>
+          <select class="form-select" id="quiz-template">
+            <option value="">No template (custom)</option>
+            ${templates.map(template => `
+              <option value="${template.id}" data-template-name="${this.esc(template.name)}" data-defaults='${this.esc(JSON.stringify(template.defaults || {}))}' ${quiz.templateName === template.name ? 'selected' : ''}>
+                ${this.esc(template.name)} ${template.isSystem ? '(system)' : template.courseId ? '(course)' : ''}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+        <div class="form-section">
+          <h3>Basic Settings</h3>
+          <div class="form-grid">
+            <label class="form-field"><span>Course</span><select class="form-select" id="quiz-course">
+              ${courses.map(course => `<option value="${course.id}" ${Number(quiz.courseId) === course.id ? 'selected' : ''}>${this.esc(course.code)} - ${this.esc(course.title)}</option>`).join('')}
+            </select></label>
+            ${this.input('quiz-title', 'Title', quiz.title)}
+          </div>
+          ${this.textarea('quiz-description', 'Description', quiz.description || '')}
           <label class="form-field"><span>Status</span><select class="form-select" id="quiz-status">
             ${['draft', 'published', 'closed'].map(status => `<option value="${status}" ${quiz.status === status ? 'selected' : ''}>${status}</option>`).join('')}
           </select></label>
-          ${this.input('quiz-attempts', 'Attempts', quiz.maxAttempts || quiz.attemptsAllowed || 1, 'number')}
-          ${this.input('quiz-time', 'Duration minutes', quiz.durationMinutes || quiz.timeLimitMinutes || 30, 'number')}
-          ${this.input('quiz-start', 'Start at', this.toDateTimeLocal(quiz.startAt || quiz.openAt), 'datetime-local')}
-          ${this.input('quiz-end', 'End at', this.toDateTimeLocal(quiz.endAt || quiz.closeAt), 'datetime-local')}
-          <label class="form-field"><span>Result visibility</span><select class="form-select" id="quiz-result-policy">
-            ${['immediately', 'after_close', 'after_manual_release', 'never'].map(policy => `<option value="${policy}" ${(quiz.showResultPolicy || 'immediately') === policy ? 'selected' : ''}>${policy}</option>`).join('')}
-          </select></label>
-          <label class="form-field"><span>Grading mode</span><select class="form-select" id="quiz-grading-mode">
-            ${['standard', 'negative_marking', 'manual_review'].map(mode => `<option value="${mode}" ${(quiz.gradingMode || 'standard') === mode ? 'selected' : ''}>${mode}</option>`).join('')}
-          </select></label>
-          ${this.input('quiz-penalty', 'Penalty per wrong', quiz.penaltyPerWrong || 0, 'number')}
         </div>
-        <label class="check-field"><input type="checkbox" id="quiz-shuffle" ${quiz.shuffleQuestions ? 'checked' : ''}> Shuffle questions</label>
-        <label class="check-field"><input type="checkbox" id="quiz-shuffle-options" ${quiz.shuffleOptions ? 'checked' : ''}> Shuffle options</label>
-        <label class="check-field"><input type="checkbox" id="quiz-penalty-enabled" ${quiz.penaltyEnabled ? 'checked' : ''}> Enable negative marking</label>
-        <label class="check-field"><input type="checkbox" id="quiz-requires-seb" ${quiz.requiresSeb ? 'checked' : ''}> Requires Safe Exam Browser compatible mode</label>
-        ${this.input('quiz-seb-name', 'SEB config name', quiz.sebConfigName || '')}
-        <label class="check-field"><input type="checkbox" id="quiz-show-correct" ${quiz.showCorrectAnswers ? 'checked' : ''}> Show correct answers after submit</label>
-        <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary">Save</button></div>
+        <div class="form-section">
+          <h3>Timing & Attempts</h3>
+          <div class="form-grid">
+            ${this.input('quiz-duration', 'Duration (min)', quiz.durationMinutes || 30, 'number')}
+            ${this.input('quiz-max-attempts', 'Max attempts', quiz.maxAttempts || 1, 'number')}
+            ${this.input('quiz-start', 'Opens at', this.toDateTimeLocal(quiz.startAt || quiz.openAt), 'datetime-local')}
+            ${this.input('quiz-end', 'Closes at', this.toDateTimeLocal(quiz.endAt || quiz.closeAt), 'datetime-local')}
+          </div>
+        </div>
+        <div class="form-section">
+          <h3>Behavior</h3>
+          <div class="form-grid">
+            <label class="form-field"><span>Show results</span><select class="form-select" id="quiz-show-result">
+              ${['immediately', 'after_close', 'after_manual_release', 'never'].map(policy => `<option value="${policy}" ${quiz.showResultPolicy === policy ? 'selected' : ''}>${policy.replace(/_/g, ' ')}</option>`).join('')}
+            </select></label>
+            <label class="form-field"><span>Grading mode</span><select class="form-select" id="quiz-grading-mode">
+              ${['standard', 'negative_marking', 'manual_review'].map(mode => `<option value="${mode}" ${quiz.gradingMode === mode ? 'selected' : ''}>${mode.replace(/_/g, ' ')}</option>`).join('')}
+            </select></label>
+          </div>
+          <div class="check-grid">
+            <label class="check-field"><input type="checkbox" id="quiz-shuffle-q" ${quiz.shuffleQuestions ? 'checked' : ''}> Shuffle questions</label>
+            <label class="check-field"><input type="checkbox" id="quiz-shuffle-o" ${quiz.shuffleOptions ? 'checked' : ''}> Shuffle options</label>
+            <label class="check-field"><input type="checkbox" id="quiz-show-correct" ${quiz.showCorrectAnswers ? 'checked' : ''}> Show correct answers</label>
+            <label class="check-field"><input type="checkbox" id="quiz-penalty" ${quiz.penaltyEnabled ? 'checked' : ''}> Negative marking</label>
+            <label class="check-field"><input type="checkbox" id="quiz-seb" ${quiz.requiresSeb ? 'checked' : ''}> Require SEB</label>
+          </div>
+          <div class="form-grid" id="penalty-options" style="${quiz.penaltyEnabled ? '' : 'display:none'}">
+            ${this.input('quiz-penalty-amount', 'Penalty per wrong answer', quiz.penaltyPerWrong || 0, 'number')}
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary">${id ? 'Update' : 'Create'} Quiz</button>
+        </div>
       </form>
     `);
+
+    // Template selection applies defaults
+    document.getElementById('quiz-template').addEventListener('change', (event) => {
+      const opt = event.target.selectedOptions[0];
+      if (!opt || !opt.dataset.defaults) return;
+      try {
+        const defaults = JSON.parse(opt.dataset.defaults);
+        if (defaults.durationMinutes) document.getElementById('quiz-duration').value = defaults.durationMinutes;
+        if (defaults.maxAttempts) document.getElementById('quiz-max-attempts').value = defaults.maxAttempts;
+        if (defaults.showResultPolicy) document.getElementById('quiz-show-result').value = defaults.showResultPolicy;
+        if (defaults.gradingMode) document.getElementById('quiz-grading-mode').value = defaults.gradingMode;
+        document.getElementById('quiz-shuffle-q').checked = !!defaults.shuffleQuestions;
+        document.getElementById('quiz-shuffle-o').checked = !!defaults.shuffleOptions;
+        document.getElementById('quiz-show-correct').checked = !!defaults.showCorrectAnswers;
+        document.getElementById('quiz-penalty').checked = !!defaults.penaltyEnabled;
+        document.getElementById('quiz-seb').checked = !!defaults.requiresSeb;
+        if (defaults.penaltyPerWrong) document.getElementById('quiz-penalty-amount').value = defaults.penaltyPerWrong;
+        document.getElementById('penalty-options').style.display = defaults.penaltyEnabled ? '' : 'none';
+      } catch (e) { /* ignore */ }
+    });
+
+    document.getElementById('quiz-penalty').addEventListener('change', (event) => {
+      document.getElementById('penalty-options').style.display = event.target.checked ? '' : 'none';
+    });
 
     document.getElementById('quiz-form').addEventListener('submit', async event => {
       event.preventDefault();
       const data = {
-        courseId: fixedCourseId || Number(value('quiz-course')),
+        courseId: Number(value('quiz-course')),
         title: value('quiz-title'),
         description: value('quiz-description'),
         status: value('quiz-status'),
-        maxAttempts: Number(value('quiz-attempts')),
-        durationMinutes: Number(value('quiz-time')),
-        startAt: value('quiz-start') ? new Date(value('quiz-start')).toISOString() : '',
-        endAt: value('quiz-end') ? new Date(value('quiz-end')).toISOString() : '',
-        showResultPolicy: value('quiz-result-policy'),
+        startAt: value('quiz-start'),
+        endAt: value('quiz-end'),
+        durationMinutes: Number(value('quiz-duration')),
+        maxAttempts: Number(value('quiz-max-attempts')),
+        shuffleQuestions: document.getElementById('quiz-shuffle-q').checked,
+        shuffleOptions: document.getElementById('quiz-shuffle-o').checked,
+        showCorrectAnswers: document.getElementById('quiz-show-correct').checked,
+        showResultPolicy: value('quiz-show-result'),
         gradingMode: value('quiz-grading-mode'),
-        penaltyEnabled: document.getElementById('quiz-penalty-enabled').checked,
-        penaltyPerWrong: Number(value('quiz-penalty') || 0),
-        shuffleQuestions: document.getElementById('quiz-shuffle').checked,
-        shuffleOptions: document.getElementById('quiz-shuffle-options').checked,
-        requiresSeb: document.getElementById('quiz-requires-seb').checked,
-        sebConfigName: value('quiz-seb-name'),
-        templateName: value('quiz-template'),
-        showCorrectAnswers: document.getElementById('quiz-show-correct').checked
+        penaltyEnabled: document.getElementById('quiz-penalty').checked,
+        penaltyPerWrong: Number(value('quiz-penalty-amount') || 0),
+        requiresSeb: document.getElementById('quiz-seb').checked,
+        templateName: document.getElementById('quiz-template').selectedOptions[0]?.dataset.templateName || ''
       };
+
       try {
-        const saved = id ? await API.updateQuiz(id, data) : await API.createQuiz(data);
+        if (id) await API.updateQuiz(id, data);
+        else await API.createQuiz(data);
         this.closeModal();
-        await this.showAssignQuestions(saved.id);
+        this.renderQuizzes();
       } catch (err) {
         this.toast(err.message, 'error');
       }
@@ -129,40 +267,122 @@ export const QuizzesPage = {
   },
 
   async showAssignQuestions(quizId) {
-    const quiz = await API.getQuiz(quizId);
-    const questions = await API.getQuestions({ courseId: quiz.courseId });
-    const assigned = new Set((quiz.questions || []).map(question => Number(question.id)));
+    const [quiz, allQuestions] = await Promise.all([
+      API.getQuiz(quizId),
+      API.getQuestions({ courseId: undefined })
+    ]);
+    const assignedIds = new Set((quiz.questions || []).map(q => q.id));
+    const TYPE_LABELS = {
+      MC: 'Multiple Choice', TF: 'True/False', FB: 'Fill Blank',
+      MT: 'Math Table', MP: 'Multi-Part', SA: 'Numeric',
+      ES: 'Essay', OR: 'Ordering', MR: 'Multiple Response'
+    };
 
-    this.openModal('Quiz questions', `
-      <form id="assign-form" class="stack">
-        <div class="assign-list">
-          ${questions.map(question => `
-            <label class="assign-row">
-              <input type="checkbox" value="${question.id}" ${assigned.has(Number(question.id)) ? 'checked' : ''}>
-              <span>${this.esc(question.text)}</span>
-              <small>${this.esc(question.categoryName || '')} - ${this.esc(question.difficulty)}</small>
-            </label>
-          `).join('') || this.emptyLine('Create questions before assigning them.')}
+    this.openModal('Assign questions to ' + quiz.title, `
+      <div class="assign-questions-panel">
+        <div class="assigned-section">
+          <h3>Assigned (${assignedIds.size})</h3>
+          <div id="assigned-list" class="question-mini-list">
+            ${(quiz.questions || []).map(q => `
+              <div class="question-mini-item assigned" data-id="${q.id}">
+                <button class="btn btn-ghost btn-sm" onclick="App.removeAssigned(${q.id})">✕</button>
+                <span class="type-badge-sm">${q.type}</span>
+                <span>${this.esc(q.text.slice(0, 60))}</span>
+                <span class="pts">${q.points} pts</span>
+              </div>
+            `).join('') || '<p class="muted">No questions assigned.</p>'}
+          </div>
         </div>
-        <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary">Save questions</button></div>
-      </form>
+        <div class="available-section">
+          <h3>Available</h3>
+          <input class="form-input" id="assign-search" placeholder="Search...">
+          <div id="available-list" class="question-mini-list">
+            ${allQuestions.filter(q => !assignedIds.has(q.id)).map(q => `
+              <div class="question-mini-item" data-id="${q.id}">
+                <button class="btn btn-ghost btn-sm" onclick="App.addAssigned(${q.id})">+</button>
+                <span class="type-badge-sm">${q.type}</span>
+                <span>${this.esc(q.text.slice(0, 60))}</span>
+                <span class="pts">${q.points} pts</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" id="btn-save-assign">Save</button>
+        </div>
+      </div>
     `);
 
-    document.getElementById('assign-form').addEventListener('submit', async event => {
-      event.preventDefault();
-      const ids = Array.from(document.querySelectorAll('#assign-form input[type="checkbox"]:checked')).map(input => Number(input.value));
+    this._assignedIds = new Set(assignedIds);
+    this._quizId = quizId;
+
+    document.getElementById('btn-save-assign')?.addEventListener('click', async () => {
       try {
-        await API.setQuizQuestions(quizId, ids);
+        await API.setQuizQuestions(this._quizId, Array.from(this._assignedIds));
         this.closeModal();
-        this.route();
-        this.toast('Quiz questions saved.', 'success');
+        this.renderQuizzes();
+        this.toast('Questions assigned.', 'success');
       } catch (err) {
         this.toast(err.message, 'error');
       }
     });
   },
 
-  async startQuiz(quizId) {
+  addAssigned(questionId) {
+    this._assignedIds.add(questionId);
+    const item = document.querySelector(`.question-mini-item[data-id="${questionId}"]`);
+    if (item) {
+      item.classList.add('assigned');
+      item.querySelector('button').textContent = '✕';
+      item.querySelector('button').setAttribute('onclick', `App.removeAssigned(${questionId})`);
+      document.getElementById('assigned-list')?.appendChild(item);
+    }
+  },
+
+  removeAssigned(questionId) {
+    this._assignedIds.delete(questionId);
+    const item = document.querySelector(`.question-mini-item[data-id="${questionId}"]`);
+    if (item) {
+      item.classList.remove('assigned');
+      item.querySelector('button').textContent = '+';
+      item.querySelector('button').setAttribute('onclick', `App.addAssigned(${questionId})`);
+      document.getElementById('available-list')?.appendChild(item);
+    }
+  },
+
+  async showQuizAttempts(quizId) {
+    try {
+      const attempts = await API.getQuizAttempts(quizId);
+      this.openModal('Quiz Attempts', `
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Student</th><th>#</th><th>Score</th><th>%</th><th>Grade</th><th>Status</th><th>Time</th><th></th></tr></thead>
+            <tbody>${attempts.map(attempt => `
+              <tr>
+                <td>${this.esc(attempt.studentName || 'You')}</td>
+                <td>${attempt.attemptNumber}</td>
+                <td>${attempt.score ?? '-'}/${attempt.maxScore ?? '-'}</td>
+                <td>${attempt.percentage != null ? attempt.percentage + '%' : '-'}</td>
+                <td>${this.esc(attempt.letterGrade || '-')}</td>
+                <td><span class="status-badge status-${attempt.status}">${attempt.status}</span></td>
+                <td>${attempt.timeSpentSeconds ? Math.round(attempt.timeSpentSeconds / 60) + 'm' : '-'}</td>
+                <td>
+                  ${attempt.status === 'in_progress' ? `<a class="btn btn-primary btn-sm" href="#/attempt/${attempt.id}">Continue</a>` : ''}
+                  ${attempt.status === 'submitted' ? `<a class="btn btn-ghost btn-sm" href="#/attempt/${attempt.id}">Review</a>` : ''}
+                </td>
+              </tr>
+            `).join('') || '<tr><td colspan="8">No attempts yet.</td></tr>'}</tbody>
+          </table>
+        </div>
+      `);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  async startQuizAttempt(quizId) {
+    if (!confirm('Start a new attempt?')) return;
     try {
       const attempt = await API.startAttempt(quizId);
       location.hash = `#/attempt/${attempt.id}`;
@@ -171,35 +391,142 @@ export const QuizzesPage = {
     }
   },
 
-  quizRow(quiz, showCourse = false, manager = false) {
-    const actions = this.user.role === 'student'
-      ? `<button class="btn btn-primary btn-sm" onclick="App.startQuiz(${quiz.id})" ${quiz.isOpen ? '' : 'disabled'}>${quiz.isOpen ? 'Start' : 'Closed'}</button>`
-      : `${manager ? `<button class="btn btn-ghost btn-sm" onclick="App.showQuizForm(${quiz.id})">Edit</button><button class="btn btn-primary btn-sm" onclick="App.showAssignQuestions(${quiz.id})">Questions</button>` : ''}`;
-
-    return `
-      <div class="list-row">
-        <div>
-          <strong>${this.esc(quiz.title)}</strong>
-          <small>${showCourse ? `${this.esc(quiz.courseCode || '')} - ` : ''}${quiz.questionCount || 0} questions, ${quiz.maxScore || 0} points | ${this.esc(quiz.showResultPolicy || 'immediately')} results | ${this.esc(quiz.durationMinutes || quiz.timeLimitMinutes || 0)} min</small>
-        </div>
-        <div class="row-actions">
-          <span class="status ${quiz.status}">${this.esc(quiz.status)}</span>
-          ${actions}
-        </div>
-      </div>
-    `;
+  async deleteQuiz(id) {
+    if (!confirm('Delete this quiz?')) return;
+    try {
+      await API.deleteQuiz(id);
+      this.renderQuizzes();
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
   },
 
-  toDateTimeLocal(value) {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
+  async saveAsTemplate(quizId) {
+    this.openModal('Save as Template', `
+      <form id="save-template-form" class="stack">
+        ${this.input('template-name', 'Template Name')}
+        ${this.textarea('template-desc', 'Description (optional)')}
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    `);
+    document.getElementById('save-template-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      try {
+        await API.saveQuizAsTemplate(quizId, { name: value('template-name'), description: value('template-desc') });
+        this.closeModal();
+        this.toast('Template saved!', 'success');
+      } catch (err) {
+        this.toast(err.message, 'error');
+      }
+    });
+  },
+
+  async showTemplateManager(courseId) {
+    try {
+      const templates = await API.getTemplates({ courseId });
+      this.openModal('Manage Templates', `
+        <div class="stack">
+          <div class="toolbar">
+            <button class="btn btn-primary btn-sm" id="btn-create-template">Create Template</button>
+          </div>
+          <div class="template-list">
+            ${templates.map(template => `
+              <div class="template-item">
+                <div class="template-info">
+                  <strong>${this.esc(template.name)}</strong>
+                  ${template.isSystem ? '<span class="badge badge-system">System</span>' : '<span class="badge badge-custom">Custom</span>'}
+                  ${template.courseId ? '<span class="badge badge-course">Course</span>' : ''}
+                  <p class="template-desc">${this.esc(template.description || '')}</p>
+                </div>
+                <div class="template-actions">
+                  ${(!template.isSystem || this.user.role === 'admin') ? `
+                    <button class="btn btn-danger btn-sm" onclick="App.deleteTemplate(${template.id})">Delete</button>
+                  ` : ''}
+                </div>
+              </div>
+            `).join('') || '<p>No templates found.</p>'}
+          </div>
+        </div>
+      `);
+      document.getElementById('btn-create-template')?.addEventListener('click', () => this.showCreateTemplateForm(courseId));
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  async showCreateTemplateForm(courseId) {
+    this.openModal('Create Template', `
+      <form id="create-template-form" class="stack">
+        ${this.input('new-template-name', 'Template Name')}
+        ${this.textarea('new-template-desc', 'Description')}
+        <div class="form-section">
+          <h3>Default Settings</h3>
+          <div class="form-grid">
+            ${this.input('tpl-duration', 'Duration (min)', 30, 'number')}
+            ${this.input('tpl-attempts', 'Max attempts', 1, 'number')}
+            <label class="form-field"><span>Show results</span><select class="form-select" id="tpl-show-result">
+              ${['immediately', 'after_close', 'after_manual_release', 'never'].map(p => `<option value="${p}">${p.replace(/_/g, ' ')}</option>`).join('')}
+            </select></label>
+          </div>
+          <div class="check-grid">
+            <label class="check-field"><input type="checkbox" id="tpl-shuffle-q"> Shuffle questions</label>
+            <label class="check-field"><input type="checkbox" id="tpl-shuffle-o"> Shuffle options</label>
+            <label class="check-field"><input type="checkbox" id="tpl-show-correct"> Show correct answers</label>
+            <label class="check-field"><input type="checkbox" id="tpl-penalty"> Negative marking</label>
+            <label class="check-field"><input type="checkbox" id="tpl-seb"> Require SEB</label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="App.showTemplateManager(${courseId})">Back</button>
+          <button class="btn btn-primary">Create</button>
+        </div>
+      </form>
+    `);
+    document.getElementById('create-template-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      try {
+        await API.createTemplate({
+          name: value('new-template-name'),
+          description: value('new-template-desc'),
+          courseId,
+          defaults: {
+            durationMinutes: Number(value('tpl-duration') || 30),
+            maxAttempts: Number(value('tpl-attempts') || 1),
+            showResultPolicy: value('tpl-show-result'),
+            shuffleQuestions: document.getElementById('tpl-shuffle-q').checked,
+            shuffleOptions: document.getElementById('tpl-shuffle-o').checked,
+            showCorrectAnswers: document.getElementById('tpl-show-correct').checked,
+            penaltyEnabled: document.getElementById('tpl-penalty').checked,
+            requiresSeb: document.getElementById('tpl-seb').checked
+          }
+        });
+        this.toast('Template created!', 'success');
+        this.showTemplateManager(courseId);
+      } catch (err) {
+        this.toast(err.message, 'error');
+      }
+    });
+  },
+
+  async deleteTemplate(id) {
+    if (!confirm('Delete this template?')) return;
+    try {
+      await API.deleteTemplate(id);
+      this.toast('Template deleted.', 'success');
+      this.renderQuizzes();
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  toDateTimeLocal(valueText) {
+    if (!valueText) return '';
+    const date = new Date(valueText);
+    if (Number.isNaN(date.getTime())) return String(valueText).slice(0, 16);
     const pad = number => String(number).padStart(2, '0');
-    const year = date.getFullYear();
-    const month = pad(date.getMonth() + 1);
-    const day = pad(date.getDate());
-    const hour = pad(date.getHours());
-    const minute = pad(date.getMinutes());
-    return `${year}-${month}-${day}T${hour}:${minute}`;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 };

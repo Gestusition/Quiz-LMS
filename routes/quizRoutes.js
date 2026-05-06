@@ -206,7 +206,39 @@ router.get('/templates', (req, res) => {
     if (req.user.role === 'student') {
       return res.status(403).json({ error: 'Teacher or admin course access required.' });
     }
-    res.json(quizService.getExamTemplates());
+    const filters = {};
+    if (req.query.courseId) filters.courseId = Number(req.query.courseId);
+    res.json(quizService.getExamTemplates(filters));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.post('/templates', (req, res) => {
+  try {
+    if (req.user.role === 'student') {
+      return res.status(403).json({ error: 'Teacher or admin access required.' });
+    }
+    res.status(201).json(quizService.createExamTemplate(req.body, req.user));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.delete('/templates/:templateId', (req, res) => {
+  try {
+    const templateId = parseId(req.params.templateId);
+    if (!templateId) return res.status(400).json({ error: 'Invalid template ID.' });
+    quizService.deleteExamTemplate(templateId, req.user);
+    res.json({ message: 'Template deleted successfully.' });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.post('/:id/save-as-template', loadQuiz, requireQuizManager, (req, res) => {
+  try {
+    res.status(201).json(quizService.saveQuizAsTemplate(req.quizId, req.body, req.user));
   } catch (err) {
     sendError(res, err, 400);
   }
