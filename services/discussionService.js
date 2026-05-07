@@ -15,6 +15,10 @@ class DiscussionService {
     return discussionRepository.listThreads(courseId, filters);
   }
 
+  getThread(threadId, user) {
+    return this.getThreadForAction(threadId, user);
+  }
+
   createThread(courseId, user, data) {
     this.ensureCourseAccess(courseId, user);
     restrictionService.assertAccessAllowed({
@@ -72,8 +76,7 @@ class DiscussionService {
       createdBy: user.id
     });
 
-    const replies = discussionRepository.listReplies(thread.id, { page: 1, limit: 1 });
-    return replies.items.find(item => item.id === result.lastInsertRowid) || null;
+    return discussionRepository.findReplyById(result.lastInsertRowid);
   }
 
   getThreadForAction(threadId, user) {

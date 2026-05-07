@@ -128,7 +128,7 @@ export const AcademicPage = {
         <td><strong>${this.esc(term.name)}</strong></td>
         <td>${this.esc(term.academicYear)}</td>
         <td>${this.esc(term.semesterType)}</td>
-        <td>${this.esc(term.startDate || '-')} to ${this.esc(term.endDate || '-')}</td>
+        <td>${this.esc(term.startDate ? this.formatDateOnly(term.startDate) : '-')} to ${this.esc(term.endDate ? this.formatDateOnly(term.endDate) : '-')}</td>
         <td><span class="status ${term.isActive ? 'active' : 'archived'}">${term.isActive ? 'active' : 'inactive'}</span></td>
         <td class="table-actions">
           ${admin ? `<button class="btn btn-ghost btn-sm" onclick="App.showTermForm(${term.id})">Edit</button>
@@ -258,7 +258,7 @@ export const AcademicPage = {
         <label class="form-field"><span>Semester</span><select class="form-select" id="term-semester">
           ${['fall', 'spring', 'summer', 'winter', 'full-year', 'other'].map(option => `<option value="${option}" ${item.semesterType === option ? 'selected' : ''}>${option}</option>`).join('')}
         </select></label>
-        <div class="form-grid">${this.input('term-start', 'Start date', item.startDate, 'date')}${this.input('term-end', 'End date', item.endDate, 'date')}</div>
+        <div class="form-grid">${this.input('term-start', 'Start date', this.dateInputValue(item.startDate), 'date')}${this.input('term-end', 'End date', this.dateInputValue(item.endDate), 'date')}</div>
         <label class="check-field"><input type="checkbox" id="term-active" ${item.isActive ? 'checked' : ''}> Active term</label>
         <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary">Save</button></div>
       </form>

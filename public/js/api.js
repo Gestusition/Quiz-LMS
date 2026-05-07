@@ -13,10 +13,13 @@ export const API = {
   },
 
   async request(endpoint, options = {}) {
-    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const headers = isFormData
+      ? { ...(options.headers || {}) }
+      : { 'Content-Type': 'application/json', ...(options.headers || {}) };
 
     const config = { ...options, headers, credentials: 'same-origin' };
-    if (config.body && typeof config.body === 'object') {
+    if (config.body && typeof config.body === 'object' && !isFormData) {
       config.body = JSON.stringify(config.body);
     }
 
@@ -148,6 +151,12 @@ export const API = {
   },
   createAttendanceSession(data) { return this.request('/academic/attendance/sessions', { method: 'POST', body: data }); },
   getAttendanceRecords(id) { return this.request(`/academic/attendance/sessions/${id}/records`); },
+  getAttendanceRecordDetails(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
+    if (filters.courseOfferingId) params.set('courseOfferingId', filters.courseOfferingId);
+    return this.request(`/academic/attendance/records${params.toString() ? `?${params}` : ''}`);
+  },
   markAttendance(id, records) { return this.request(`/academic/attendance/sessions/${id}/records`, { method: 'POST', body: { records } }); },
   getMyAttendance() { return this.request('/academic/attendance/my'); },
   getAttendanceSummary(courseOfferingId) { return this.request(`/academic/attendance/offerings/${courseOfferingId}/summary`); },
@@ -229,6 +238,7 @@ export const API = {
   },
   createThread(courseId, data) { return this.request(`/discussion/courses/${courseId}/threads`, { method: 'POST', body: data }); },
   updateThreadStatus(id, status) { return this.request(`/discussion/threads/${id}/status`, { method: 'PUT', body: { status } }); },
+  getThread(id) { return this.request(`/discussion/threads/${id}`); },
   getThreadReplies(id, filters = {}) {
     const params = new URLSearchParams();
     if (filters.page) params.set('page', filters.page);

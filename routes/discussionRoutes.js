@@ -64,6 +64,15 @@ router.get('/courses/:courseId/threads', (req, res) => {
   }
 });
 
+router.get('/threads/:id', (req, res) => {
+  try {
+    const threadId = Number(req.params.id);
+    res.json(discussionService.getThread(threadId, req.user));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
 /**
  * @swagger
  * /api/discussion/courses/{courseId}/threads:

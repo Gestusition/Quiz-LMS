@@ -3,9 +3,29 @@ const router = express.Router();
 const courseWeekService = require('../services/courseWeekService');
 const auditService = require('../services/auditService');
 const { requireAuth } = require('../middleware/auth');
+const { resourceUpload, removeUploadedFile } = require('../middleware/upload');
 const { sendError } = require('../utils/appError');
 
 router.use(requireAuth);
+
+function uploadResourceFile(req, res, next) {
+  resourceUpload.single('file')(req, res, err => {
+    if (err) return sendError(res, err, 400);
+    next();
+  });
+}
+
+function resourcePayload(req) {
+  if (!req.file) return req.body;
+  return {
+    ...req.body,
+    type: 'file',
+    content: `/uploads/resources/${req.file.filename}`,
+    fileName: req.file.originalname,
+    fileSizeBytes: req.file.size,
+    mimeType: req.file.mimetype
+  };
+}
 
 /**
  * @swagger
@@ -267,12 +287,13 @@ router.get('/weeks/:id/resources', (req, res) => {
  *       404:
  *         $ref: '#/components/responses/404NotFound'
  */
-router.post('/weeks/:id/resources', (req, res) => {
+router.post('/weeks/:id/resources', uploadResourceFile, (req, res) => {
   try {
     const weekId = Number(req.params.id);
-    const resource = courseWeekService.createWeekResource(weekId, req.user, req.body);
+    const resource = courseWeekService.createWeekResource(weekId, req.user, resourcePayload(req));
     res.status(201).json(resource);
   } catch (err) {
+    removeUploadedFile(req.file);
     sendError(res, err, 400);
   }
 });

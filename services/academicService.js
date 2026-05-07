@@ -6,8 +6,10 @@ const restrictionService = require('./restrictionService');
 const auditService = require('./auditService');
 const validationIssueService = require('./validationIssueService');
 const importService = require('./importService');
+const { removeUploadedSubmissionByUrl } = require('../middleware/upload');
 const { nowIso } = require('../utils/security');
 const {
+  ATTENDANCE_STATUSES,
   validateAssignment,
   validateAttendanceRecord,
   validateAttendanceSession,
@@ -366,6 +368,9 @@ class AcademicService {
   deleteAssignment(id, user) {
     const assignment = requireRow(academicRepository.findAssignmentById(id), 'Assignment not found.');
     if (!this.canManageOffering(user, assignment)) throw forbidden();
+    academicRepository.listSubmissions(id).forEach(submission => {
+      removeUploadedSubmissionByUrl(submission.submissionUrl);
+    });
     academicRepository.deleteAssignment(id);
     return true;
   }
@@ -404,9 +409,13 @@ class AcademicService {
     });
 
     const payload = validateSubmission(data);
+    const existingSubmission = academicRepository.findSubmissionByAssignmentStudent(assignmentId, user.id);
     const timestamp = nowIso();
     const late = isPastDue(assignment.dueDate, timestamp);
     const result = academicRepository.upsertSubmission(assignmentId, user.id, payload, timestamp, late);
+    if (existingSubmission && existingSubmission.submissionUrl !== payload.submissionUrl) {
+      removeUploadedSubmissionByUrl(existingSubmission.submissionUrl);
+    }
     const saved = academicRepository.findSubmissionByAssignmentStudent(assignmentId, user.id) ||
       academicRepository.findSubmission(result.lastInsertRowid);
     auditService.log({
@@ -488,6 +497,16 @@ class AcademicService {
     const session = requireRow(academicRepository.findAttendanceSessionById(sessionId), 'Attendance session not found.');
     if (!this.canManageOffering(user, session)) throw forbidden();
     return academicRepository.listAttendanceRecords(sessionId);
+  }
+
+  listAttendanceRecordDetails(user, filters = {}) {
+    if (!['admin', 'teacher'].includes(user.role)) throw forbidden();
+    const normalized = normalizeFilters(filters);
+    if (filters.status && ATTENDANCE_STATUSES.includes(String(filters.status))) {
+      normalized.status = String(filters.status);
+    }
+    return academicRepository.listAttendanceRecordDetails(user, normalized)
+      .filter(record => !this.isCourseAccessBlocked(user, record.courseId));
   }
 
   getAttendanceForStudent(user) {

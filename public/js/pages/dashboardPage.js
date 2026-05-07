@@ -26,9 +26,9 @@ export const DashboardPage = {
       API.getCourses(),
       API.getTerms().catch(() => []),
       API.getAdminAnalytics(),
-      API.getValidationIssues({ status: 'open', limit: 6 }).catch(() => ({ items: [] })),
-      API.getImportBatches({ limit: 6 }).catch(() => ({ items: [] })),
-      API.getAuditLogs(12).catch(() => [])
+      API.getValidationIssues({ status: 'open', limit: 20 }).catch(() => ({ items: [] })),
+      API.getImportBatches({ limit: 20 }).catch(() => ({ items: [] })),
+      API.getAuditLogs(40).catch(() => [])
     ]);
 
     const users = usersResult.items || [];
@@ -63,8 +63,8 @@ export const DashboardPage = {
       <section class="content-grid">
         <div class="panel">
           <div class="panel-header"><h2>Recent Audit Logs</h2><a href="#/analytics">Open analytics</a></div>
-          <div class="list compact">
-            ${(auditLogs || []).slice(0, 10).map(log => `
+          <div class="list compact scroll-list dashboard-scroll-list">
+            ${(auditLogs || []).map(log => `
               <div class="list-row">
                 <div>
                   <strong>${this.esc(log.action)}</strong>
@@ -78,7 +78,7 @@ export const DashboardPage = {
 
         <div class="panel">
           <div class="panel-header"><h2>Open Validation Issues</h2><a href="#/analytics">System health</a></div>
-          <div class="list compact">
+          <div class="list compact scroll-list dashboard-scroll-list">
             ${openIssues.map(item => `
               <div class="list-row">
                 <div>
@@ -92,7 +92,7 @@ export const DashboardPage = {
 
         <div class="panel">
           <div class="panel-header"><h2>Import Batches</h2><a href="#/analytics">View reports</a></div>
-          <div class="list compact">
+          <div class="list compact scroll-list dashboard-scroll-list">
             ${importBatches.map(batch => `
               <div class="list-row">
                 <div>
@@ -151,7 +151,7 @@ export const DashboardPage = {
           <div class="list">${activeQuizzes.slice(0, 6).map(quiz => this.quizRow(quiz)).join('') || this.emptyLine('No active quizzes.')}</div>
         </div>
         <div class="panel">
-          <div class="panel-header"><h2>Course Issues</h2><a href="#/analytics">Analytics</a></div>
+          <div class="panel-header"><h2>Course Issues</h2><span>${(issuesResult.items || []).length} open</span></div>
           <div class="list compact">
             ${(issuesResult.items || []).map(item => `
               <div class="list-row">
@@ -213,7 +213,7 @@ export const DashboardPage = {
               <div class="list-row">
                 <div>
                   <strong>${this.esc(item.title)}</strong>
-                  <small>${this.esc(item.courseCode || '')} - due ${this.esc(item.dueDate || 'N/A')}</small>
+                  <small>${this.esc(item.courseCode || '')} - due ${this.esc(item.dueDate ? this.formatDate(item.dueDate) : 'N/A')}</small>
                 </div>
                 <span class="status-chip ${this.esc(item.ownSubmissionStatus || 'pending')}">${this.esc(item.ownSubmissionStatus || 'not submitted')}</span>
               </div>
@@ -228,7 +228,7 @@ export const DashboardPage = {
               <div class="list-row">
                 <div>
                   <strong>${this.esc(item.courseCode)}</strong>
-                  <small>${this.esc(item.status)} - ${this.esc(item.sessionDate)}</small>
+                  <small>${this.esc(item.status)} - ${this.esc(this.formatDate(item.sessionDate))}</small>
                 </div>
               </div>
             `).join('') || this.emptyLine('No attendance records yet.')}

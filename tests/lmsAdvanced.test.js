@@ -394,6 +394,101 @@ describe('Advanced LMS controls', () => {
     expect(db.prepare('SELECT COUNT(*) as count FROM validation_issues WHERE relatedCourseId = ?').get(course.id).count).toBe(0);
   });
 
+  test('course and week file resources accept real uploaded documents', async () => {
+    const db = getDatabase();
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const week = db.prepare('SELECT id FROM course_weeks WHERE courseId = ? ORDER BY id ASC LIMIT 1').get(course.id) ||
+      (await request(app)
+        .post(`/api/weeks/courses/${course.id}/weeks`)
+        .set('Cookie', cookie(authService.login('teacher@example.com', 'Teacher123!')))
+        .send({ weekNumber: 8, title: 'Upload Week', visible: true })
+        .expect(201)).body;
+    const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
+
+    const courseResource = (await request(app)
+      .post(`/api/courses/${course.id}/resources`)
+      .set('Cookie', cookie(teacherSession))
+      .field('title', 'Uploaded PDF')
+      .field('type', 'file')
+      .field('description', 'Lecture notes')
+      .attach('file', Buffer.from('%PDF-1.4\nresource test\n'), {
+        filename: 'lecture-notes.pdf',
+        contentType: 'application/pdf'
+      })
+      .expect(201)).body;
+
+    expect(courseResource.type).toBe('file');
+    expect(courseResource.url).toMatch(/^\/uploads\/resources\/.+\.pdf$/);
+    expect(courseResource.fileName).toBe('lecture-notes.pdf');
+    expect(courseResource.fileSizeBytes).toBeGreaterThan(0);
+
+    const weekResource = (await request(app)
+      .post(`/api/weeks/weeks/${week.id}/resources`)
+      .set('Cookie', cookie(teacherSession))
+      .field('title', 'Grade Sheet')
+      .field('type', 'file')
+      .attach('file', Buffer.from('student,grade\nA,95\n'), {
+        filename: 'grades.csv',
+        contentType: 'text/csv'
+      })
+      .expect(201)).body;
+
+    expect(weekResource.type).toBe('file');
+    expect(weekResource.content).toMatch(/^\/uploads\/resources\/.+\.csv$/);
+    expect(weekResource.fileName).toBe('grades.csv');
+
+    const htmlResource = (await request(app)
+      .post(`/api/courses/${course.id}/resources`)
+      .set('Cookie', cookie(teacherSession))
+      .field('title', 'HTML Handout')
+      .field('type', 'file')
+      .attach('file', Buffer.from('<!doctype html><title>Lesson</title><p>Notes</p>'), {
+        filename: 'lesson.html',
+        contentType: 'text/html'
+      })
+      .expect(201)).body;
+
+    expect(htmlResource.url).toMatch(/^\/uploads\/resources\/.+\.html$/);
+    expect(htmlResource.fileName).toBe('lesson.html');
+
+    const markdownResource = (await request(app)
+      .post(`/api/weeks/weeks/${week.id}/resources`)
+      .set('Cookie', cookie(teacherSession))
+      .field('title', 'Markdown Notes')
+      .field('type', 'file')
+      .attach('file', Buffer.from('# Notes\n\n- Item\n'), {
+        filename: 'notes.md',
+        contentType: 'text/markdown'
+      })
+      .expect(201)).body;
+
+    expect(markdownResource.content).toMatch(/^\/uploads\/resources\/.+\.md$/);
+    expect(markdownResource.fileName).toBe('notes.md');
+
+    await request(app)
+      .post(`/api/weeks/weeks/${week.id}/resources`)
+      .set('Cookie', cookie(teacherSession))
+      .send({ title: 'Legacy Page', type: 'page', content: 'unused' })
+      .expect(400);
+
+    await request(app)
+      .delete(`/api/courses/resources/${courseResource.id}`)
+      .set('Cookie', cookie(teacherSession))
+      .expect(200);
+    await request(app)
+      .delete(`/api/weeks/week-resources/${weekResource.id}`)
+      .set('Cookie', cookie(teacherSession))
+      .expect(200);
+    await request(app)
+      .delete(`/api/courses/resources/${htmlResource.id}`)
+      .set('Cookie', cookie(teacherSession))
+      .expect(200);
+    await request(app)
+      .delete(`/api/weeks/week-resources/${markdownResource.id}`)
+      .set('Cookie', cookie(teacherSession))
+      .expect(200);
+  });
+
   test('timed attempt marks expired and negative marking score never goes below zero', () => {
     const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
     const studentSession = authService.login('STU-0003', 'Student123!');

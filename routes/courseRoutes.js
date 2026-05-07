@@ -6,6 +6,7 @@ const quizService = require('../services/quizService');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const contentRepository = require('../repositories/contentRepository');
 const { requireAuth, requireRole, canAccessCourse, canManageCourse } = require('../middleware/auth');
+const { resourceUpload, removeUploadedFile } = require('../middleware/upload');
 const { sendError } = require('../utils/appError');
 
 router.use(requireAuth);
@@ -37,6 +38,25 @@ function enrollmentCourseId(enrollmentId) {
 
 function contentCourseId(table, id) {
   return contentRepository.findCourseId(table, id);
+}
+
+function uploadResourceFile(req, res, next) {
+  resourceUpload.single('file')(req, res, err => {
+    if (err) return sendError(res, err, 400);
+    next();
+  });
+}
+
+function resourcePayload(req) {
+  if (!req.file) return req.body;
+  return {
+    ...req.body,
+    type: 'file',
+    url: `/uploads/resources/${req.file.filename}`,
+    fileName: req.file.originalname,
+    fileSizeBytes: req.file.size,
+    mimeType: req.file.mimetype
+  };
 }
 
 /**
@@ -481,10 +501,11 @@ router.get('/:courseId/resources', requireCourseAccess, (req, res) => {
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
-router.post('/:courseId/resources', requireCourseManager, (req, res) => {
+router.post('/:courseId/resources', requireCourseManager, uploadResourceFile, (req, res) => {
   try {
-    res.status(201).json(contentService.createResource(req.courseId, req.body, req.user));
+    res.status(201).json(contentService.createResource(req.courseId, resourcePayload(req), req.user));
   } catch (err) {
+    removeUploadedFile(req.file);
     sendError(res, err, 400);
   }
 });

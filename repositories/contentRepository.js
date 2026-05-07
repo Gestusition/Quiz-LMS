@@ -41,13 +41,23 @@ function getResources(courseId) {
 
 function insertResource(courseId, payload, userId) {
   return getDatabase().prepare(`
-    INSERT INTO resources (courseId, title, type, url, description, createdBy)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(courseId, payload.title, payload.type, payload.url, payload.description, userId);
+    INSERT INTO resources (courseId, title, type, url, description, fileName, fileSizeBytes, mimeType, createdBy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    courseId,
+    payload.title,
+    payload.type,
+    payload.url,
+    payload.description,
+    payload.fileName || '',
+    payload.fileSizeBytes || 0,
+    payload.mimeType || '',
+    userId
+  );
 }
 
 function findResourceById(id) {
-  return getDatabase().prepare('SELECT id, courseId FROM resources WHERE id = ?').get(id) || null;
+  return getDatabase().prepare('SELECT * FROM resources WHERE id = ?').get(id) || null;
 }
 
 function deleteResource(id) {

@@ -352,6 +352,20 @@ describe('Academic management system', () => {
       .send({ submissionText: 'My proof is included here.' })
       .expect(201)).body;
 
+    submission = (await request(app)
+      .post(`/api/academic/assignments/${assignment.id}/submissions`)
+      .set('Cookie', cookie(studentSession))
+      .field('submissionText', 'My proof is attached.')
+      .attach('file', Buffer.from('# Proof\n\nSee the argument below.\n'), {
+        filename: 'proof.md',
+        contentType: 'text/markdown'
+      })
+      .expect(201)).body;
+
+    expect(submission.fileName).toBe('proof.md');
+    expect(submission.fileSizeBytes).toBeGreaterThan(0);
+    expect(submission.submissionUrl).toMatch(/^\/uploads\/submissions\/.+\.md$/);
+
     await request(app)
       .get(`/api/academic/assignments/${assignment.id}/submissions`)
       .set('Cookie', cookie(teacherSession))
@@ -359,6 +373,7 @@ describe('Academic management system', () => {
       .expect(response => {
         expect(response.body).toHaveLength(1);
         expect(response.body[0].studentId).toBe(studentSession.user.id);
+        expect(response.body[0].fileName).toBe('proof.md');
       });
 
     await request(app)

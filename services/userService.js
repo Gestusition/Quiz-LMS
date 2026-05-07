@@ -22,6 +22,7 @@ const {
 const { hashPassword, nowIso } = require('../utils/security');
 const { serializeUser } = require('../serializers/userSerializer');
 const { conflictError, notFoundError } = require('../utils/appError');
+const { removeUploadedSubmissionByUrl } = require('../middleware/upload');
 const auditService = require('./auditService');
 
 class UserService {
@@ -135,6 +136,10 @@ class UserService {
     this.ensureUniqueStudentNumber(payload, id);
     this.ensureUniqueStaffNumber(payload, id);
 
+    const submissionFilesToRemove = existing.role === 'student' && payload.role !== 'student'
+      ? academicRepository.listSubmissionsByStudent(id).map(submission => submission.submissionUrl)
+      : [];
+
     userRepository.withTransaction(() => {
       userRepository.update(id, payload, nowIso());
       if (existing.role !== payload.role) {
@@ -155,6 +160,7 @@ class UserService {
 
       profileRepository.replaceForUser(id, payload);
     });
+    submissionFilesToRemove.forEach(removeUploadedSubmissionByUrl);
 
     const updated = this.getUserById(id);
     auditService.log({
@@ -200,6 +206,9 @@ class UserService {
       throw notFoundError('User not found.');
     }
 
+    const submissionFilesToRemove = academicRepository.listSubmissionsByStudent(id)
+      .map(submission => submission.submissionUrl);
+
     userRepository.withTransaction(() => {
       enrollmentRepository.deleteByUserId(id);
       academicRepository.deleteOfferingEnrollmentsByStudent(id);
@@ -223,6 +232,7 @@ class UserService {
       profileRepository.deleteForUser(id);
       userRepository.deleteById(id);
     });
+    submissionFilesToRemove.forEach(removeUploadedSubmissionByUrl);
 
     return true;
   }

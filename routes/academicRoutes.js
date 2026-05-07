@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const academicService = require('../services/academicService');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { removeUploadedFile, submissionUpload } = require('../middleware/upload');
 
 router.use(requireAuth);
 
@@ -21,6 +22,14 @@ function requireValidId(req, res, next) {
   if (!id) return res.status(400).json({ error: 'Invalid ID.' });
   req.params.id = id;
   next();
+}
+
+function handleSubmissionUpload(req, res, next) {
+  submissionUpload.single('file')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message });
+  });
 }
 
 /**
@@ -529,8 +538,20 @@ router.post('/assignments', requireRole(['admin', 'teacher']), (req, res) => {
 router.get('/assignments/:id/submissions', requireValidId, (req, res) => {
   try { res.json(academicService.listSubmissions(req.params.id, req.user)); } catch (err) { sendError(res, err); }
 });
-router.post('/assignments/:id/submissions', requireValidId, (req, res) => {
-  try { res.status(201).json(academicService.submitAssignment(req.params.id, req.body, req.user)); } catch (err) { sendError(res, err); }
+router.post('/assignments/:id/submissions', requireValidId, handleSubmissionUpload, (req, res) => {
+  const payload = { ...req.body };
+  if (req.file) {
+    payload.submissionUrl = `/uploads/submissions/${req.file.filename}`;
+    payload.fileName = req.file.originalname;
+    payload.fileSizeBytes = req.file.size;
+    payload.mimeType = req.file.mimetype;
+  }
+  try {
+    res.status(201).json(academicService.submitAssignment(req.params.id, payload, req.user));
+  } catch (err) {
+    removeUploadedFile(req.file);
+    sendError(res, err);
+  }
 });
 
 /**
@@ -644,6 +665,10 @@ router.post('/attendance/sessions', requireRole(['admin', 'teacher']), (req, res
  */
 router.post('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
   try { res.json(academicService.markAttendance(req.params.id, req.body.records, req.user)); } catch (err) { sendError(res, err); }
+});
+
+router.get('/attendance/records', requireRole(['admin', 'teacher']), (req, res) => {
+  try { res.json(academicService.listAttendanceRecordDetails(req.user, req.query)); } catch (err) { sendError(res, err); }
 });
 
 router.get('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {

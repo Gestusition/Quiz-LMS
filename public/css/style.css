@@ -98,7 +98,15 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 .brand-text { font-size: 1.05rem; }
-.nav-links { display: flex; align-items: center; gap: 4px; flex: 1; }
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
 
 .nav-link {
   padding: 8px 10px;
@@ -106,6 +114,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   color: var(--muted);
   font-size: 0.9rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .nav-link:hover, .nav-link.active {
@@ -239,6 +248,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+  align-items: start;
 }
 
 .content-grid .wide { grid-column: span 1; }
@@ -347,6 +357,123 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .link-row:hover { background: var(--surface-strong); }
 .list-row strong { display: block; font-size: 0.95rem; }
 .list-row small { display: block; margin-top: 2px; color: var(--muted); }
+
+.scroll-list {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.dashboard-scroll-list {
+  max-height: 460px;
+}
+
+.analytics-scroll-list {
+  max-height: 260px;
+}
+
+.course-enrollment-scroll-list {
+  max-height: 240px;
+}
+
+.attendance-record-list {
+  max-height: 430px;
+}
+
+.scroll-table {
+  max-height: 360px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.analytics-table-scroll {
+  max-height: 320px;
+}
+
+.discussion-row {
+  align-items: flex-start;
+}
+
+.discussion-content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.discussion-body {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.meta-line small {
+  display: inline;
+  margin-top: 0;
+}
+
+.discussion-thread {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+
+.discussion-thread-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.discussion-thread-header strong,
+.reply-row strong {
+  display: block;
+}
+
+.discussion-thread-header small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.reply-row {
+  align-items: flex-start;
+}
+
+.compact-toolbar {
+  align-items: end;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.inline-field {
+  width: min(220px, 100%);
+}
+
+.attendance-summary-row {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attendance-summary-row:hover {
+  border-color: var(--primary);
+}
+
+.attendance-record-row {
+  align-items: flex-start;
+}
 
 .resource-inline-list {
   display: flex;
@@ -546,11 +673,11 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .role-badge { background: var(--primary-soft); color: var(--primary-dark); }
 .status.private, .status.draft, .status-chip.private, .status-chip.draft { background: #ede9fe; color: #5b21b6; }
-.status.published, .status.active, .status.present, .status.graded, .status-chip.published, .status-chip.active, .status-chip.present, .status-chip.graded { background: #dcfce7; color: var(--success); }
+.status.published, .status.active, .status.present, .status.graded, .status.open, .status-chip.published, .status-chip.active, .status-chip.present, .status-chip.graded, .status-chip.open { background: #dcfce7; color: var(--success); }
 .status.planned, .status.late, .status.submitted, .status.returned, .status-chip.planned, .status-chip.late, .status-chip.submitted, .status-chip.returned, .status-chip.pending { background: #fef3c7; color: var(--warning); }
 .status.absent, .status-chip.absent { background: var(--danger-soft); color: var(--danger); }
 .status.excused, .status-chip.excused { background: #e0f2fe; color: #0369a1; }
-.status.archived, .status.closed, .status.completed, .status.cancelled, .status.inactive, .status-chip.archived, .status-chip.closed, .status-chip.completed, .status-chip.cancelled, .status-chip.inactive, .status-chip.not_submitted { background: #e5e7eb; color: var(--closed); }
+.status.archived, .status.closed, .status.completed, .status.cancelled, .status.inactive, .status.locked, .status-chip.archived, .status-chip.closed, .status-chip.completed, .status-chip.cancelled, .status-chip.inactive, .status-chip.locked, .status-chip.not_submitted { background: #e5e7eb; color: var(--closed); }
 .status.invalid, .status-chip.invalid, .status-chip.restricted { background: #fee2e2; color: #991b1b; }
 .status.pending_review, .status-chip.pending_review { background: #fef9c3; color: #92400e; }
 

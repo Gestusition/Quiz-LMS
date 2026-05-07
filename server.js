@@ -20,6 +20,9 @@ const auditRoutes = require('./routes/auditRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const publicDir = path.join(__dirname, 'public');
+const resourceUploadRoot = path.join(publicDir, 'uploads', 'resources');
+const submissionUploadRoot = path.join(publicDir, 'uploads', 'submissions');
 
 // Middleware
 app.use((req, res, next) => {
@@ -50,7 +53,20 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Serve static frontend files
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(publicDir, {
+  setHeaders(res, filePath) {
+    const uploadRoots = [resourceUploadRoot, submissionUploadRoot];
+    const isUploadedFile = uploadRoots.some(root => {
+      const relative = path.relative(root, filePath);
+      return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+    });
+    if (!isUploadedFile) return;
+
+    const safeName = path.basename(filePath).replace(/["\r\n]/g, '');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+  }
+}));
 
 // API Routes
 app.use('/api/auth', authRoutes);

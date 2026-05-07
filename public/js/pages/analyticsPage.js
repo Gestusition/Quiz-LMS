@@ -37,7 +37,7 @@ export const AnalyticsPage = {
         <section class="content-grid">
           <div class="panel">
             <div class="panel-header"><h2>Course Enrollment Summary</h2><span>${data.courseEnrollmentSummary.length}</span></div>
-            <div class="list">${data.courseEnrollmentSummary.map(item => `
+            <div class="list compact scroll-list course-enrollment-scroll-list">${data.courseEnrollmentSummary.map(item => `
               <div class="list-row">
                 <div><strong>${this.esc(item.courseCode)} - ${this.esc(item.courseTitle)}</strong><small>${this.esc(item.termName)}</small></div>
                 <span class="role-badge">${item.enrollmentCount} students</span>
@@ -45,20 +45,16 @@ export const AnalyticsPage = {
             `).join('') || this.emptyLine('No course offering enrollments yet.')}</div>
           </div>
           <div class="panel">
-            <div class="panel-header"><h2>Attendance Summary</h2><span>${totals.attendanceRecords || 0} records</span></div>
-            <div class="list">${['present', 'absent', 'late', 'excused'].map(status => {
-              const row = data.attendanceSummary.find(item => item.status === status);
-              return `
-                <div class="list-row">
-                  <div><strong>${this.esc(status)}</strong><small>All attendance sessions</small></div>
-                  <span class="status ${status}">${row ? row.count : 0}</span>
-                </div>
-              `;
-            }).join('')}</div>
+            <div class="panel-header"><h2>Attendance Summary</h2><span id="attendance-summary-total">${totals.attendanceRecords || 0} records</span></div>
+            <div class="toolbar compact-toolbar">
+              <label class="form-field inline-field"><span>Date</span><input class="form-input" id="attendance-summary-date" type="date"></label>
+              <button class="btn btn-ghost btn-sm" id="attendance-summary-clear" type="button">Clear</button>
+            </div>
+            <div class="list compact" id="attendance-summary-list">${this.attendanceSummaryRows(data.attendanceSummary || [])}</div>
           </div>
           <div class="panel">
             <div class="panel-header"><h2>Recent Audit Logs</h2><span>${recentAudit.length}</span></div>
-            <div class="list compact">${recentAudit.map(log => `
+            <div class="list compact scroll-list analytics-scroll-list">${recentAudit.map(log => `
               <div class="list-row">
                 <div><strong>${this.esc(log.action)}</strong><small>${this.esc(log.actorName || 'System')} - ${this.esc(log.entityType)} #${this.esc(log.entityId || '-')}</small></div>
                 <small>${this.esc(this.formatDate(log.createdAt))}</small>
@@ -67,7 +63,7 @@ export const AnalyticsPage = {
           </div>
           <div class="panel">
             <div class="panel-header"><h2>Import Batches</h2><span>${batches.length}</span></div>
-            <div class="list compact">${batches.map(batch => `
+            <div class="list compact scroll-list analytics-scroll-list">${batches.map(batch => `
               <div class="list-row">
                 <div><strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong><small>${this.esc(batch.status)} | ${batch.successCount}/${batch.totalRows} success</small></div>
                 <button class="btn btn-ghost btn-sm" onclick="App.showImportBatchErrors(${batch.id})">Errors</button>
@@ -77,7 +73,7 @@ export const AnalyticsPage = {
         </section>
         <section class="panel">
           <div class="panel-header"><h2>Department Summaries</h2><span>${data.departmentSummary.length}</span></div>
-          <div class="table-wrap">
+          <div class="table-wrap scroll-table analytics-table-scroll">
             <table class="table">
               <thead><tr><th>Department</th><th>Faculty</th><th>Students</th><th>Instructors</th><th>Courses</th><th>Offerings</th></tr></thead>
               <tbody>${data.departmentSummary.map(item => `
@@ -94,9 +90,171 @@ export const AnalyticsPage = {
           </div>
         </section>
       `);
+      this.initAttendanceSummary(data.attendanceSummary || [], totals.attendanceRecords || 0);
     } catch (err) {
       this.renderError(err);
     }
+  },
+
+  attendanceStatuses() {
+    return ['present', 'absent', 'late', 'excused'];
+  },
+
+  attendanceSummaryRows(summary = []) {
+    const counts = new Map(summary.map(item => [item.status, Number(item.count || 0)]));
+    return this.attendanceStatuses().map(status => this.attendanceSummaryRow(status, counts.get(status) || 0)).join('');
+  },
+
+  attendanceSummaryRow(status, count) {
+    return `
+      <button class="list-row attendance-summary-row" type="button" data-status="${this.esc(status)}">
+        <div>
+          <strong>${this.esc(status)}</strong>
+          <small>All courses</small>
+        </div>
+        <span class="status ${this.esc(status)}">${this.esc(count)}</span>
+      </button>
+    `;
+  },
+
+  initAttendanceSummary(summary, total) {
+    this.attendanceSummaryBase = { summary, total };
+    this.attendanceRecordDetailsCache = null;
+    this.bindAttendanceSummaryRows();
+
+    const dateInput = document.getElementById('attendance-summary-date');
+    const clearButton = document.getElementById('attendance-summary-clear');
+    if (dateInput) {
+      dateInput.addEventListener('change', () => this.updateAttendanceSummaryForDate());
+    }
+    if (clearButton) {
+      clearButton.addEventListener('click', () => {
+        if (dateInput) dateInput.value = '';
+        this.renderAttendanceSummary(summary, total);
+      });
+    }
+  },
+
+  bindAttendanceSummaryRows() {
+    document.querySelectorAll('.attendance-summary-row').forEach(row => {
+      row.addEventListener('click', () => this.showAttendanceRecordsForStatus(row.dataset.status));
+    });
+  },
+
+  renderAttendanceSummary(summary, total) {
+    const list = document.getElementById('attendance-summary-list');
+    const totalLabel = document.getElementById('attendance-summary-total');
+    if (list) list.innerHTML = this.attendanceSummaryRows(summary);
+    if (totalLabel) totalLabel.textContent = `${total} record${Number(total) === 1 ? '' : 's'}`;
+    this.bindAttendanceSummaryRows();
+  },
+
+  async updateAttendanceSummaryForDate() {
+    const date = document.getElementById('attendance-summary-date')?.value || '';
+    if (!date) {
+      this.renderAttendanceSummary(this.attendanceSummaryBase.summary, this.attendanceSummaryBase.total);
+      return;
+    }
+
+    try {
+      const records = await this.getAttendanceRecordDetails();
+      const filtered = this.filterAttendanceRecordsByDate(records, date);
+      const summary = this.attendanceStatuses().map(status => ({
+        status,
+        count: filtered.filter(record => record.status === status).length
+      }));
+      this.renderAttendanceSummary(summary, filtered.length);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  async getAttendanceRecordDetails(filters = {}) {
+    if (!filters.status && this.attendanceRecordDetailsCache) return this.attendanceRecordDetailsCache;
+    const records = await API.getAttendanceRecordDetails(filters);
+    if (!filters.status) this.attendanceRecordDetailsCache = records;
+    return records;
+  },
+
+  async showAttendanceRecordsForStatus(status) {
+    try {
+      const records = await this.getAttendanceRecordDetails({ status });
+      const selectedDate = document.getElementById('attendance-summary-date')?.value || '';
+      this.openAttendanceRecordsModal(status, records, selectedDate);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  openAttendanceRecordsModal(status, records, selectedDate = '') {
+    const filtered = this.filterAttendanceRecordsByDate(records, selectedDate);
+    this.openModal(`${status} attendance`, `
+      <div class="stack">
+        <div class="toolbar compact-toolbar">
+          <label class="form-field inline-field"><span>Date</span><input class="form-input" id="attendance-record-date-filter" type="date" value="${this.esc(selectedDate)}"></label>
+          <button class="btn btn-ghost btn-sm" id="attendance-record-clear" type="button">Clear</button>
+          <span class="muted" id="attendance-record-count">${filtered.length} record${filtered.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="list compact scroll-list attendance-record-list" id="attendance-record-list">
+          ${this.attendanceRecordRows(filtered)}
+        </div>
+        <div class="modal-actions"><button type="button" class="btn btn-primary" onclick="App.closeModal()">Done</button></div>
+      </div>
+    `);
+
+    const dateInput = document.getElementById('attendance-record-date-filter');
+    const clearButton = document.getElementById('attendance-record-clear');
+    const update = () => {
+      const nextDate = dateInput?.value || '';
+      const nextRecords = this.filterAttendanceRecordsByDate(records, nextDate);
+      document.getElementById('attendance-record-list').innerHTML = this.attendanceRecordRows(nextRecords);
+      document.getElementById('attendance-record-count').textContent = `${nextRecords.length} record${nextRecords.length === 1 ? '' : 's'}`;
+    };
+    if (dateInput) dateInput.addEventListener('change', update);
+    if (clearButton) {
+      clearButton.addEventListener('click', () => {
+        if (dateInput) dateInput.value = '';
+        update();
+      });
+    }
+  },
+
+  attendanceRecordRows(records) {
+    return records.map(record => this.attendanceRecordRow(record)).join('') ||
+      this.emptyLine('No attendance records match this filter.');
+  },
+
+  attendanceRecordRow(record) {
+    const marker = record.markedByName || record.sessionCreatedByName || record.instructorName || 'Unknown user';
+    const studentId = record.studentNumber || record.studentEmail || `User #${record.studentId}`;
+    return `
+      <div class="list-row attendance-record-row">
+        <div>
+          <strong>${this.esc(record.courseCode)} - ${this.esc(record.courseTitle)}</strong>
+          <small>${this.esc(record.termName || '')}${record.topic ? ` - ${this.esc(record.topic)}` : ''}</small>
+          <small>Student: ${this.esc(record.studentName || 'Unknown student')} (${this.esc(studentId)})</small>
+          <small>Session: ${this.esc(this.formatDate(record.sessionDate))}</small>
+          <small>Marked by: ${this.esc(marker)}${record.updatedAt ? ` - ${this.esc(this.formatDate(record.updatedAt))}` : ''}</small>
+          ${record.note ? `<small>Note: ${this.esc(record.note)}</small>` : ''}
+        </div>
+        <span class="status ${this.esc(record.status)}">${this.esc(record.status)}</span>
+      </div>
+    `;
+  },
+
+  filterAttendanceRecordsByDate(records, date) {
+    if (!date) return records;
+    return records.filter(record => this.localDateValue(record.sessionDate) === date);
+  },
+
+  localDateValue(dateText) {
+    if (!dateText) return '';
+    const date = new Date(dateText);
+    if (Number.isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   },
 
   async showImportBatchErrors(batchId) {

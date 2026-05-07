@@ -51,7 +51,7 @@ export const AttendancePage = {
       <div class="list-row">
         <div>
           <strong>${this.esc(session.courseCode)} - ${this.esc(session.courseTitle)}</strong>
-          <small>${this.esc(session.sessionDate)}${session.topic ? ` - ${this.esc(session.topic)}` : ''} - ${session.recordCount || 0} records</small>
+          <small>${this.esc(this.formatDate(session.sessionDate))}${session.topic ? ` - ${this.esc(session.topic)}` : ''} - ${session.recordCount || 0} records</small>
         </div>
         <div class="row-actions">
           <button class="btn btn-ghost btn-sm" onclick="App.showAttendanceSummary(${session.courseOfferingId})">Summary</button>
@@ -66,7 +66,7 @@ export const AttendancePage = {
       <div class="list-row">
         <div>
           <strong>${this.esc(record.courseCode)} - ${this.esc(record.courseTitle)}</strong>
-          <small>${this.esc(record.sessionDate)}${record.topic ? ` - ${this.esc(record.topic)}` : ''}</small>
+          <small>${this.esc(this.formatDate(record.sessionDate))}${record.topic ? ` - ${this.esc(record.topic)}` : ''}</small>
           ${record.note ? `<small>${this.esc(record.note)}</small>` : ''}
         </div>
         <span class="status ${this.esc(record.status)}">${this.esc(record.status)}</span>
@@ -81,7 +81,7 @@ export const AttendancePage = {
         <label class="form-field"><span>Course offering</span><select class="form-select" id="attendance-offering">
           ${offerings.map(offering => `<option value="${offering.id}">${this.esc(offering.courseCode)} - ${this.esc(offering.termName)}</option>`).join('')}
         </select></label>
-        ${this.input('attendance-date', 'Session date', new Date().toISOString().slice(0, 10), 'date')}
+        ${this.input('attendance-date', 'Session date and time', this.dateTimeInputValue(), 'datetime-local')}
         ${this.input('attendance-topic', 'Topic')}
         <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary">Create</button></div>
       </form>
@@ -160,5 +160,10 @@ export const AttendancePage = {
         </div>
       `);
     } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  dateTimeInputValue(date = new Date()) {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
   }
 };

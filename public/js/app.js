@@ -2,7 +2,7 @@ import { API } from './api.js';
 import { state } from './state.js';
 import { routeTo } from './router.js';
 import { esc } from './utils/escape.js';
-import { formatDate } from './utils/date.js';
+import { dateInputValue, formatDate, formatDateOnly } from './utils/date.js';
 import { setHtml } from './utils/dom.js';
 import { value, formMethods } from './components/form.js';
 import { modalMethods } from './components/modal.js';
@@ -128,6 +128,8 @@ const App = {
   esc,
 
   formatDate,
+  formatDateOnly,
+  dateInputValue,
 
   canManageLearning() {
     return this.user && ['admin', 'teacher'].includes(this.user.role);

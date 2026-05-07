@@ -383,9 +383,12 @@ const options = {
             id: { type: 'integer' },
             courseId: { type: 'integer' },
             title: { type: 'string' },
-            type: { type: 'string', enum: ['link', 'file', 'page'] },
+            type: { type: 'string', enum: ['link', 'file'] },
             url: { type: 'string' },
             description: { type: 'string' },
+            fileName: { type: 'string' },
+            fileSizeBytes: { type: 'integer' },
+            mimeType: { type: 'string' },
             createdBy: { type: 'integer' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' }
@@ -396,7 +399,7 @@ const options = {
           required: ['title', 'url'],
           properties: {
             title: { type: 'string' },
-            type: { type: 'string', enum: ['link', 'file', 'page'] },
+            type: { type: 'string', enum: ['link', 'file'] },
             url: { type: 'string' },
             description: { type: 'string' }
           }
@@ -1002,8 +1005,11 @@ const options = {
             id: { type: 'integer' },
             weekId: { type: 'integer' },
             title: { type: 'string' },
-            type: { type: 'string', enum: ['link', 'file', 'page'] },
+            type: { type: 'string', enum: ['link', 'file'] },
             content: { type: 'string' },
+            fileName: { type: 'string' },
+            fileSizeBytes: { type: 'integer' },
+            mimeType: { type: 'string' },
             visibleFrom: { type: 'string', format: 'date-time', nullable: true },
             visibleUntil: { type: 'string', format: 'date-time', nullable: true },
             createdBy: { type: 'integer', nullable: true },
@@ -1015,7 +1021,7 @@ const options = {
           required: ['title'],
           properties: {
             title: { type: 'string' },
-            type: { type: 'string', enum: ['link', 'file', 'page'], default: 'link' },
+            type: { type: 'string', enum: ['link', 'file'], default: 'link' },
             content: { type: 'string' },
             url: { type: 'string', description: 'Alias for content' },
             visibleFrom: { type: 'string', format: 'date-time' },

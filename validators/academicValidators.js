@@ -137,11 +137,24 @@ function validateAssignment(data) {
 
 function validateSubmission(data) {
   const submissionText = shortText(data.submissionText, 'Submission text', LIMITS.assignments.submissionTextMax, false);
-  const submissionUrl = optionalUrl(data.submissionUrl, 'Submission URL', LIMITS.assignments.submissionUrlMax);
-  if (!submissionText && !submissionUrl) {
-    throw validationError('submission', 'Submission text or URL is required.');
+  const submissionUrl = optionalUrl(data.submissionUrl, 'Submission URL', LIMITS.assignments.submissionUrlMax, {
+    allowRelative: true,
+    allowedRelativePrefixes: ['/uploads/submissions/']
+  });
+  const isUploadedFile = submissionUrl.startsWith('/uploads/submissions/');
+  const fileName = isUploadedFile ? shortText(data.fileName, 'File name', LIMITS.imports.fileNameMax, false) : '';
+  const mimeType = isUploadedFile ? shortText(data.mimeType, 'MIME type', 160, false) : '';
+  let fileSizeBytes = 0;
+  if (isUploadedFile) {
+    fileSizeBytes = Number(data.fileSizeBytes || 0);
+    if (!Number.isInteger(fileSizeBytes) || fileSizeBytes < 0 || fileSizeBytes > LIMITS.assignments.submissionFileSizeMaxBytes) {
+      throw validationError('file', 'Submission file must be 100 MB or smaller.');
+    }
   }
-  return { submissionText, submissionUrl };
+  if (!submissionText && !submissionUrl) {
+    throw validationError('submission', 'Submission text, URL, or file is required.');
+  }
+  return { submissionText, submissionUrl, fileName, fileSizeBytes, mimeType };
 }
 
 function validateSubmissionGrade(data) {

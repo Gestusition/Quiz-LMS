@@ -1,5 +1,6 @@
 const courseRepository = require('../repositories/courseRepository');
 const contentRepository = require('../repositories/contentRepository');
+const { removeUploadedResourceByUrl } = require('../middleware/upload');
 const {
   validateAnnouncement,
   validateResource
@@ -51,6 +52,7 @@ class ContentService {
       throw new Error('Resource not found.');
     }
     contentRepository.deleteResource(id);
+    removeUploadedResourceByUrl(existing.url);
     return true;
   }
 }

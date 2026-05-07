@@ -40,7 +40,9 @@ function listThreads(courseId, filters = {}) {
 
 function findThreadById(id) {
   return getDatabase().prepare(`
-    SELECT t.*, u.name as createdByName
+    SELECT t.*, u.name as createdByName, u.role as createdByRole,
+      (SELECT COUNT(*) FROM course_thread_replies r WHERE r.threadId = t.id) as replyCount,
+      (SELECT MAX(r.createdAt) FROM course_thread_replies r WHERE r.threadId = t.id) as lastReplyAt
     FROM course_threads t
     LEFT JOIN users u ON u.id = t.createdBy
     WHERE t.id = ?
@@ -88,6 +90,15 @@ function listReplies(threadId, filters = {}) {
   };
 }
 
+function findReplyById(id) {
+  return getDatabase().prepare(`
+    SELECT r.*, u.name as createdByName, u.role as createdByRole
+    FROM course_thread_replies r
+    LEFT JOIN users u ON u.id = r.createdBy
+    WHERE r.id = ?
+  `).get(id) || null;
+}
+
 function createReply(payload) {
   return getDatabase().prepare(`
     INSERT INTO course_thread_replies (threadId, body, createdBy)
@@ -116,6 +127,7 @@ module.exports = {
   createReply,
   createThread,
   deleteByCourseId,
+  findReplyById,
   findThreadById,
   listReplies,
   listThreads,

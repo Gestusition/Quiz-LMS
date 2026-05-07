@@ -3,6 +3,7 @@ const courseRepository = require('../repositories/courseRepository');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const { LIMITS } = require('../constants/limits');
 const { notFoundError, forbiddenError } = require('../utils/appError');
+const { removeUploadedResourceByUrl } = require('../middleware/upload');
 const {
   dateValue,
   ensureDateOrder,
@@ -14,7 +15,7 @@ const {
 } = require('../utils/validation');
 const { nowIso } = require('../utils/security');
 
-const RESOURCE_TYPES = ['link', 'file', 'page'];
+const RESOURCE_TYPES = ['link', 'file'];
 
 class CourseWeekService {
   listWeeks(courseId, user, filters = {}) {
@@ -91,11 +92,19 @@ class CourseWeekService {
     const visibleUntil = dateValue(data.visibleUntil, 'visible_until', { required: false });
     ensureDateOrder(visibleFrom, visibleUntil, 'visible_from', 'visible_until');
 
+    const fileSizeBytes = Number.isInteger(Number(data.fileSizeBytes)) ? Number(data.fileSizeBytes) : 0;
+    if (fileSizeBytes > LIMITS.resources.fileSizeMaxBytes) {
+      throw new Error('Resource file must be 100 MB or smaller.');
+    }
+
     const result = courseWeekRepository.createWeekResource({
       weekId,
       title: requiredText(data.title, 'title', { min: 2, max: LIMITS.resources.titleMax }),
       type: enumValue(data.type, 'type', RESOURCE_TYPES, 'link'),
       content: this.validateResourceContent(data.content || data.url, data.type),
+      fileName: optionalText(data.fileName, 'fileName', 255),
+      fileSizeBytes,
+      mimeType: optionalText(data.mimeType, 'mimeType', 120),
       visibleFrom,
       visibleUntil,
       createdBy: user.id
@@ -111,6 +120,7 @@ class CourseWeekService {
     if (!week) throw notFoundError('Course week not found.');
     this.ensureCourseManager(week.courseId, user);
     courseWeekRepository.deleteWeekResource(resourceId);
+    removeUploadedResourceByUrl(resource.content);
     return true;
   }
 
@@ -132,13 +142,14 @@ class CourseWeekService {
 
   validateResourceContent(value, type) {
     const normalizedType = enumValue(type, 'type', RESOURCE_TYPES, 'link');
-    if (normalizedType === 'page') {
-      return optionalText(value, 'content', LIMITS.resources.urlMax);
-    }
-    return optionalUrl(value, 'content', LIMITS.resources.urlMax, {
+    const content = optionalUrl(value, 'content', LIMITS.resources.urlMax, {
       allowRelative: normalizedType === 'file',
-      allowedRelativePrefixes: ['/uploads/']
+      allowedRelativePrefixes: ['/uploads/resources/']
     });
+    if (!content) {
+      throw new Error(normalizedType === 'file' ? 'A resource file is required.' : 'URL is required.');
+    }
+    return content;
   }
 }
 

@@ -121,13 +121,16 @@ function listWeekResources(weekId, filters = {}) {
 
 function createWeekResource(payload) {
   return getDatabase().prepare(`
-    INSERT INTO week_resources (weekId, title, type, content, visibleFrom, visibleUntil, createdBy)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO week_resources (weekId, title, type, content, fileName, fileSizeBytes, mimeType, visibleFrom, visibleUntil, createdBy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     payload.weekId,
     payload.title,
     payload.type,
     payload.content || '',
+    payload.fileName || '',
+    payload.fileSizeBytes || 0,
+    payload.mimeType || '',
     payload.visibleFrom || '',
     payload.visibleUntil || '',
     payload.createdBy || null

@@ -78,6 +78,12 @@ export const AssignmentsPage = {
               <div class="panel-header"><h2>Your Submission</h2><span>${this.esc(own.ownSubmissionStatus || 'not submitted')}</span></div>
               <div class="profile-list">
                 ${this.profileRow('Submitted at', own.ownSubmittedAt ? this.formatDate(own.ownSubmittedAt) : '')}
+                ${this.submissionInfoRow('Submitted work', this.submissionLinkHtml({
+                  submissionUrl: own.ownSubmissionUrl,
+                  fileName: own.ownFileName,
+                  fileSizeBytes: own.ownFileSizeBytes
+                }))}
+                ${own.ownSubmissionText ? this.submissionInfoRow('Submission text', this.esc(own.ownSubmissionText)) : ''}
                 ${this.profileRow('Late', own.ownLate ? 'Yes' : '')}
                 ${this.profileRow('Grade', own.ownGrade || '')}
                 ${this.profileRow('Feedback', own.ownFeedback || '')}
@@ -141,7 +147,7 @@ export const AssignmentsPage = {
         ${this.input('assignment-title', 'Title', item.title)}
         ${this.textarea('assignment-description', 'Description', item.description)}
         <div class="form-grid">
-          ${this.input('assignment-due', 'Due date', item.dueDate ? item.dueDate.slice(0, 10) : '', 'date')}
+          ${this.input('assignment-due', 'Due date', this.dateInputValue(item.dueDate), 'date')}
           <label class="form-field"><span>Status</span><select class="form-select" id="assignment-status">
             ${['draft', 'published', 'closed'].map(status => `<option value="${status}" ${item.status === status ? 'selected' : ''}>${status}</option>`).join('')}
           </select></label>
@@ -171,19 +177,22 @@ export const AssignmentsPage = {
     this.openModal('Submit assignment', `
       <form id="submission-form" class="stack">
         ${this.textarea('submission-text', 'Submission text')}
-        ${this.input('submission-url', 'Submission URL', '', 'url', 'https://...')}
+        <label class="form-field"><span>Submission type</span><select class="form-select" id="submission-type">
+          <option value="link">link</option>
+          <option value="file">file</option>
+        </select></label>
+        <div id="submission-link-field">${this.input('submission-url', 'Submission URL', '', 'url', 'https://...')}</div>
+        <label class="form-field" id="submission-file-field" style="display:none"><span>Submission file</span><input class="form-input" id="submission-file" type="file" accept="${this.submissionFileAccept()}"></label>
         <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary">Submit</button></div>
       </form>
     `);
+    this.bindSubmissionTypeFields();
     document.getElementById('submission-form').addEventListener('submit', async event => {
       event.preventDefault();
       try {
-        await API.submitAssignment(assignmentId, {
-          submissionText: value('submission-text'),
-          submissionUrl: value('submission-url')
-        });
+        await API.submitAssignment(assignmentId, this.submissionPayload());
         this.closeModal();
-        this.renderAssignments();
+        this.route();
         this.toast('Submission saved.', 'success');
       } catch (err) { this.toast(err.message, 'error'); }
     });
@@ -210,7 +219,8 @@ export const AssignmentsPage = {
               <div>
                 <strong>${this.esc(item.studentName)}</strong>
                 <small>${this.esc(item.studentNumber || item.studentEmail)} - ${this.esc(item.status)}</small>
-                ${item.submissionUrl ? `<small><a href="${this.esc(item.submissionUrl)}" target="_blank" rel="noopener noreferrer">${this.esc(item.submissionUrl)}</a></small>` : ''}
+                ${item.submittedAt ? `<small>Submitted ${this.esc(this.formatDate(item.submittedAt))}${item.late ? ' - late' : ''}</small>` : ''}
+                ${item.submissionUrl ? `<small>${this.submissionLinkHtml(item)}</small>` : ''}
                 ${item.submissionText ? `<small>${this.esc(item.submissionText)}</small>` : ''}
                 ${item.grade ? `<small>Grade: ${this.esc(item.grade)} - ${this.esc(item.feedback || '')}</small>` : ''}
               </div>
@@ -247,5 +257,57 @@ export const AssignmentsPage = {
         this.toast('Submission graded.', 'success');
       } catch (err) { this.toast(err.message, 'error'); }
     });
+  },
+
+  bindSubmissionTypeFields() {
+    const type = document.getElementById('submission-type');
+    const linkField = document.getElementById('submission-link-field');
+    const fileField = document.getElementById('submission-file-field');
+    if (!type || !linkField || !fileField) return;
+    const sync = () => {
+      const isFile = type.value === 'file';
+      linkField.style.display = isFile ? 'none' : '';
+      fileField.style.display = isFile ? '' : 'none';
+    };
+    type.addEventListener('change', sync);
+    sync();
+  },
+
+  submissionPayload() {
+    const submissionText = value('submission-text');
+    if (value('submission-type') === 'file') {
+      const formData = new FormData();
+      formData.append('submissionText', submissionText);
+      const file = document.getElementById('submission-file')?.files[0];
+      if (file) formData.append('file', file);
+      return formData;
+    }
+    return {
+      submissionText,
+      submissionUrl: value('submission-url')
+    };
+  },
+
+  submissionFileAccept() {
+    return this.resourceFileAccept ? this.resourceFileAccept() : '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.html,.htm,.rtf,.zip';
+  },
+
+  submissionInfoRow(label, html) {
+    if (!html) return '';
+    return `
+      <div class="profile-row">
+        <span>${this.esc(label)}</span>
+        <strong>${html}</strong>
+      </div>
+    `;
+  },
+
+  submissionLinkHtml(item) {
+    const url = item?.submissionUrl || '';
+    if (!url) return '';
+    const fileName = item.fileName || '';
+    const label = fileName || url;
+    const size = fileName && item.fileSizeBytes ? ` (${this.formatFileSize(item.fileSizeBytes)})` : '';
+    return `<a href="${this.esc(url)}" target="_blank" rel="noopener noreferrer">${this.esc(label)}</a>${this.esc(size)}`;
   }
 };

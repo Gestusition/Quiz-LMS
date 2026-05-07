@@ -28,8 +28,7 @@ const quizStatus = Object.freeze({
 
 const resourceType = Object.freeze({
   link: 'link',
-  file: 'file',
-  page: 'page'
+  file: 'file'
 });
 
 const questionType = Object.freeze({

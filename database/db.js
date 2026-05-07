@@ -423,6 +423,9 @@ function createTables() {
       studentId INTEGER NOT NULL,
       submissionText TEXT DEFAULT '',
       submissionUrl TEXT DEFAULT '',
+      fileName TEXT DEFAULT '',
+      fileSizeBytes INTEGER NOT NULL DEFAULT 0,
+      mimeType TEXT DEFAULT '',
       status TEXT NOT NULL DEFAULT 'submitted' CHECK(status IN ('submitted', 'graded', 'returned')),
       submittedAt TEXT DEFAULT (datetime('now')),
       grade TEXT DEFAULT '',
@@ -448,9 +451,12 @@ function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER NOT NULL,
       title TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'link' CHECK(type IN ('link', 'file', 'page')),
+      type TEXT NOT NULL DEFAULT 'link' CHECK(type IN ('link', 'file')),
       url TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      fileName TEXT DEFAULT '',
+      fileSizeBytes INTEGER NOT NULL DEFAULT 0,
+      mimeType TEXT DEFAULT '',
       createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now'))
     );
@@ -584,8 +590,11 @@ function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       weekId INTEGER NOT NULL,
       title TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'link' CHECK(type IN ('link', 'file', 'page')),
+      type TEXT NOT NULL DEFAULT 'link' CHECK(type IN ('link', 'file')),
       content TEXT DEFAULT '',
+      fileName TEXT DEFAULT '',
+      fileSizeBytes INTEGER NOT NULL DEFAULT 0,
+      mimeType TEXT DEFAULT '',
       visibleFrom TEXT DEFAULT '',
       visibleUntil TEXT DEFAULT '',
       createdBy INTEGER,
@@ -684,12 +693,21 @@ function migrateExistingTables() {
   ensureColumn('assessment', 'attempt_answers', 'gradedAt', 'gradedAt TEXT DEFAULT \'\'');
 
   ensureColumn('assessment', 'assignment_submissions', 'late', 'late INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('assessment', 'assignment_submissions', 'fileName', 'fileName TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'assignment_submissions', 'fileSizeBytes', 'fileSizeBytes INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('assessment', 'assignment_submissions', 'mimeType', 'mimeType TEXT DEFAULT \'\'');
 
   ensureColumn('content', 'announcements', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
   ensureColumn('content', 'resources', 'weekId', 'weekId INTEGER');
   ensureColumn('content', 'resources', 'visibleFrom', 'visibleFrom TEXT DEFAULT \'\'');
   ensureColumn('content', 'resources', 'visibleUntil', 'visibleUntil TEXT DEFAULT \'\'');
   ensureColumn('content', 'resources', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
+  ensureColumn('content', 'resources', 'fileName', 'fileName TEXT DEFAULT \'\'');
+  ensureColumn('content', 'resources', 'fileSizeBytes', 'fileSizeBytes INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('content', 'resources', 'mimeType', 'mimeType TEXT DEFAULT \'\'');
+  ensureColumn('content', 'week_resources', 'fileName', 'fileName TEXT DEFAULT \'\'');
+  ensureColumn('content', 'week_resources', 'fileSizeBytes', 'fileSizeBytes INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('content', 'week_resources', 'mimeType', 'mimeType TEXT DEFAULT \'\'');
 
   normalizeUserIdentityState();
   normalizeAcademicProfileState();
@@ -1202,7 +1220,7 @@ function seedLmsData(database) {
     database.prepare(`
       INSERT INTO resources (courseId, title, type, url, description, createdBy)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(courseId, 'Course syllabus', 'page', '', 'Weekly topics, assessment policy, and quiz rules.', teacher.id);
+    `).run(courseId, 'Course syllabus', 'link', 'https://example.com/course-syllabus', 'Weekly topics, assessment policy, and quiz rules.', teacher.id);
   }
 }
 

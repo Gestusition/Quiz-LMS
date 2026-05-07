@@ -76,6 +76,7 @@ const LIMITS = Object.freeze({
     descriptionMax: 5000,
     submissionTextMax: 10000,
     submissionUrlMax: 500,
+    submissionFileSizeMaxBytes: 100 * 1024 * 1024,
     feedbackMax: 5000,
     gradeMax: 40
   }),
@@ -86,7 +87,8 @@ const LIMITS = Object.freeze({
   resources: Object.freeze({
     titleMax: 160,
     descriptionMax: 2000,
-    urlMax: 500
+    urlMax: 500,
+    fileSizeMaxBytes: 100 * 1024 * 1024
   }),
   announcements: Object.freeze({
     titleMax: 160,

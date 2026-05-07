@@ -470,7 +470,7 @@ function listAssignments(user, filters = {}) {
       t.name as termName, t.isActive as termIsActive,
       u.name as instructorName,
       COUNT(DISTINCT s.id) as submissionCount
-      ${user.role === 'student' ? ', own.id as ownSubmissionId, own.status as ownSubmissionStatus, own.grade as ownGrade, own.feedback as ownFeedback, own.submittedAt as ownSubmittedAt, own.late as ownLate' : ''}
+      ${user.role === 'student' ? ', own.id as ownSubmissionId, own.status as ownSubmissionStatus, own.grade as ownGrade, own.feedback as ownFeedback, own.submittedAt as ownSubmittedAt, own.late as ownLate, own.submissionText as ownSubmissionText, own.submissionUrl as ownSubmissionUrl, own.fileName as ownFileName, own.fileSizeBytes as ownFileSizeBytes, own.mimeType as ownMimeType' : ''}
     FROM assignments a
     JOIN course_offerings co ON co.id = a.courseOfferingId
     JOIN courses c ON c.id = co.courseId
@@ -590,6 +590,10 @@ function findSubmissionByAssignmentStudent(assignmentId, studentId) {
   `).get(assignmentId, studentId) || null;
 }
 
+function listSubmissionsByStudent(studentId) {
+  return getDatabase().prepare('SELECT * FROM assignment_submissions WHERE studentId = ?').all(studentId);
+}
+
 function deleteSubmissionsByStudent(studentId) {
   return getDatabase().prepare('DELETE FROM assignment_submissions WHERE studentId = ?').run(studentId);
 }
@@ -612,18 +616,39 @@ function upsertSubmission(assignmentId, studentId, payload, submittedAt, late = 
   if (existing) {
     getDatabase().prepare(`
       UPDATE assignment_submissions
-      SET submissionText = ?, submissionUrl = ?, status = 'submitted', submittedAt = ?,
+      SET submissionText = ?, submissionUrl = ?, fileName = ?, fileSizeBytes = ?, mimeType = ?,
+        status = 'submitted', submittedAt = ?,
         late = ?, grade = '', feedback = '', gradedAt = '', gradedBy = NULL, updatedAt = ?
       WHERE id = ?
-    `).run(payload.submissionText, payload.submissionUrl, submittedAt, late ? 1 : 0, submittedAt, existing.id);
+    `).run(
+      payload.submissionText,
+      payload.submissionUrl,
+      payload.fileName,
+      payload.fileSizeBytes,
+      payload.mimeType,
+      submittedAt,
+      late ? 1 : 0,
+      submittedAt,
+      existing.id
+    );
     return { lastInsertRowid: existing.id };
   }
   return getDatabase().prepare(`
     INSERT INTO assignment_submissions (
-      assignmentId, studentId, submissionText, submissionUrl, status, submittedAt, late
+      assignmentId, studentId, submissionText, submissionUrl, fileName, fileSizeBytes, mimeType, status, submittedAt, late
     )
-    VALUES (?, ?, ?, ?, 'submitted', ?, ?)
-  `).run(assignmentId, studentId, payload.submissionText, payload.submissionUrl, submittedAt, late ? 1 : 0);
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)
+  `).run(
+    assignmentId,
+    studentId,
+    payload.submissionText,
+    payload.submissionUrl,
+    payload.fileName,
+    payload.fileSizeBytes,
+    payload.mimeType,
+    submittedAt,
+    late ? 1 : 0
+  );
 }
 
 function gradeSubmission(id, payload, gradedAt, gradedBy) {
@@ -712,13 +737,63 @@ function upsertAttendanceRecord(sessionId, record, markedBy, updatedAt) {
 
 function listAttendanceRecords(sessionId) {
   return getDatabase().prepare(`
-    SELECT ar.*, u.name as studentName, u.email as studentEmail, sp.studentNumber
+    SELECT ar.*, u.name as studentName, u.email as studentEmail, sp.studentNumber,
+      markedByUser.name as markedByName, markedByUser.role as markedByRole
     FROM attendance_records ar
     JOIN users u ON u.id = ar.studentId
     LEFT JOIN student_profiles sp ON sp.userId = u.id
+    LEFT JOIN users markedByUser ON markedByUser.id = ar.markedBy
     WHERE ar.sessionId = ?
     ORDER BY u.name ASC
   `).all(sessionId);
+}
+
+function listAttendanceRecordDetails(user, filters = {}) {
+  const params = [];
+  let query = `
+    SELECT ar.*, ats.sessionDate, ats.topic,
+      co.id as courseOfferingId, co.courseId, co.instructorId,
+      c.code as courseCode, c.title as courseTitle,
+      t.name as termName,
+      student.name as studentName, student.email as studentEmail, sp.studentNumber,
+      markedByUser.name as markedByName, markedByUser.role as markedByRole,
+      sessionCreator.name as sessionCreatedByName,
+      instructor.name as instructorName
+    FROM attendance_records ar
+    JOIN attendance_sessions ats ON ats.id = ar.sessionId
+    JOIN course_offerings co ON co.id = ats.courseOfferingId
+    JOIN courses c ON c.id = co.courseId
+    JOIN academic_terms t ON t.id = ats.termId
+    JOIN users student ON student.id = ar.studentId
+    LEFT JOIN student_profiles sp ON sp.userId = student.id
+    LEFT JOIN users markedByUser ON markedByUser.id = ar.markedBy
+    LEFT JOIN users sessionCreator ON sessionCreator.id = ats.createdBy
+    LEFT JOIN users instructor ON instructor.id = co.instructorId
+    WHERE 1=1
+  `;
+
+  if (user.role === 'teacher') {
+    query += ` AND (
+      co.instructorId = ?
+      OR co.courseId IN (
+        SELECT courseId FROM enrollments
+        WHERE userId = ? AND role = 'teacher' AND status = 'active'
+      )
+    )`;
+    params.push(user.id, user.id);
+  }
+
+  if (filters.status) {
+    query += ' AND ar.status = ?';
+    params.push(filters.status);
+  }
+  if (filters.courseOfferingId) {
+    query += ' AND ats.courseOfferingId = ?';
+    params.push(filters.courseOfferingId);
+  }
+
+  query += ' ORDER BY ats.sessionDate DESC, ar.updatedAt DESC, student.name ASC';
+  return getDatabase().prepare(query).all(...params);
 }
 
 function listAttendanceForStudent(studentId) {
@@ -786,7 +861,6 @@ function adminAnalytics() {
       LEFT JOIN course_offering_enrollments oe ON oe.courseOfferingId = co.id AND oe.status = 'active'
       GROUP BY co.id
       ORDER BY enrollmentCount DESC, c.code ASC
-      LIMIT 10
     `),
     departmentSummary: all(`
       SELECT d.id, d.name, d.code, f.name as facultyName,
@@ -864,6 +938,7 @@ module.exports = {
   insertTerm,
   listAssignments,
   listAttendanceForStudent,
+  listAttendanceRecordDetails,
   listAttendanceRecords,
   listAttendanceSessions,
   listClassYears,
@@ -873,6 +948,7 @@ module.exports = {
   listOfferingEnrollments,
   listSections,
   listSubmissions,
+  listSubmissionsByStudent,
   listTerms,
   setActiveTerm,
   updateAssignment,
