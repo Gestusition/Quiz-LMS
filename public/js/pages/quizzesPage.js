@@ -200,7 +200,7 @@ export const QuizzesPage = {
             <label class="check-field"><input type="checkbox" id="quiz-seb" ${quiz.requiresSeb ? 'checked' : ''}> Require SEB</label>
           </div>
           <div class="form-grid" id="penalty-options" style="${quiz.penaltyEnabled ? '' : 'display:none'}">
-            ${this.input('quiz-penalty-amount', 'Penalty per wrong answer', quiz.penaltyPerWrong || 0, 'number')}
+            ${this.input('quiz-penalty-amount', 'Penalty per wrong answer', quiz.penaltyPerWrong || 0, 'number', '', { min: 0, max: 100, step: 'any' })}
           </div>
         </div>
         <div class="modal-actions">
