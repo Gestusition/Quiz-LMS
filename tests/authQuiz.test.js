@@ -1,6 +1,14 @@
 const path = require('path');
 const fs = require('fs');
-const { initDatabase, seedDatabase, closeDatabase, getDatabase, getDatabaseFiles, resolveDatabaseFiles } = require('../database/db');
+const {
+  DATABASE_CONTEXTS,
+  initDatabase,
+  seedDatabase,
+  closeDatabase,
+  getDatabase,
+  getDatabaseFiles,
+  resolveDatabaseFiles
+} = require('../database/db');
 const authService = require('../services/authService');
 const quizService = require('../services/quizService');
 const restrictionService = require('../services/restrictionService');
@@ -41,6 +49,24 @@ function cookie(session) {
   return `auth_token=${session.token}`;
 }
 
+function getDeclaredContextTables() {
+  const dbSource = fs.readFileSync(path.join(__dirname, '..', 'database', 'db.js'), 'utf8');
+  const tablePattern = /CREATE TABLE IF NOT EXISTS\s+([a-z_]+)\.([a-z_]+)/g;
+  const tablesByContext = new Map(Object.keys(DATABASE_CONTEXTS).map(context => [context, []]));
+  let match;
+
+  while ((match = tablePattern.exec(dbSource)) !== null) {
+    const [, context, table] = match;
+    if (tablesByContext.has(context)) {
+      tablesByContext.get(context).push(table);
+    }
+  }
+
+  return Object.fromEntries(
+    [...tablesByContext.entries()].map(([context, tables]) => [context, [...new Set(tables)].sort()])
+  );
+}
+
 beforeAll(() => {
   removeDbFiles();
   initDatabase(TEST_DB);
@@ -55,22 +81,26 @@ afterAll(() => {
 describe('Auth and quiz attempt flow', () => {
   test('uses separate SQLite files for each bounded context', () => {
     const files = getDatabaseFiles();
-    expect(Object.keys(files)).toEqual(expect.arrayContaining([
-      'users',
-      'admin',
-      'teacher',
-      'student',
-      'learning',
-      'assessment',
-      'content'
-    ]));
-    expect(fs.existsSync(files.users)).toBe(true);
-    expect(fs.existsSync(files.admin)).toBe(true);
-    expect(fs.existsSync(files.teacher)).toBe(true);
-    expect(fs.existsSync(files.student)).toBe(true);
-    expect(fs.existsSync(files.learning)).toBe(true);
-    expect(fs.existsSync(files.assessment)).toBe(true);
-    expect(fs.existsSync(files.content)).toBe(true);
+    const contexts = Object.keys(DATABASE_CONTEXTS);
+
+    expect(Object.keys(files)).toEqual(expect.arrayContaining(contexts));
+    contexts.forEach(context => {
+      expect(fs.existsSync(files[context])).toBe(true);
+    });
+  });
+
+  test('fresh setup creates the required tables in each database context', () => {
+    const expectedTables = getDeclaredContextTables();
+    const database = getDatabase();
+    Object.entries(expectedTables).forEach(([schema, tables]) => {
+      const actualTables = database.prepare(`
+        SELECT name
+        FROM ${schema}.sqlite_master
+        WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+      `).all().map(row => row.name).sort();
+
+      expect(actualTables).toEqual(tables);
+    });
   });
 
   test('seeds role-specific profile databases for admin, teacher, and student', () => {
