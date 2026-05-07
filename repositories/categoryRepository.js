@@ -68,6 +68,10 @@ function deleteById(id) {
   return getDatabase().prepare('DELETE FROM categories WHERE id = ?').run(id);
 }
 
+function deleteByCourseId(courseId) {
+  return getDatabase().prepare('DELETE FROM categories WHERE courseId = ?').run(courseId);
+}
+
 function withTransaction(work) {
   const db = getDatabase();
   db.exec('BEGIN TRANSACTION');
@@ -82,6 +86,7 @@ function withTransaction(work) {
 }
 
 module.exports = {
+  deleteByCourseId,
   deleteById,
   findById,
   findDuplicateName,

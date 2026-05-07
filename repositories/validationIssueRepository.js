@@ -100,9 +100,25 @@ function countOpen() {
   `).get().count;
 }
 
+function clearUserReferences(userId) {
+  const db = getDatabase();
+  db.prepare('UPDATE validation_issues SET relatedUserId = NULL WHERE relatedUserId = ?').run(userId);
+  db.prepare('UPDATE validation_issues SET resolvedBy = NULL WHERE resolvedBy = ?').run(userId);
+}
+
+function deleteByCourseId(courseId) {
+  return getDatabase().prepare(`
+    DELETE FROM validation_issues
+    WHERE relatedCourseId = ?
+      OR (entityType = 'course' AND entityId = ?)
+  `).run(courseId, courseId);
+}
+
 module.exports = {
+  clearUserReferences,
   countOpen,
   create,
+  deleteByCourseId,
   findById,
   list,
   updateStatus

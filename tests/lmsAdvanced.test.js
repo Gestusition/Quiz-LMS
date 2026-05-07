@@ -7,6 +7,7 @@ const authService = require('../services/authService');
 const quizService = require('../services/quizService');
 const restrictionService = require('../services/restrictionService');
 const gradeSchemeService = require('../services/gradeSchemeService');
+const validationIssueService = require('../services/validationIssueService');
 
 const TEST_DB = path.join(__dirname, 'test_lms_advanced.db');
 
@@ -46,7 +47,7 @@ describe('Advanced LMS controls', () => {
       .send({ title: 'Exam question', body: 'When is the midterm schedule published?' })
       .expect(201);
 
-    const stamp = Date.now();
+    const stamp = String(Date.now()).slice(-8);
     const outsider = authService.createUser({
       name: `Outsider ${stamp}`,
       username: `outsider-${stamp}`,
@@ -117,6 +118,36 @@ describe('Advanced LMS controls', () => {
       });
   });
 
+  test('course_access_blocked restriction prevents course access', async () => {
+    const db = getDatabase();
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const stamp = String(Date.now()).slice(-8);
+    const blockedStudent = authService.createUser({
+      name: `Course Blocked ${stamp}`,
+      username: `course-blocked-${stamp}`,
+      email: `course-blocked-${stamp}@example.com`,
+      role: 'student',
+      password: 'CourseBlocked123!',
+      studentNumber: `CBL-${stamp}`
+    });
+    db.prepare('INSERT INTO enrollments (courseId, userId, role, status) VALUES (?, ?, \'student\', \'active\')')
+      .run(course.id, blockedStudent.id);
+
+    restrictionService.create({
+      userId: blockedStudent.id,
+      restrictionType: 'course_access_blocked',
+      scopeType: 'course',
+      scopeId: course.id,
+      reason: 'Course access hold'
+    }, null);
+
+    const session = authService.login(blockedStudent.studentNumber, 'CourseBlocked123!');
+    await request(app)
+      .get(`/api/courses/${course.id}`)
+      .set('Cookie', cookie(session))
+      .expect(403);
+  });
+
   test('assignment_blocked restriction prevents submission', async () => {
     const db = getDatabase();
     const offering = db.prepare(`
@@ -160,6 +191,175 @@ describe('Advanced LMS controls', () => {
       });
   });
 
+  test('teachers can only manage validation issues for their courses or own issues', async () => {
+    const db = getDatabase();
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
+    const stamp = String(Date.now()).slice(-8);
+    const otherTeacher = authService.createUser({
+      name: `Other Issue Teacher ${stamp}`,
+      username: `other-issue-teacher-${stamp}`,
+      email: `other-issue-teacher-${stamp}@example.com`,
+      role: 'teacher',
+      password: 'OtherTeacher123!',
+      staffNumber: `OIT-${stamp}`
+    });
+    const otherSession = authService.login(otherTeacher.email, 'OtherTeacher123!');
+
+    const issue = (await request(app)
+      .post('/api/issues')
+      .set('Cookie', cookie(teacherSession))
+      .send({
+        entityType: 'quiz',
+        entityId: 1,
+        severity: 'warning',
+        message: 'Course-scoped issue',
+        relatedCourseId: course.id
+      })
+      .expect(201)).body;
+
+    await request(app)
+      .get(`/api/issues?relatedCourseId=${course.id}`)
+      .set('Cookie', cookie(teacherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.items.some(item => item.id === issue.id)).toBe(true);
+      });
+
+    await request(app)
+      .put(`/api/issues/${issue.id}/status`)
+      .set('Cookie', cookie(otherSession))
+      .send({ status: 'resolved' })
+      .expect(403);
+  });
+
+  test('course deletion removes attached-database course data and student resource visibility is time-gated', async () => {
+    const stamp = String(Date.now()).slice(-8);
+    const admin = authService.createUser({
+      name: `Cascade Admin ${stamp}`,
+      username: `cascade-admin-${stamp}`,
+      email: `cascade-admin-${stamp}@example.com`,
+      role: 'admin',
+      password: 'CascadeAdmin123!'
+    });
+    const adminSession = authService.login(admin.username, 'CascadeAdmin123!');
+    const studentSession = authService.login('STU-0003', 'Student123!');
+
+    const course = (await request(app)
+      .post('/api/courses')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        code: `CAS-${stamp}`,
+        title: `Cascade Course ${stamp}`,
+        description: 'Course deletion cascade test.',
+        credits: 3,
+        visibility: 'published'
+      })
+      .expect(201)).body;
+
+    await request(app)
+      .post(`/api/courses/${course.id}/enrollments`)
+      .set('Cookie', cookie(adminSession))
+      .send({ userId: studentSession.user.id, role: 'student' })
+      .expect(201);
+
+    const week = (await request(app)
+      .post(`/api/weeks/courses/${course.id}/weeks`)
+      .set('Cookie', cookie(adminSession))
+      .send({ weekNumber: 1, title: 'Cascade Week', description: 'Visible week', visible: true })
+      .expect(201)).body;
+
+    const visibleResource = (await request(app)
+      .post(`/api/weeks/weeks/${week.id}/resources`)
+      .set('Cookie', cookie(adminSession))
+      .send({ title: 'Visible resource', type: 'link', content: 'https://example.com/visible' })
+      .expect(201)).body;
+
+    const futureResource = (await request(app)
+      .post(`/api/weeks/weeks/${week.id}/resources`)
+      .set('Cookie', cookie(adminSession))
+      .send({
+        title: 'Future resource',
+        type: 'link',
+        content: 'https://example.com/future',
+        visibleFrom: '2099-01-01T00:00:00.000Z'
+      })
+      .expect(201)).body;
+
+    await request(app)
+      .get(`/api/weeks/weeks/${week.id}/resources`)
+      .set('Cookie', cookie(studentSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.items.some(item => item.id === visibleResource.id)).toBe(true);
+        expect(response.body.items.some(item => item.id === futureResource.id)).toBe(false);
+      });
+
+    await request(app)
+      .post(`/api/discussion/courses/${course.id}/threads`)
+      .set('Cookie', cookie(studentSession))
+      .send({ title: 'Cascade discussion', body: 'This should disappear with the course.' })
+      .expect(201);
+
+    const category = (await request(app)
+      .post('/api/categories')
+      .set('Cookie', cookie(adminSession))
+      .send({ courseId: course.id, name: `Cascade Category ${stamp}`, description: 'Cascade category' })
+      .expect(201)).body;
+
+    await request(app)
+      .post('/api/questions')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        categoryId: category.id,
+        text: 'Cascade question?',
+        type: 'MC',
+        options: ['Yes', 'No'],
+        correctAnswer: '0',
+        difficulty: 'EASY',
+        points: 1
+      })
+      .expect(201);
+
+    gradeSchemeService.ensureDefault(course.id, adminSession.user.id);
+    quizService.createExamTemplate({
+      name: `Cascade Template ${stamp}`,
+      description: 'Course-scoped template',
+      courseId: course.id,
+      defaults: { durationMinutes: 15 }
+    }, adminSession.user);
+    restrictionService.create({
+      userId: studentSession.user.id,
+      restrictionType: 'course_access_blocked',
+      scopeType: 'course',
+      scopeId: course.id,
+      reason: 'Cascade restriction'
+    }, adminSession.user.id);
+    validationIssueService.create({
+      entityType: 'course',
+      entityId: course.id,
+      severity: 'warning',
+      message: 'Cascade issue',
+      relatedCourseId: course.id
+    });
+
+    await request(app)
+      .delete(`/api/courses/${course.id}`)
+      .set('Cookie', cookie(adminSession))
+      .expect(200);
+
+    const db = getDatabase();
+    expect(db.prepare('SELECT COUNT(*) as count FROM categories WHERE courseId = ?').get(course.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM questions WHERE categoryId = ?').get(category.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM course_weeks WHERE courseId = ?').get(course.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM week_resources WHERE weekId = ?').get(week.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM course_threads WHERE courseId = ?').get(course.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM grade_schemes WHERE courseId = ?').get(course.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM exam_templates WHERE courseId = ?').get(course.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM user_restrictions WHERE scopeType = ? AND scopeId = ?').get('course', course.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM validation_issues WHERE relatedCourseId = ?').get(course.id).count).toBe(0);
+  });
+
   test('timed attempt marks expired and negative marking score never goes below zero', () => {
     const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
     const studentSession = authService.login('STU-0003', 'Student123!');
@@ -178,7 +378,7 @@ describe('Advanced LMS controls', () => {
       courseId: course.id,
       title: `Timed Negative Quiz ${Date.now()}`,
       description: 'Timer + penalty test',
-      status: 'published',
+      status: 'draft',
       startAt: new Date(Date.now() - 1000 * 60).toISOString(),
       endAt: new Date(Date.now() + 1000 * 60 * 30).toISOString(),
       durationMinutes: 5,
@@ -190,6 +390,7 @@ describe('Advanced LMS controls', () => {
     }, teacherSession.user);
 
     quizService.setQuestions(quiz.id, [question.id], teacherSession.user.id);
+    quizService.update(quiz.id, { status: 'published' }, teacherSession.user);
 
     const attempt = quizService.startAttempt(quiz.id, studentSession.user);
     db.prepare('UPDATE quiz_attempts SET expiresAt = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), attempt.id);
@@ -200,6 +401,97 @@ describe('Advanced LMS controls', () => {
 
     expect(submitted.lifecycleStatus).toBe('expired');
     expect(submitted.score).toBeGreaterThanOrEqual(0);
+  });
+
+  test('manual result policy hides scores and answer correctness until released', async () => {
+    const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
+    const studentSession = authService.login('STU-0003', 'Student123!');
+    const db = getDatabase();
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const question = db.prepare(`
+      SELECT q.id
+      FROM questions q
+      JOIN categories c ON c.id = q.categoryId
+      WHERE c.courseId = ?
+      ORDER BY q.id ASC
+      LIMIT 1
+    `).get(course.id);
+
+    const quiz = quizService.create({
+      courseId: course.id,
+      title: `Manual Release Quiz ${Date.now()}`,
+      description: 'Hidden result policy test',
+      status: 'draft',
+      startAt: new Date(Date.now() - 1000 * 60).toISOString(),
+      endAt: new Date(Date.now() + 1000 * 60 * 30).toISOString(),
+      durationMinutes: 10,
+      maxAttempts: 1,
+      showCorrectAnswers: true,
+      showResultPolicy: 'after_manual_release'
+    }, teacherSession.user);
+    quizService.setQuestions(quiz.id, [question.id], teacherSession.user.id);
+    quizService.update(quiz.id, { status: 'published' }, teacherSession.user);
+
+    const attempt = quizService.startAttempt(quiz.id, studentSession.user);
+    const submitted = quizService.submitAttempt(attempt.id, studentSession.user, {
+      answers: [{ questionId: attempt.questions[0].id, answer: '__wrong__' }]
+    });
+
+    expect(submitted.hiddenByPolicy).toBe(true);
+    expect(submitted.score).toBeNull();
+    expect(submitted.answers[0].isCorrect).toBeUndefined();
+    expect(submitted.answers[0].pointsAwarded).toBeUndefined();
+    expect(submitted.answers[0].correctAnswer).toBeUndefined();
+
+    await request(app)
+      .get(`/api/quizzes/${quiz.id}/attempts`)
+      .set('Cookie', cookie(studentSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body[0].score).toBeNull();
+        expect(response.body[0].hiddenByPolicy).toBe(true);
+      });
+
+    await request(app)
+      .post(`/api/quizzes/${quiz.id}/release-results`)
+      .set('Cookie', cookie(teacherSession))
+      .expect(200);
+
+    const released = await request(app)
+      .get(`/api/quizzes/attempts/${attempt.id}`)
+      .set('Cookie', cookie(studentSession))
+      .expect(200);
+    expect(released.body.score).not.toBeNull();
+    expect(released.body.answers[0].isCorrect).toBeDefined();
+  });
+
+  test('published quiz creation is rejected until questions are assigned', () => {
+    const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
+    const db = getDatabase();
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+
+    expect(() => quizService.create({
+      courseId: course.id,
+      title: `Invalid Published Quiz ${Date.now()}`,
+      description: 'Should not publish without questions',
+      status: 'published',
+      startAt: new Date(Date.now() - 1000 * 60).toISOString(),
+      endAt: new Date(Date.now() + 1000 * 60 * 30).toISOString(),
+      durationMinutes: 10,
+      maxAttempts: 1
+    }, teacherSession.user)).toThrow(/draft/i);
+  });
+
+  test('question upload rejects non-raster image types', async () => {
+    const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
+    await request(app)
+      .post('/api/questions/upload')
+      .set('Cookie', cookie(teacherSession))
+      .attach('file', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), {
+        filename: 'question.svg',
+        contentType: 'image/svg+xml'
+      })
+      .expect(400);
   });
 
   test('invalid grade scheme keeps numeric score but sets letter grade pending review', () => {

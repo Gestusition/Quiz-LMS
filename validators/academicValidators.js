@@ -13,6 +13,7 @@ const {
   intInRange,
   optionalId: parseOptionalId,
   optionalText,
+  optionalUrl,
   requiredId: parseRequiredId,
   requiredText
 } = require('../utils/validation');
@@ -136,7 +137,7 @@ function validateAssignment(data) {
 
 function validateSubmission(data) {
   const submissionText = shortText(data.submissionText, 'Submission text', LIMITS.assignments.submissionTextMax, false);
-  const submissionUrl = shortText(data.submissionUrl, 'Submission URL', LIMITS.assignments.submissionUrlMax, false);
+  const submissionUrl = optionalUrl(data.submissionUrl, 'Submission URL', LIMITS.assignments.submissionUrlMax);
   if (!submissionText && !submissionUrl) {
     throw validationError('submission', 'Submission text or URL is required.');
   }

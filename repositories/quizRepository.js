@@ -143,7 +143,7 @@ function deleteByCourseId(courseId) {
 
 function getQuestions(quizId) {
   return getDatabase().prepare(`
-    SELECT q.*, c.name as categoryName, qq.points as quizPoints, qq.position
+    SELECT q.*, c.name as categoryName, c.courseId, qq.points as quizPoints, qq.position
     FROM quiz_questions qq
     JOIN questions q ON q.id = qq.questionId
     LEFT JOIN categories c ON c.id = q.categoryId
@@ -167,7 +167,8 @@ function replaceQuestions(quizId, questions, questionIds) {
 
 function findActiveAttempt(quizId, userId) {
   return getDatabase().prepare(`
-    SELECT id FROM quiz_attempts
+    SELECT id, quizId, userId, startedAt, expiresAt, maxScore
+    FROM quiz_attempts
     WHERE quizId = ? AND userId = ? AND status = 'in_progress'
     ORDER BY attemptNumber DESC LIMIT 1
   `).get(quizId, userId) || null;
@@ -287,10 +288,20 @@ function getGradebookStudents(courseId) {
 
 function getBestGrade(quizId, userId) {
   return getDatabase().prepare(`
-    SELECT MAX(percentage) as percentage, MAX(score) as score, MAX(maxScore) as maxScore
+    SELECT percentage, score, maxScore
     FROM quiz_attempts
     WHERE quizId = ? AND userId = ? AND status = 'submitted'
+    ORDER BY percentage DESC, score DESC, submittedAt ASC, id ASC
+    LIMIT 1
   `).get(quizId, userId);
+}
+
+function setManualResultReleasedAt(quizId, releasedAt) {
+  return getDatabase().prepare(`
+    UPDATE quizzes
+    SET manualResultReleasedAt = ?, updatedAt = ?
+    WHERE id = ?
+  `).run(releasedAt, releasedAt, quizId);
 }
 
 function listExamTemplates(filters = {}) {
@@ -335,6 +346,10 @@ function deleteExamTemplate(id) {
   return getDatabase().prepare('DELETE FROM exam_templates WHERE id = ?').run(id);
 }
 
+function deleteExamTemplatesByCourseId(courseId) {
+  return getDatabase().prepare('DELETE FROM exam_templates WHERE courseId = ?').run(courseId);
+}
+
 function insertAttemptAnswerWithJson(attemptId, questionId, answer, isCorrect, pointsAwarded, answerJson) {
   return getDatabase().prepare(`
     INSERT INTO attempt_answers (attemptId, questionId, answer, isCorrect, pointsAwarded, answerJson)
@@ -347,7 +362,9 @@ function deleteAttemptsByUserId(userId) {
 }
 
 function clearCreatedBy(userId) {
-  return getDatabase().prepare('UPDATE quizzes SET createdBy = NULL WHERE createdBy = ?').run(userId);
+  const db = getDatabase();
+  db.prepare('UPDATE quizzes SET createdBy = NULL WHERE createdBy = ?').run(userId);
+  db.prepare('UPDATE exam_templates SET createdBy = NULL WHERE createdBy = ?').run(userId);
 }
 
 function withTransaction(work) {
@@ -372,6 +389,7 @@ module.exports = {
   deleteByCourseId,
   deleteById,
   deleteExamTemplate,
+  deleteExamTemplatesByCourseId,
   findActiveAttempt,
   findAttemptById,
   findExamTemplateById,
@@ -395,6 +413,7 @@ module.exports = {
   replaceQuestions,
   submitAttempt,
   setAttemptGradeStatus,
+  setManualResultReleasedAt,
   update,
   withTransaction
 };

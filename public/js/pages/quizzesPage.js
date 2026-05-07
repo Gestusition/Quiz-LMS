@@ -87,6 +87,7 @@ export const QuizzesPage = {
             <button class="btn btn-ghost btn-sm" onclick="App.showQuizForm(${quiz.id})">Edit</button>
             <button class="btn btn-ghost btn-sm" onclick="App.showAssignQuestions(${quiz.id})">Questions</button>
             <button class="btn btn-ghost btn-sm" onclick="App.showQuizAttempts(${quiz.id})">Attempts</button>
+            ${quiz.showResultPolicy === 'after_manual_release' ? `<button class="btn btn-ghost btn-sm" onclick="App.releaseQuizResults(${quiz.id})">${quiz.manualResultReleasedAt ? 'Results released' : 'Release results'}</button>` : ''}
             <button class="btn btn-ghost btn-sm" onclick="App.saveAsTemplate(${quiz.id})">Save as Template</button>
             <button class="btn btn-danger btn-sm" onclick="App.deleteQuiz(${quiz.id})">Delete</button>
           ` : `
@@ -267,10 +268,8 @@ export const QuizzesPage = {
   },
 
   async showAssignQuestions(quizId) {
-    const [quiz, allQuestions] = await Promise.all([
-      API.getQuiz(quizId),
-      API.getQuestions({ courseId: undefined })
-    ]);
+    const quiz = await API.getQuiz(quizId);
+    const allQuestions = await API.getQuestions({ courseId: quiz.courseId });
     const assignedIds = new Set((quiz.questions || []).map(q => q.id));
     const TYPE_LABELS = {
       MC: 'Multiple Choice', TF: 'True/False', FB: 'Fill Blank',
@@ -376,6 +375,17 @@ export const QuizzesPage = {
           </table>
         </div>
       `);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  async releaseQuizResults(quizId) {
+    if (!confirm('Release results for this quiz now? Students will be able to see their scores according to the quiz settings.')) return;
+    try {
+      await API.releaseQuizResults(quizId);
+      this.toast('Quiz results released.', 'success');
+      this.renderQuizzes();
     } catch (err) {
       this.toast(err.message, 'error');
     }

@@ -346,7 +346,7 @@ router.post('/:id/duplicate', requireRole(['admin', 'teacher']), validateId, (re
   }
 });
 
-const { upload } = require('../middleware/upload');
+const { upload, validateUploadedImage } = require('../middleware/upload');
 
 /**
  * @swagger
@@ -368,7 +368,7 @@ const { upload } = require('../middleware/upload');
  *       200:
  *         description: Upload successful
  */
-router.post('/upload', requireRole(['admin', 'teacher']), upload.single('file'), (req, res) => {
+router.post('/upload', requireRole(['admin', 'teacher']), upload.single('file'), validateUploadedImage, (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded or invalid file type.' });
   }

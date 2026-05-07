@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "jest --verbose --runInBand --forceExit"
+    "test": "jest --verbose --runInBand"
   },
   "keywords": [
     "quiz",

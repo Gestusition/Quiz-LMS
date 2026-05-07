@@ -95,9 +95,27 @@ function createReply(payload) {
   `).run(payload.threadId, payload.body, payload.createdBy || null);
 }
 
+function clearCreatedBy(userId) {
+  const db = getDatabase();
+  db.prepare('UPDATE course_threads SET createdBy = NULL WHERE createdBy = ?').run(userId);
+  db.prepare('UPDATE course_thread_replies SET createdBy = NULL WHERE createdBy = ?').run(userId);
+}
+
+function deleteByCourseId(courseId) {
+  const db = getDatabase();
+  const threadIds = db.prepare('SELECT id FROM course_threads WHERE courseId = ?').all(courseId).map(row => row.id);
+  if (threadIds.length) {
+    const placeholders = threadIds.map(() => '?').join(',');
+    db.prepare(`DELETE FROM course_thread_replies WHERE threadId IN (${placeholders})`).run(...threadIds);
+  }
+  db.prepare('DELETE FROM course_threads WHERE courseId = ?').run(courseId);
+}
+
 module.exports = {
+  clearCreatedBy,
   createReply,
   createThread,
+  deleteByCourseId,
   findThreadById,
   listReplies,
   listThreads,

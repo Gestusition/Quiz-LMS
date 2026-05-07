@@ -7,7 +7,7 @@ function serializeUser(user) {
     email: user.email,
     role: user.role,
     status: user.status,
-    mustChangeCredentials: user.mustChangeCredentials,
+    mustChangeCredentials: !!user.mustChangeCredentials,
     createdAt: user.createdAt
   };
   return withAcademicIdentity(result, user);

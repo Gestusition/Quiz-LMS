@@ -201,6 +201,21 @@ router.post('/attempts/:id/submit', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/templates:
+ *   get:
+ *     summary: List quiz setting templates (Teacher/Admin)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: query
+ *         name: courseId
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Templates available to the current manager
+ */
 router.get('/templates', (req, res) => {
   try {
     if (req.user.role === 'student') {
@@ -214,6 +229,16 @@ router.get('/templates', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/templates:
+ *   post:
+ *     summary: Create a quiz setting template (Teacher/Admin)
+ *     tags: [Quizzes]
+ *     responses:
+ *       201:
+ *         description: Template created
+ */
 router.post('/templates', (req, res) => {
   try {
     if (req.user.role === 'student') {
@@ -225,6 +250,22 @@ router.post('/templates', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/templates/{templateId}:
+ *   delete:
+ *     summary: Delete a quiz setting template (Owner/Admin)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: templateId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Template deleted
+ */
 router.delete('/templates/:templateId', (req, res) => {
   try {
     const templateId = parseId(req.params.templateId);
@@ -236,6 +277,22 @@ router.delete('/templates/:templateId', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/{id}/save-as-template:
+ *   post:
+ *     summary: Save a quiz's settings as a reusable template (Course Manager)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       201:
+ *         description: Template created
+ */
 router.post('/:id/save-as-template', loadQuiz, requireQuizManager, (req, res) => {
   try {
     res.status(201).json(quizService.saveQuizAsTemplate(req.quizId, req.body, req.user));
@@ -244,6 +301,49 @@ router.post('/:id/save-as-template', loadQuiz, requireQuizManager, (req, res) =>
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/{id}/release-results:
+ *   post:
+ *     summary: Release manually held quiz results (Course Manager)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Quiz updated with manualResultReleasedAt
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Quiz'
+ */
+router.post('/:id/release-results', loadQuiz, requireQuizManager, (req, res) => {
+  try {
+    res.json(quizService.releaseResults(req.quizId, req.user));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+/**
+ * @swagger
+ * /api/quizzes/grade-schemes:
+ *   get:
+ *     summary: List grade schemes (Teacher/Admin)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: query
+ *         name: courseId
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Grade schemes
+ */
 router.get('/grade-schemes', (req, res) => {
   try {
     if (req.user.role === 'student') {
@@ -255,6 +355,22 @@ router.get('/grade-schemes', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/grade-schemes/{id}/thresholds:
+ *   put:
+ *     summary: Replace grade scheme thresholds (Teacher/Admin)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Grade scheme updated
+ */
 router.put('/grade-schemes/:id/thresholds', (req, res) => {
   try {
     if (req.user.role === 'student') {

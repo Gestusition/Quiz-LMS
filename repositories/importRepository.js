@@ -125,7 +125,14 @@ function countOpenErrors() {
   `).get().count;
 }
 
+function clearUserReferences(userId) {
+  const db = getDatabase();
+  db.prepare('UPDATE import_batches SET uploadedBy = NULL WHERE uploadedBy = ?').run(userId);
+  db.prepare('UPDATE import_errors SET resolvedBy = NULL WHERE resolvedBy = ?').run(userId);
+}
+
 module.exports = {
+  clearUserReferences,
   countOpenErrors,
   createBatch,
   createError,

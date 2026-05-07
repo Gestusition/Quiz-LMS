@@ -87,6 +87,18 @@ function deactivate(id) {
   `).run(id);
 }
 
+function deleteByUserId(userId) {
+  return getDatabase().prepare('DELETE FROM user_restrictions WHERE userId = ?').run(userId);
+}
+
+function clearCreatedBy(userId) {
+  return getDatabase().prepare('UPDATE user_restrictions SET createdBy = NULL WHERE createdBy = ?').run(userId);
+}
+
+function deleteByScope(scopeType, scopeId) {
+  return getDatabase().prepare('DELETE FROM user_restrictions WHERE scopeType = ? AND scopeId = ?').run(scopeType, scopeId);
+}
+
 function findActiveForUser(userId, nowIso) {
   return getDatabase().prepare(`
     SELECT *
@@ -106,9 +118,12 @@ function countActive() {
 }
 
 module.exports = {
+  clearCreatedBy,
   countActive,
   create,
   deactivate,
+  deleteByScope,
+  deleteByUserId,
   findActiveForUser,
   findById,
   list

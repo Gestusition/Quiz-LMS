@@ -4,7 +4,7 @@ const {
 } = require('../constants/enums');
 const { LIMITS } = require('../constants/limits');
 const { validationError } = require('../utils/appError');
-const { numberInRange, requiredId, requiredText } = require('../utils/validation');
+const { numberInRange, optionalUrl, requiredId, requiredText } = require('../utils/validation');
 
 function validateQuestion(data) {
   const categoryId = requiredId(data.categoryId, 'categoryId');
@@ -36,7 +36,10 @@ function validateQuestion(data) {
   const richText = String(data.richText || '').slice(0, LIMITS.questions.richTextMax);
   const explanationText = String(data.explanationText || '').slice(0, LIMITS.questions.explanationMax);
   const hintText = String(data.hintText || '').slice(0, LIMITS.questions.hintMax);
-  const mediaUrl = String(data.mediaUrl || '').slice(0, 2000);
+  const mediaUrl = optionalUrl(data.mediaUrl, 'mediaUrl', 2000, {
+    allowRelative: true,
+    allowedRelativePrefixes: ['/uploads/']
+  });
 
   // Type-specific validation
   if (type === 'MC') {

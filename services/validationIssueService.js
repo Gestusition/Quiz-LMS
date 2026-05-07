@@ -10,6 +10,12 @@ class ValidationIssueService {
     return validationIssueRepository.list(filters);
   }
 
+  getById(id) {
+    const issue = validationIssueRepository.findById(id);
+    if (!issue) throw notFoundError('Validation issue not found.');
+    return issue;
+  }
+
   create(issue) {
     if (!issue || !issue.entityType) {
       throw validationError('entity_type', 'entity_type is required.');

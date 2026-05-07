@@ -27,7 +27,7 @@ export const CoursesPage = {
               </div>
               <div class="card-actions">
                 <a class="btn btn-primary btn-sm" href="#/courses/${course.id}">Open</a>
-                ${this.canManageLearning() ? `<button class="btn btn-ghost btn-sm" onclick="App.showCourseForm(${course.id})">Edit</button>` : ''}
+                ${this.canManageLearning() ? `<button class="btn btn-ghost btn-sm" onclick="App.showCourseForm(${course.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="App.deleteCourse(${course.id})">Delete</button>` : ''}
               </div>
             </article>
           `).join('') || this.emptyBlock('No courses found.')}
@@ -92,6 +92,21 @@ export const CoursesPage = {
         this.toast(err.message, 'error');
       }
     });
+  },
+
+  async deleteCourse(id) {
+    if (!confirm('Delete this course and its enrollments, quizzes, resources, weeks, discussions, and offerings?')) return;
+    try {
+      await API.deleteCourse(id);
+      this.toast('Course deleted.', 'success');
+      if ((location.hash || '').startsWith(`#/courses/${id}`)) {
+        location.hash = '#/courses';
+      } else {
+        this.renderCourses();
+      }
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
   },
 
   courseRow(course) {

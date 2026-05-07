@@ -78,7 +78,10 @@ export const AcademicPage = {
     return `
       <div class="list-row">
         <div><strong>${this.esc(item.name)}</strong><small>${this.esc(item.code)} - ${item.departmentCount || 0} departments</small></div>
-        ${admin ? `<button class="btn btn-ghost btn-sm" onclick="App.showFacultyForm(${item.id})">Edit</button>` : ''}
+        ${admin ? `<div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="App.showFacultyForm(${item.id})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="App.deleteFaculty(${item.id})">Delete</button>
+        </div>` : ''}
       </div>
     `;
   },
@@ -87,7 +90,10 @@ export const AcademicPage = {
     return `
       <div class="list-row">
         <div><strong>${this.esc(item.name)}</strong><small>${this.esc(item.facultyName || '')} - ${this.esc(item.code)}</small></div>
-        ${admin ? `<button class="btn btn-ghost btn-sm" onclick="App.showDepartmentForm(${item.id})">Edit</button>` : ''}
+        ${admin ? `<div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="App.showDepartmentForm(${item.id})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="App.deleteDepartment(${item.id})">Delete</button>
+        </div>` : ''}
       </div>
     `;
   },
@@ -96,7 +102,10 @@ export const AcademicPage = {
     return `
       <div class="list-row">
         <div><strong>${this.esc(item.name)}</strong><small>${this.esc(item.departmentName || '')} - year ${item.yearNumber}</small></div>
-        ${admin ? `<button class="btn btn-ghost btn-sm" onclick="App.showClassYearForm(${item.id})">Edit</button>` : ''}
+        ${admin ? `<div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="App.showClassYearForm(${item.id})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="App.deleteClassYear(${item.id})">Delete</button>
+        </div>` : ''}
       </div>
     `;
   },
@@ -105,7 +114,10 @@ export const AcademicPage = {
     return `
       <div class="list-row">
         <div><strong>${this.esc(item.name)}</strong><small>${this.esc(item.departmentName || '')} - ${this.esc(item.classYearName || '')}</small></div>
-        ${admin ? `<button class="btn btn-ghost btn-sm" onclick="App.showSectionForm(${item.id})">Edit</button>` : ''}
+        ${admin ? `<div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="App.showSectionForm(${item.id})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="App.deleteSection(${item.id})">Delete</button>
+        </div>` : ''}
       </div>
     `;
   },
@@ -120,7 +132,8 @@ export const AcademicPage = {
         <td><span class="status ${term.isActive ? 'active' : 'archived'}">${term.isActive ? 'active' : 'inactive'}</span></td>
         <td class="table-actions">
           ${admin ? `<button class="btn btn-ghost btn-sm" onclick="App.showTermForm(${term.id})">Edit</button>
-          ${term.isActive ? '' : `<button class="btn btn-primary btn-sm" onclick="App.activateTerm(${term.id})">Set active</button>`}` : ''}
+          ${term.isActive ? '' : `<button class="btn btn-primary btn-sm" onclick="App.activateTerm(${term.id})">Set active</button>`}
+          <button class="btn btn-danger btn-sm" onclick="App.deleteTerm(${term.id})">Delete</button>` : ''}
         </td>
       </tr>
     `;
@@ -137,7 +150,7 @@ export const AcademicPage = {
         <td>${offering.studentCount || 0}</td>
         <td><span class="status ${offering.status}">${this.esc(offering.status)}</span></td>
         <td class="table-actions">
-          ${admin ? `<button class="btn btn-ghost btn-sm" onclick="App.showOfferingEnrollmentForm(${offering.id})">Enroll</button><button class="btn btn-ghost btn-sm" onclick="App.showOfferingForm(${offering.id})">Edit</button>` : ''}
+          ${admin ? `<button class="btn btn-ghost btn-sm" onclick="App.showOfferingEnrollmentForm(${offering.id})">Enroll</button><button class="btn btn-ghost btn-sm" onclick="App.showOfferingForm(${offering.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="App.deleteCourseOffering(${offering.id})">Delete</button>` : ''}
         </td>
       </tr>
     `;
@@ -273,6 +286,60 @@ export const AcademicPage = {
       await API.setActiveTerm(id);
       this.renderAcademic();
       this.toast('Active term updated.', 'success');
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  async deleteFaculty(id) {
+    if (!confirm('Delete this faculty and its related departments, class years, and sections?')) return;
+    try {
+      await API.deleteFaculty(id);
+      this.toast('Faculty deleted.', 'success');
+      this.renderAcademic();
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  async deleteDepartment(id) {
+    if (!confirm('Delete this department and its related class years and sections?')) return;
+    try {
+      await API.deleteDepartment(id);
+      this.toast('Department deleted.', 'success');
+      this.renderAcademic();
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  async deleteClassYear(id) {
+    if (!confirm('Delete this class year and its related sections?')) return;
+    try {
+      await API.deleteClassYear(id);
+      this.toast('Class year deleted.', 'success');
+      this.renderAcademic();
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  async deleteSection(id) {
+    if (!confirm('Delete this section?')) return;
+    try {
+      await API.deleteSection(id);
+      this.toast('Section deleted.', 'success');
+      this.renderAcademic();
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  async deleteTerm(id) {
+    if (!confirm('Delete this term and its related offerings, assignments, and attendance records?')) return;
+    try {
+      await API.deleteTerm(id);
+      this.toast('Term deleted.', 'success');
+      this.renderAcademic();
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  async deleteCourseOffering(id) {
+    if (!confirm('Delete this offering and its enrollments, assignments, and attendance records?')) return;
+    try {
+      await API.deleteCourseOffering(id);
+      this.toast('Course offering deleted.', 'success');
+      this.renderAcademic();
     } catch (err) { this.toast(err.message, 'error'); }
   },
 

@@ -646,6 +646,10 @@ router.post('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']
   try { res.json(academicService.markAttendance(req.params.id, req.body.records, req.user)); } catch (err) { sendError(res, err); }
 });
 
+router.get('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
+  try { res.json(academicService.listAttendanceRecords(req.params.id, req.user)); } catch (err) { sendError(res, err); }
+});
+
 /**
  * @swagger
  * /api/academic/attendance/my:

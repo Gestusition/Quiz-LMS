@@ -70,24 +70,43 @@ function updateWeek(id, payload, updatedAt) {
 }
 
 function deleteWeek(id) {
+  deleteResourcesByWeekIds([id]);
   return getDatabase().prepare('DELETE FROM course_weeks WHERE id = ?').run(id);
+}
+
+function deleteResourcesByWeekIds(weekIds) {
+  if (!weekIds.length) return;
+  const placeholders = weekIds.map(() => '?').join(',');
+  getDatabase().prepare(`DELETE FROM week_resources WHERE weekId IN (${placeholders})`).run(...weekIds);
+}
+
+function deleteByCourseId(courseId) {
+  const weekIds = getDatabase().prepare('SELECT id FROM course_weeks WHERE courseId = ?').all(courseId).map(row => row.id);
+  deleteResourcesByWeekIds(weekIds);
+  getDatabase().prepare('DELETE FROM course_weeks WHERE courseId = ?').run(courseId);
 }
 
 function listWeekResources(weekId, filters = {}) {
   const paging = parsePagination(filters);
+  const visibleOnly = !!filters.visibleOnly;
+  const visibilityClause = visibleOnly
+    ? `AND (TRIM(COALESCE(visibleFrom, '')) = '' OR visibleFrom <= ?)
+       AND (TRIM(COALESCE(visibleUntil, '')) = '' OR visibleUntil >= ?)`
+    : '';
+  const visibilityParams = visibleOnly ? [filters.now, filters.now] : [];
   const total = getDatabase().prepare(`
     SELECT COUNT(*) as count
     FROM week_resources
-    WHERE weekId = ?
-  `).get(weekId).count;
+    WHERE weekId = ? ${visibilityClause}
+  `).get(weekId, ...visibilityParams).count;
 
   const items = getDatabase().prepare(`
     SELECT *
     FROM week_resources
-    WHERE weekId = ?
+    WHERE weekId = ? ${visibilityClause}
     ORDER BY createdAt DESC, id DESC
     LIMIT ? OFFSET ?
-  `).all(weekId, paging.limit, paging.offset);
+  `).all(weekId, ...visibilityParams, paging.limit, paging.offset);
 
   return {
     items,
@@ -123,9 +142,17 @@ function deleteWeekResource(id) {
   return getDatabase().prepare('DELETE FROM week_resources WHERE id = ?').run(id);
 }
 
+function clearCreatedBy(userId) {
+  const db = getDatabase();
+  db.prepare('UPDATE course_weeks SET createdBy = NULL WHERE createdBy = ?').run(userId);
+  db.prepare('UPDATE week_resources SET createdBy = NULL WHERE createdBy = ?').run(userId);
+}
+
 module.exports = {
+  clearCreatedBy,
   createWeek,
   createWeekResource,
+  deleteByCourseId,
   deleteWeek,
   deleteWeekResource,
   findWeekById,

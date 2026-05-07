@@ -209,6 +209,10 @@ class AcademicService {
   deleteTerm(id) {
     const term = requireRow(academicRepository.findTermById(id), 'Term not found.');
     academicRepository.withTransaction(() => {
+      const terms = academicRepository.listTerms();
+      if (term.isActive && terms.length <= 1) {
+        throw new Error('At least one term must remain active. Create or activate another term first.');
+      }
       academicRepository.deleteTerm(id);
       if (term.isActive) {
         const fallback = academicRepository.listTerms()[0];
@@ -219,7 +223,8 @@ class AcademicService {
   }
 
   listCourseOfferings(user, filters = {}) {
-    return academicRepository.listCourseOfferings(user, normalizeFilters(filters));
+    return academicRepository.listCourseOfferings(user, normalizeFilters(filters))
+      .filter(offering => !this.isCourseAccessBlocked(user, offering.courseId));
   }
 
   getCourseOffering(id, user) {
@@ -281,9 +286,15 @@ class AcademicService {
     }
     const existing = academicRepository.findOfferingEnrollmentByStudent(payload.courseOfferingId, payload.studentId);
     if (existing) {
+      if (payload.status === 'active') {
+        this.ensureOfferingCapacity(offering, existing.id);
+      }
       academicRepository.updateOfferingEnrollment(existing.id, payload, nowIso());
       return academicRepository.listOfferingEnrollments(payload.courseOfferingId)
         .find(item => item.id === existing.id);
+    }
+    if (payload.status === 'active') {
+      this.ensureOfferingCapacity(offering);
     }
     const result = academicRepository.withTransaction(() => {
       const created = academicRepository.insertOfferingEnrollment(payload);
@@ -302,6 +313,10 @@ class AcademicService {
       status: data.status !== undefined ? data.status : existing.status,
       finalGrade: data.finalGrade !== undefined ? data.finalGrade : existing.finalGrade
     });
+    if (payload.status === 'active') {
+      const offering = requireRow(academicRepository.findCourseOfferingById(payload.courseOfferingId), 'Course offering not found.');
+      this.ensureOfferingCapacity(offering, existing.id);
+    }
     academicRepository.updateOfferingEnrollment(id, payload, nowIso());
     return academicRepository.listOfferingEnrollments(existing.courseOfferingId)
       .find(item => item.id === id);
@@ -314,7 +329,8 @@ class AcademicService {
   }
 
   listAssignments(user, filters = {}) {
-    return academicRepository.listAssignments(user, normalizeFilters(filters));
+    return academicRepository.listAssignments(user, normalizeFilters(filters))
+      .filter(assignment => !this.isCourseAccessBlocked(user, assignment.courseId));
   }
 
   getAssignment(id, user) {
@@ -371,6 +387,13 @@ class AcademicService {
     if (!academicRepository.findOfferingEnrollmentByStudent(assignment.courseOfferingId, user.id)) {
       throw forbidden();
     }
+    restrictionService.assertAccessAllowed({
+      user,
+      restrictionType: 'course_access_blocked',
+      scopeType: 'course',
+      scopeId: assignment.courseId,
+      safeMessage: 'Your access to this course is restricted. Please contact your instructor or administrator.'
+    });
 
     restrictionService.assertAccessAllowed({
       user,
@@ -382,7 +405,8 @@ class AcademicService {
 
     const payload = validateSubmission(data);
     const timestamp = nowIso();
-    const result = academicRepository.upsertSubmission(assignmentId, user.id, payload, timestamp);
+    const late = isPastDue(assignment.dueDate, timestamp);
+    const result = academicRepository.upsertSubmission(assignmentId, user.id, payload, timestamp, late);
     const saved = academicRepository.findSubmissionByAssignmentStudent(assignmentId, user.id) ||
       academicRepository.findSubmission(result.lastInsertRowid);
     auditService.log({
@@ -412,7 +436,8 @@ class AcademicService {
   }
 
   listAttendanceSessions(user, filters = {}) {
-    return academicRepository.listAttendanceSessions(user, normalizeFilters(filters));
+    return academicRepository.listAttendanceSessions(user, normalizeFilters(filters))
+      .filter(session => !this.isCourseAccessBlocked(user, session.courseId));
   }
 
   createAttendanceSession(data, user) {
@@ -459,11 +484,18 @@ class AcademicService {
     };
   }
 
+  listAttendanceRecords(sessionId, user) {
+    const session = requireRow(academicRepository.findAttendanceSessionById(sessionId), 'Attendance session not found.');
+    if (!this.canManageOffering(user, session)) throw forbidden();
+    return academicRepository.listAttendanceRecords(sessionId);
+  }
+
   getAttendanceForStudent(user) {
     if (user.role !== 'student') {
       throw new Error('Only students can use this attendance view.');
     }
-    return academicRepository.listAttendanceForStudent(user.id);
+    return academicRepository.listAttendanceForStudent(user.id)
+      .filter(record => !this.isCourseAccessBlocked(user, record.courseId));
   }
 
   attendanceSummary(courseOfferingId, user) {
@@ -492,6 +524,7 @@ class AcademicService {
     if (!user || !offering) return false;
     if (user.role === 'admin') return true;
     if (user.role !== 'teacher') return false;
+    if (this.isCourseAccessBlocked(user, offering.courseId)) return false;
     if (Number(offering.instructorId) === Number(user.id)) return true;
     return enrollmentRepository.canManageCourse(user, offering.courseId);
   }
@@ -500,6 +533,7 @@ class AcademicService {
     if (!user || !offering) return false;
     if (this.canManageOffering(user, offering)) return true;
     if (user.role !== 'student') return false;
+    if (this.isCourseAccessBlocked(user, offering.courseId)) return false;
     const enrollment = academicRepository.findOfferingEnrollmentByStudent(offering.id || offering.courseOfferingId, user.id);
     return !!enrollment && enrollment.status === 'active';
   }
@@ -507,6 +541,7 @@ class AcademicService {
   canAccessAssignment(user, assignment) {
     if (this.canManageOffering(user, assignment)) return true;
     if (user.role !== 'student') return false;
+    if (this.isCourseAccessBlocked(user, assignment.courseId)) return false;
     if (!['published', 'closed'].includes(assignment.status)) return false;
     const enrollment = academicRepository.findOfferingEnrollmentByStudent(assignment.courseOfferingId, user.id);
     return !!enrollment && enrollment.status === 'active';
@@ -539,6 +574,25 @@ class AcademicService {
       }
     }
   }
+
+  ensureOfferingCapacity(offering, excludeEnrollmentId = null) {
+    const capacity = Number(offering.capacity || 0);
+    if (capacity <= 0) return;
+    const activeCount = academicRepository.countActiveOfferingEnrollments(offering.id, excludeEnrollmentId);
+    if (activeCount >= capacity) {
+      throw new Error('Course offering capacity has been reached.');
+    }
+  }
+
+  isCourseAccessBlocked(user, courseId) {
+    if (!user || user.role === 'admin') return false;
+    return restrictionService.hasActiveRestriction({
+      user,
+      restrictionType: 'course_access_blocked',
+      scopeType: 'course',
+      scopeId: courseId
+    });
+  }
 }
 
 function normalizeFilters(filters) {
@@ -564,6 +618,13 @@ function forbidden() {
   const error = new Error('You do not have permission to perform this action.');
   error.status = 403;
   return error;
+}
+
+function isPastDue(dueDate, submittedAt) {
+  if (!dueDate) return false;
+  const dueTs = new Date(dueDate).getTime();
+  const submittedTs = new Date(submittedAt).getTime();
+  return Number.isFinite(dueTs) && Number.isFinite(submittedTs) && submittedTs > dueTs;
 }
 
 module.exports = new AcademicService();

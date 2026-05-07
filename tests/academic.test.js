@@ -196,6 +196,35 @@ describe('Academic management system', () => {
       .expect(response => {
         expect(response.body.error).toMatch(/must remain active/i);
       });
+
+    const temporaryActiveTerm = (await request(app)
+      .post('/api/academic/terms')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        name: '2027-2028 Fall',
+        academicYear: '2027-2028',
+        semesterType: 'fall',
+        startDate: '2027-09-01',
+        endDate: '2027-12-22',
+        isActive: true
+      })
+      .expect(201)).body;
+
+    await request(app)
+      .delete(`/api/academic/terms/${temporaryActiveTerm.id}`)
+      .set('Cookie', cookie(adminSession))
+      .expect(200);
+
+    await request(app)
+      .get('/api/academic/terms')
+      .set('Cookie', cookie(adminSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(term => term.id === temporaryActiveTerm.id)).toBe(false);
+        const active = response.body.filter(term => term.isActive);
+        expect(active).toHaveLength(1);
+        expect(active[0].id).toBe(alternateTerm.id);
+      });
   });
 
   test('course offerings and enrollments are term-based and role-protected', async () => {
@@ -246,6 +275,56 @@ describe('Academic management system', () => {
       });
   });
 
+  test('course offering capacity is enforced for active enrollments', async () => {
+    const stamp = Date.now();
+    const extraStudent = authService.createUser({
+      name: `Capacity Student ${stamp}`,
+      username: `capacity-student-${stamp}`,
+      email: `capacity-student-${stamp}@example.com`,
+      role: 'student',
+      password: 'Capacity123!',
+      studentNumber: `CAP-${stamp}`
+    });
+
+    const cappedOffering = (await request(app)
+      .post('/api/academic/offerings')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        courseId: course.id,
+        termId: alternateTerm.id,
+        instructorId: teacherSession.user.id,
+        departmentId: department.id,
+        classYearId: classYear.id,
+        sectionId: section.id,
+        capacity: 1,
+        status: 'active'
+      })
+      .expect(201)).body;
+
+    await request(app)
+      .post('/api/academic/enrollments')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        courseOfferingId: cappedOffering.id,
+        studentId: studentSession.user.id,
+        status: 'active'
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/academic/enrollments')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        courseOfferingId: cappedOffering.id,
+        studentId: extraStudent.id,
+        status: 'active'
+      })
+      .expect(400)
+      .expect(response => {
+        expect(response.body.error).toMatch(/capacity/i);
+      });
+  });
+
   test('assignment creation, student submission, and instructor grading work', async () => {
     assignment = (await request(app)
       .post('/api/academic/assignments')
@@ -293,6 +372,29 @@ describe('Academic management system', () => {
       });
   });
 
+  test('late assignment submissions are accepted but marked late', async () => {
+    const lateAssignment = (await request(app)
+      .post('/api/academic/assignments')
+      .set('Cookie', cookie(teacherSession))
+      .send({
+        courseOfferingId: offering.id,
+        title: 'Past Due Homework',
+        description: 'Late flag check.',
+        dueDate: '2020-01-01',
+        status: 'published'
+      })
+      .expect(201)).body;
+
+    await request(app)
+      .post(`/api/academic/assignments/${lateAssignment.id}/submissions`)
+      .set('Cookie', cookie(studentSession))
+      .send({ submissionText: 'Submitted after the due date.' })
+      .expect(201)
+      .expect(response => {
+        expect(response.body.late).toBe(1);
+      });
+  });
+
   test('attendance sessions can be marked by instructors and viewed by students', async () => {
     attendanceSession = (await request(app)
       .post('/api/academic/attendance/sessions')
@@ -324,6 +426,104 @@ describe('Academic management system', () => {
       .expect(response => {
         expect(response.body.some(item => item.sessionId === attendanceSession.id && item.status === 'present')).toBe(true);
       });
+  });
+
+  test('deleting a student clears academic records that do not have database foreign keys', async () => {
+    const stamp = Date.now().toString().slice(-8);
+    const transientStudent = authService.createUser({
+      name: `Deleted Academic Student ${stamp}`,
+      username: `del-acad-${stamp}`,
+      email: `deleted-academic-student-${stamp}@example.com`,
+      role: 'student',
+      password: 'DeletedAcademic123!',
+      studentNumber: `DEL-ACA-${stamp}`
+    });
+    const transientSession = authService.login(transientStudent.studentNumber, 'DeletedAcademic123!');
+
+    await request(app)
+      .post('/api/academic/enrollments')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        courseOfferingId: offering.id,
+        studentId: transientStudent.id,
+        status: 'active'
+      })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/academic/assignments/${assignment.id}/submissions`)
+      .set('Cookie', cookie(transientSession))
+      .send({ submissionText: 'Temporary work.' })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/academic/attendance/sessions/${attendanceSession.id}/records`)
+      .set('Cookie', cookie(teacherSession))
+      .send({
+        records: [
+          { studentId: transientStudent.id, status: 'late', note: 'Temporary record' }
+        ]
+      })
+      .expect(200);
+
+    await request(app)
+      .post('/api/restrictions')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        userId: transientStudent.id,
+        restrictionType: 'course_access_blocked',
+        scopeType: 'course',
+        scopeId: course.id,
+        reason: 'Temporary restriction'
+      })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/users/${transientStudent.id}`)
+      .set('Cookie', cookie(adminSession))
+      .expect(200);
+
+    const db = getDatabase();
+    expect(db.prepare('SELECT COUNT(*) as count FROM course_offering_enrollments WHERE studentId = ?').get(transientStudent.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM assignment_submissions WHERE studentId = ?').get(transientStudent.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM attendance_records WHERE studentId = ?').get(transientStudent.id).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as count FROM user_restrictions WHERE userId = ?').get(transientStudent.id).count).toBe(0);
+  });
+
+  test('deleting an instructor clears course offering instructor references', async () => {
+    const stamp = Date.now().toString().slice(-8);
+    const transientTeacher = authService.createUser({
+      name: `Deleted Instructor ${stamp}`,
+      username: `del-teach-${stamp}`,
+      email: `deleted-instructor-${stamp}@example.com`,
+      role: 'teacher',
+      password: 'DeletedTeacher123!',
+      staffNumber: `DEL-T-${stamp}`
+    });
+
+    const transientOffering = (await request(app)
+      .post('/api/academic/offerings')
+      .set('Cookie', cookie(adminSession))
+      .send({
+        courseId: course.id,
+        termId: alternateTerm.id,
+        instructorId: transientTeacher.id,
+        departmentId: department.id,
+        classYearId: classYear.id,
+        sectionId: section.id,
+        capacity: 10,
+        status: 'active'
+      })
+      .expect(201)).body;
+
+    await request(app)
+      .delete(`/api/users/${transientTeacher.id}`)
+      .set('Cookie', cookie(adminSession))
+      .expect(200);
+
+    const db = getDatabase();
+    expect(db.prepare('SELECT instructorId FROM course_offerings WHERE id = ?').get(transientOffering.id).instructorId).toBeNull();
+    expect(db.prepare('SELECT COUNT(*) as count FROM enrollments WHERE userId = ?').get(transientTeacher.id).count).toBe(0);
   });
 
   test('admin analytics are role protected and include academic totals', async () => {

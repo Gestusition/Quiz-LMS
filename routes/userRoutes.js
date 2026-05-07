@@ -57,7 +57,7 @@ router.use(requireRole('admin'));
  *         content:
  *           application/json:
  *             schema:
- *               type: array
+ *               type: object
  *               properties:
  *                 items:
  *                   type: array
@@ -167,7 +167,7 @@ router.get('/:id', validateId, (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    res.status(201).json(userService.createUser(req.body));
+    res.status(201).json(userService.createUser(req.body, req.user.id));
   } catch (err) {
     sendError(res, err, 400);
   }
@@ -205,7 +205,7 @@ router.post('/', (req, res) => {
  */
 router.put('/:id', validateId, (req, res) => {
   try {
-    res.json(userService.updateUser(req.params.id, req.body));
+    res.json(userService.updateUser(req.params.id, req.body, req.user.id));
   } catch (err) {
     sendError(res, err, 400);
   }
@@ -243,7 +243,7 @@ router.put('/:id', validateId, (req, res) => {
  */
 router.put('/:id/password', validateId, (req, res) => {
   try {
-    res.json(userService.setUserPassword(req.params.id, req.body.password));
+    res.json(userService.setUserPassword(req.params.id, req.body.password, req.user.id));
   } catch (err) {
     sendError(res, err, 400);
   }

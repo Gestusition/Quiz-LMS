@@ -419,6 +419,20 @@ function findOfferingEnrollmentByStudent(courseOfferingId, studentId) {
   `).get(courseOfferingId, studentId) || null;
 }
 
+function countActiveOfferingEnrollments(courseOfferingId, excludeEnrollmentId = null) {
+  const params = [courseOfferingId];
+  let query = `
+    SELECT COUNT(*) as count
+    FROM course_offering_enrollments
+    WHERE courseOfferingId = ? AND status = 'active'
+  `;
+  if (excludeEnrollmentId) {
+    query += ' AND id != ?';
+    params.push(excludeEnrollmentId);
+  }
+  return getDatabase().prepare(query).get(...params).count;
+}
+
 function insertOfferingEnrollment(payload) {
   return getDatabase().prepare(`
     INSERT INTO course_offering_enrollments (courseOfferingId, studentId, status, finalGrade)
@@ -438,6 +452,10 @@ function deleteOfferingEnrollment(id) {
   return getDatabase().prepare('DELETE FROM course_offering_enrollments WHERE id = ?').run(id);
 }
 
+function deleteOfferingEnrollmentsByStudent(studentId) {
+  return getDatabase().prepare('DELETE FROM course_offering_enrollments WHERE studentId = ?').run(studentId);
+}
+
 function ensureCourseEnrollment(courseId, studentId) {
   return getDatabase().prepare(`
     INSERT OR IGNORE INTO enrollments (courseId, userId, role, status)
@@ -452,7 +470,7 @@ function listAssignments(user, filters = {}) {
       t.name as termName, t.isActive as termIsActive,
       u.name as instructorName,
       COUNT(DISTINCT s.id) as submissionCount
-      ${user.role === 'student' ? ', own.id as ownSubmissionId, own.status as ownSubmissionStatus, own.grade as ownGrade, own.feedback as ownFeedback, own.submittedAt as ownSubmittedAt' : ''}
+      ${user.role === 'student' ? ', own.id as ownSubmissionId, own.status as ownSubmissionStatus, own.grade as ownGrade, own.feedback as ownFeedback, own.submittedAt as ownSubmittedAt, own.late as ownLate' : ''}
     FROM assignments a
     JOIN course_offerings co ON co.id = a.courseOfferingId
     JOIN courses c ON c.id = co.courseId
@@ -572,23 +590,40 @@ function findSubmissionByAssignmentStudent(assignmentId, studentId) {
   `).get(assignmentId, studentId) || null;
 }
 
-function upsertSubmission(assignmentId, studentId, payload, submittedAt) {
+function deleteSubmissionsByStudent(studentId) {
+  return getDatabase().prepare('DELETE FROM assignment_submissions WHERE studentId = ?').run(studentId);
+}
+
+function deleteAttendanceRecordsByStudent(studentId) {
+  return getDatabase().prepare('DELETE FROM attendance_records WHERE studentId = ?').run(studentId);
+}
+
+function clearUserReferences(userId) {
+  const db = getDatabase();
+  db.prepare('UPDATE course_offerings SET instructorId = NULL WHERE instructorId = ?').run(userId);
+  db.prepare('UPDATE assignments SET createdBy = NULL WHERE createdBy = ?').run(userId);
+  db.prepare('UPDATE attendance_sessions SET createdBy = NULL WHERE createdBy = ?').run(userId);
+  db.prepare('UPDATE attendance_records SET markedBy = NULL WHERE markedBy = ?').run(userId);
+  db.prepare('UPDATE assignment_submissions SET gradedBy = NULL WHERE gradedBy = ?').run(userId);
+}
+
+function upsertSubmission(assignmentId, studentId, payload, submittedAt, late = false) {
   const existing = findSubmissionByAssignmentStudent(assignmentId, studentId);
   if (existing) {
     getDatabase().prepare(`
       UPDATE assignment_submissions
       SET submissionText = ?, submissionUrl = ?, status = 'submitted', submittedAt = ?,
-        grade = '', feedback = '', gradedAt = '', gradedBy = NULL, updatedAt = ?
+        late = ?, grade = '', feedback = '', gradedAt = '', gradedBy = NULL, updatedAt = ?
       WHERE id = ?
-    `).run(payload.submissionText, payload.submissionUrl, submittedAt, submittedAt, existing.id);
+    `).run(payload.submissionText, payload.submissionUrl, submittedAt, late ? 1 : 0, submittedAt, existing.id);
     return { lastInsertRowid: existing.id };
   }
   return getDatabase().prepare(`
     INSERT INTO assignment_submissions (
-      assignmentId, studentId, submissionText, submissionUrl, status, submittedAt
+      assignmentId, studentId, submissionText, submissionUrl, status, submittedAt, late
     )
-    VALUES (?, ?, ?, ?, 'submitted', ?)
-  `).run(assignmentId, studentId, payload.submissionText, payload.submissionUrl, submittedAt);
+    VALUES (?, ?, ?, ?, 'submitted', ?, ?)
+  `).run(assignmentId, studentId, payload.submissionText, payload.submissionUrl, submittedAt, late ? 1 : 0);
 }
 
 function gradeSubmission(id, payload, gradedAt, gradedBy) {
@@ -688,7 +723,7 @@ function listAttendanceRecords(sessionId) {
 
 function listAttendanceForStudent(studentId) {
   return getDatabase().prepare(`
-    SELECT ar.*, ats.sessionDate, ats.topic, c.code as courseCode, c.title as courseTitle,
+    SELECT ar.*, ats.sessionDate, ats.topic, co.courseId, c.code as courseCode, c.title as courseTitle,
       t.name as termName
     FROM attendance_records ar
     JOIN attendance_sessions ats ON ats.id = ar.sessionId
@@ -786,14 +821,19 @@ function adminAnalytics() {
 module.exports = {
   adminAnalytics,
   attendanceSummary,
+  clearUserReferences,
+  countActiveOfferingEnrollments,
+  deleteAttendanceRecordsByStudent,
   deleteClassYear,
   deleteCourseOffering,
   deleteDepartment,
   deleteFaculty,
   deleteOfferingEnrollment,
+  deleteOfferingEnrollmentsByStudent,
   deleteSection,
   deleteTerm,
   deleteAssignment,
+  deleteSubmissionsByStudent,
   ensureCourseEnrollment,
   findActiveTerm,
   findAssignmentById,

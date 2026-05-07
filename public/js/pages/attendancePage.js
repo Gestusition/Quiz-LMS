@@ -103,21 +103,28 @@ export const AttendancePage = {
 
   async showMarkAttendanceForm(sessionId, courseOfferingId) {
     try {
-      const enrollments = await API.getOfferingEnrollments(courseOfferingId);
+      const [enrollments, existingRecords] = await Promise.all([
+        API.getOfferingEnrollments(courseOfferingId),
+        API.getAttendanceRecords(sessionId).catch(() => [])
+      ]);
+      const activeEnrollments = enrollments.filter(item => item.status === 'active');
+      const recordsByStudent = new Map(existingRecords.map(record => [Number(record.studentId), record]));
       this.openModal('Mark attendance', `
         <form id="mark-attendance-form" class="stack">
           <div class="assign-list">
-            ${enrollments.map(item => `
+            ${activeEnrollments.map(item => {
+              const existing = recordsByStudent.get(Number(item.studentId)) || {};
+              return `
               <div class="attendance-row" data-student-id="${item.studentId}">
                 <div><strong>${this.esc(item.studentName)}</strong><small>${this.esc(item.studentNumber || item.studentEmail)}</small></div>
                 <select class="form-select attendance-status">
-                  ${['present', 'absent', 'late', 'excused'].map(status => `<option value="${status}">${status}</option>`).join('')}
+                  ${['present', 'absent', 'late', 'excused'].map(status => `<option value="${status}" ${existing.status === status ? 'selected' : ''}>${status}</option>`).join('')}
                 </select>
-                <input class="form-input attendance-note" placeholder="Note">
+                <input class="form-input attendance-note" placeholder="Note" value="${this.esc(existing.note || '')}">
               </div>
-            `).join('') || this.emptyLine('No active students are enrolled in this offering.')}
+            `; }).join('') || this.emptyLine('No active students are enrolled in this offering.')}
           </div>
-          <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" ${enrollments.length ? '' : 'disabled'}>Save</button></div>
+          <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" ${activeEnrollments.length ? '' : 'disabled'}>Save</button></div>
         </form>
       `);
       document.getElementById('mark-attendance-form').addEventListener('submit', async event => {

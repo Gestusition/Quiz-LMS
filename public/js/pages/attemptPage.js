@@ -12,14 +12,17 @@ export const AttemptPage = {
     try {
       const attempt = await API.getAttempt(attemptId);
       const isInProgress = attempt.status === 'in_progress';
+      const resultsHidden = attempt.status === 'submitted' && attempt.hiddenByPolicy;
       const questions = attempt.questions || [];
       const savedAnswers = {};
       (attempt.answers || []).forEach(answer => { savedAnswers[answer.questionId] = answer; });
+      this._attemptQuestions = questions;
 
       if (!this._attemptAnswers || this._attemptId !== attemptId) {
         this._attemptAnswers = {};
         this._attemptId = attemptId;
         this._attemptStart = Date.now();
+        this._autoSubmitted = false;
         Object.entries(savedAnswers).forEach(([qId, answer]) => {
           this._attemptAnswers[qId] = answer.answer || '';
         });
@@ -34,7 +37,12 @@ export const AttemptPage = {
                 <span>Attempt #${attempt.attemptNumber}</span>
                 ${isInProgress ? `<div class="timer" id="attempt-timer"></div>` : `<span class="status-badge status-${attempt.status}">${attempt.status}</span>`}
               </div>
-              ${attempt.status === 'submitted' ? `
+              ${attempt.status === 'submitted' && resultsHidden ? `
+                <div class="attempt-policy-message">
+                  ${this.esc(attempt.policyMessage || 'Results are not available yet.')}
+                </div>
+              ` : ''}
+              ${attempt.status === 'submitted' && !resultsHidden ? `
                 <div class="attempt-results-mini">
                   <span class="score-display">${attempt.score}/${attempt.maxScore}</span>
                   <span class="percentage-display">${attempt.percentage}%</span>
@@ -51,7 +59,7 @@ export const AttemptPage = {
                 const answered = !!this._attemptAnswers[q.id];
                 const result = savedAnswers[q.id];
                 let dotClass = 'nav-dot';
-                if (attempt.status === 'submitted') {
+                if (attempt.status === 'submitted' && !resultsHidden && result && result.isCorrect !== undefined) {
                   dotClass += result?.isCorrect ? ' dot-correct' : ' dot-wrong';
                 } else if (answered) {
                   dotClass += ' dot-answered';
@@ -69,7 +77,7 @@ export const AttemptPage = {
 
       this.renderLatexAll();
 
-      if (attempt.status === 'submitted') {
+      if (attempt.status === 'submitted' && !resultsHidden) {
         this.initAttemptChart(attempt, savedAnswers);
       }
 
@@ -91,6 +99,7 @@ export const AttemptPage = {
   },
 
   initAttemptChart(attempt, savedAnswers) {
+    if (attempt.hiddenByPolicy) return;
     if (!document.getElementById('attempt-chart') || !attempt.questions || !attempt.questions.length) return;
 
     let correct = 0;
@@ -143,7 +152,7 @@ export const AttemptPage = {
 
   renderQuestionCard(question, index, isInProgress, savedAnswers, attempt) {
     const saved = savedAnswers[question.id];
-    const showResult = attempt.status === 'submitted' && attempt.showCorrectAnswers;
+    const showResult = attempt.status === 'submitted' && !attempt.hiddenByPolicy && Number(attempt.showCorrectAnswers) === 1;
 
     return `
       <div class="question-card" id="question-${index}">
@@ -336,6 +345,10 @@ export const AttemptPage = {
       if (remaining <= 0) {
         clearInterval(this._timerInterval);
         timerEl.textContent = 'Time\'s up!';
+        if (!this._autoSubmitted) {
+          this._autoSubmitted = true;
+          this.submitCurrentAttempt(attempt.id, this._attemptQuestions || [], { force: true });
+        }
       }
     };
     updateTimer();
@@ -421,7 +434,6 @@ export const AttemptPage = {
     this._attemptAnswers[questionId] = values.join(',');
 
     // Re-render the ordering
-    const questions = []; // Will update nav dot
     this.renderAttempt(this._attemptId);
   },
 
@@ -435,12 +447,15 @@ export const AttemptPage = {
     }
   },
 
-  async submitCurrentAttempt(attemptId, questions) {
-    if (!confirm('Submit this attempt? You cannot change your answers after submission.')) return;
+  async submitCurrentAttempt(attemptId, questions, options = {}) {
+    if (!options.force && !confirm('Submit this attempt? You cannot change your answers after submission.')) return;
     clearInterval(this._timerInterval);
 
     const answers = {};
     questions.forEach(q => {
+      if (q.type === 'OR' && this._attemptAnswers[q.id] === undefined) {
+        this._attemptAnswers[q.id] = (q.options || []).map((_, index) => String(index)).join(',');
+      }
       if (this._attemptAnswers[q.id] !== undefined) {
         answers[q.id] = this._attemptAnswers[q.id];
       }

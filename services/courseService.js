@@ -4,7 +4,13 @@ const categoryRepository = require('../repositories/categoryRepository');
 const questionRepository = require('../repositories/questionRepository');
 const quizRepository = require('../repositories/quizRepository');
 const contentRepository = require('../repositories/contentRepository');
+const courseWeekRepository = require('../repositories/courseWeekRepository');
+const discussionRepository = require('../repositories/discussionRepository');
+const gradeSchemeRepository = require('../repositories/gradeSchemeRepository');
+const restrictionRepository = require('../repositories/restrictionRepository');
 const userRepository = require('../repositories/userRepository');
+const validationIssueRepository = require('../repositories/validationIssueRepository');
+const restrictionService = require('./restrictionService');
 const { courseVisibilityValues, enrollmentStatusValues } = require('../constants/enums');
 const { validateCourse } = require('../validators/courseValidators');
 const { nowIso } = require('../utils/security');
@@ -13,7 +19,14 @@ const { serializeParticipant } = require('../serializers/participantSerializer')
 
 class CourseService {
   getAll(user, filters = {}) {
-    return courseRepository.list(user, filters, courseVisibilityValues).map(serializeCourse);
+    return courseRepository.list(user, filters, courseVisibilityValues)
+      .map(serializeCourse)
+      .filter(course => user.role === 'admin' || !restrictionService.hasActiveRestriction({
+        user,
+        restrictionType: 'course_access_blocked',
+        scopeType: 'course',
+        scopeId: course.id
+      }));
   }
 
   getById(id) {
@@ -74,9 +87,16 @@ class CourseService {
     const categoryIds = categoryRepository.findIdsByCourseId(id).map(category => category.id);
     courseRepository.withTransaction(() => {
       questionRepository.deleteByCategoryIds(categoryIds);
+      categoryRepository.deleteByCourseId(id);
       quizRepository.deleteByCourseId(id);
+      quizRepository.deleteExamTemplatesByCourseId(id);
       contentRepository.deleteAnnouncementsByCourseId(id);
       contentRepository.deleteResourcesByCourseId(id);
+      courseWeekRepository.deleteByCourseId(id);
+      discussionRepository.deleteByCourseId(id);
+      gradeSchemeRepository.deleteByCourseId(id);
+      restrictionRepository.deleteByScope('course', id);
+      validationIssueRepository.deleteByCourseId(id);
       courseRepository.deleteById(id);
     });
 

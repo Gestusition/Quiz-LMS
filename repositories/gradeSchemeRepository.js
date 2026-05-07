@@ -55,8 +55,24 @@ function listThresholds(schemeId) {
   `).all(schemeId);
 }
 
+function clearCreatedBy(userId) {
+  return getDatabase().prepare('UPDATE grade_schemes SET createdBy = NULL WHERE createdBy = ?').run(userId);
+}
+
+function deleteByCourseId(courseId) {
+  const db = getDatabase();
+  const schemeIds = db.prepare('SELECT id FROM grade_schemes WHERE courseId = ?').all(courseId).map(row => row.id);
+  if (schemeIds.length) {
+    const placeholders = schemeIds.map(() => '?').join(',');
+    db.prepare(`DELETE FROM grade_thresholds WHERE gradeSchemeId IN (${placeholders})`).run(...schemeIds);
+  }
+  db.prepare('DELETE FROM grade_schemes WHERE courseId = ?').run(courseId);
+}
+
 module.exports = {
+  clearCreatedBy,
   createScheme,
+  deleteByCourseId,
   findDefaultByCourse,
   findSchemeById,
   listSchemes,

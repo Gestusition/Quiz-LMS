@@ -147,6 +147,7 @@ export const API = {
     return this.request(`/academic/attendance/sessions${params.toString() ? `?${params}` : ''}`);
   },
   createAttendanceSession(data) { return this.request('/academic/attendance/sessions', { method: 'POST', body: data }); },
+  getAttendanceRecords(id) { return this.request(`/academic/attendance/sessions/${id}/records`); },
   markAttendance(id, records) { return this.request(`/academic/attendance/sessions/${id}/records`, { method: 'POST', body: { records } }); },
   getMyAttendance() { return this.request('/academic/attendance/my'); },
   getAttendanceSummary(courseOfferingId) { return this.request(`/academic/attendance/offerings/${courseOfferingId}/summary`); },
@@ -274,6 +275,7 @@ export const API = {
   setQuizQuestions(id, questionIds) { return this.request(`/quizzes/${id}/questions`, { method: 'PUT', body: { questionIds } }); },
   getQuizAttempts(id) { return this.request(`/quizzes/${id}/attempts`); },
   startAttempt(id) { return this.request(`/quizzes/${id}/attempts`, { method: 'POST' }); },
+  releaseQuizResults(id) { return this.request(`/quizzes/${id}/release-results`, { method: 'POST' }); },
   getAttempt(id) { return this.request(`/quizzes/attempts/${id}`); },
   submitAttempt(id, answers, timeSpentSeconds) {
     return this.request(`/quizzes/attempts/${id}/submit`, {

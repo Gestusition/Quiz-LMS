@@ -1,0 +1,66 @@
+const { createRateLimiter, identifierKey } = require('../middleware/rateLimit');
+
+function runLimiter(limiter, req = {}) {
+  const response = {
+    statusCode: 200,
+    headers: {},
+    body: null,
+    setHeader(name, value) {
+      this.headers[name] = value;
+    },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    }
+  };
+  let nextCalled = false;
+  limiter({
+    ip: '127.0.0.1',
+    socket: { remoteAddress: '127.0.0.1' },
+    body: {},
+    ...req
+  }, response, () => {
+    nextCalled = true;
+  });
+  return { nextCalled, response };
+}
+
+describe('rate limiter middleware', () => {
+  test('blocks requests after the configured limit', () => {
+    const limiter = createRateLimiter({
+      windowMs: 60_000,
+      max: 2,
+      key: identifierKey,
+      message: 'Limited.'
+    });
+    const req = { body: { identifier: 'student@example.com' } };
+
+    expect(runLimiter(limiter, req).nextCalled).toBe(true);
+    expect(runLimiter(limiter, req).nextCalled).toBe(true);
+
+    const blocked = runLimiter(limiter, req);
+    expect(blocked.nextCalled).toBe(false);
+    expect(blocked.response.statusCode).toBe(429);
+    expect(blocked.response.body.error).toBe('Limited.');
+    expect(blocked.response.headers['Retry-After']).toBeDefined();
+  });
+
+  test('tracks different identifiers separately and trims stale buckets', () => {
+    const limiter = createRateLimiter({
+      windowMs: 60_000,
+      max: 1,
+      maxBuckets: 1,
+      key: req => req.body.identifier
+    });
+
+    expect(runLimiter(limiter, { body: { identifier: 'one' } }).nextCalled).toBe(true);
+    expect(runLimiter(limiter, { body: { identifier: 'two' } }).nextCalled).toBe(true);
+
+    const allowedAgainAfterTrim = runLimiter(limiter, { body: { identifier: 'one' } });
+    expect(allowedAgainAfterTrim.nextCalled).toBe(true);
+  });
+});

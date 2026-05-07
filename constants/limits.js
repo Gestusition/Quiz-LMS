@@ -4,6 +4,13 @@ const LIMITS = Object.freeze({
     defaultPageSize: 20,
     maxPageSize: 100
   }),
+  rateLimits: Object.freeze({
+    loginWindowMs: 15 * 60 * 1000,
+    loginMax: 20,
+    passwordResetWindowMs: 15 * 60 * 1000,
+    passwordResetMax: 10,
+    maxBuckets: 5000
+  }),
   users: Object.freeze({
     nameMin: 2,
     nameMax: 80,

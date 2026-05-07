@@ -242,17 +242,16 @@ export const UsersPage = {
   },
 
   async showUserForm(id) {
-    const [usersResult, faculties, departments, classYears, sections] = await Promise.all([
-      API.getUsers({ page: 1, limit: 100 }),
+    const defaultUser = {
+      name: '', username: '', email: '', role: 'student', status: 'active', studentNumber: '', cohort: ''
+    };
+    const [user, faculties, departments, classYears, sections] = await Promise.all([
+      id ? API.request(`/users/${id}`) : Promise.resolve(defaultUser),
       API.getFaculties().catch(() => []),
       API.getDepartments().catch(() => []),
       API.getClassYears().catch(() => []),
       API.getSections().catch(() => [])
     ]);
-    const users = usersResult.items || [];
-    const user = id ? users.find(item => item.id === id) : {
-      name: '', username: '', email: '', role: 'student', status: 'active', studentNumber: '', cohort: ''
-    };
     this.openModal(id ? 'Edit user' : 'New user', `
       <form id="user-form" class="stack">
         ${this.input('user-name', 'Name', user.name)}

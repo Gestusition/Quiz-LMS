@@ -2,7 +2,22 @@ const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
 const { requireAuth, getSessionToken, SESSION_COOKIE_NAME } = require('../middleware/auth');
+const { createRateLimiter, identifierKey } = require('../middleware/rateLimit');
 const { sendError } = require('../utils/appError');
+const { LIMITS } = require('../constants/limits');
+
+const loginLimiter = createRateLimiter({
+  windowMs: LIMITS.rateLimits.loginWindowMs,
+  max: LIMITS.rateLimits.loginMax,
+  key: identifierKey,
+  message: 'Too many login attempts. Please try again later.'
+});
+const resetLimiter = createRateLimiter({
+  windowMs: LIMITS.rateLimits.passwordResetWindowMs,
+  max: LIMITS.rateLimits.passwordResetMax,
+  key: identifierKey,
+  message: 'Too many password reset attempts. Please try again later.'
+});
 
 function sessionCookieOptions(expiresAt) {
   return {
@@ -54,7 +69,7 @@ function sendSession(res, session) {
  *       401:
  *         $ref: '#/components/responses/401Unauthorized'
  */
-router.post('/login', (req, res) => {
+router.post('/login', loginLimiter, (req, res) => {
   try {
     const identifier = req.body.identifier || req.body.login || req.body.email || req.body.student_number;
     const session = authService.login(identifier, req.body.password);
@@ -87,7 +102,7 @@ router.post('/login', (req, res) => {
  *       400:
  *         $ref: '#/components/responses/400BadRequest'
  */
-router.post('/password-reset/request', (req, res) => {
+router.post('/password-reset/request', resetLimiter, (req, res) => {
   try {
     const identifier = req.body.identifier || req.body.login || req.body.username;
     res.json(authService.requestPasswordReset(identifier));
@@ -119,7 +134,7 @@ router.post('/password-reset/request', (req, res) => {
  *       400:
  *         $ref: '#/components/responses/400BadRequest'
  */
-router.post('/password-reset/complete', (req, res) => {
+router.post('/password-reset/complete', resetLimiter, (req, res) => {
   try {
     res.json(authService.completePasswordReset(req.body));
   } catch (err) {

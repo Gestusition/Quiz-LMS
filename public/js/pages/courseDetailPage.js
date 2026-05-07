@@ -22,6 +22,11 @@ export const CourseDetailPage = {
 
       const weeks = weeksResult.items || [];
       const threads = threadsResult.items || [];
+      const weekResourcesById = {};
+      await Promise.all(weeks.map(async week => {
+        const result = await API.getWeekResources(week.id).catch(() => ({ items: [] }));
+        weekResourcesById[week.id] = result.items || [];
+      }));
       const courseAssignments = assignments.filter(item => Number(item.courseId) === Number(courseId));
       const courseAttendance = attendanceSessions.filter(item => Number(item.courseId) === Number(courseId));
 
@@ -33,9 +38,11 @@ export const CourseDetailPage = {
             <p>${this.esc(course.code)} - <span class="status-chip ${this.esc(course.visibility)}">${this.esc(course.visibility)}</span></p>
           </div>
           <div class="header-actions">
-            ${manager ? `<button class="btn btn-ghost" onclick="App.showEnrollmentForm(${course.id})">Enroll</button>
+            ${manager ? `<button class="btn btn-ghost" onclick="App.showCourseForm(${course.id})">Edit</button>
+            <button class="btn btn-ghost" onclick="App.showEnrollmentForm(${course.id})">Enroll</button>
             <button class="btn btn-ghost" onclick="App.showWeekForm(${course.id})">Add week</button>
-            <button class="btn btn-primary" onclick="App.showQuizForm(null, ${course.id})">New Quiz</button>` : ''}
+            <button class="btn btn-primary" onclick="App.showQuizForm(null, ${course.id})">New Quiz</button>
+            <button class="btn btn-danger" onclick="App.deleteCourse(${course.id})">Delete</button>` : ''}
           </div>
         </header>
 
@@ -55,7 +62,7 @@ export const CourseDetailPage = {
                 ${manager ? `<button class="btn btn-ghost btn-sm" onclick="App.showWeekForm(${course.id})">Add week</button>` : ''}
               </div>
               <div class="list">
-                ${weeks.map(week => this.weekRow(week, manager)).join('') || this.emptyLine('No weekly materials published.')}
+                ${weeks.map(week => this.weekRow(week, manager, weekResourcesById[week.id] || [])).join('') || this.emptyLine('No weekly materials published.')}
               </div>
             </div>
 
@@ -133,7 +140,6 @@ export const CourseDetailPage = {
               <div class="list compact">${participants.map(item => this.participantRow(item, manager)).join('') || this.emptyLine('No participants.')}</div>
             </div>
           </aside>
-        </section>
         </section>
       `);
       
@@ -439,7 +445,7 @@ export const CourseDetailPage = {
   },
 
   resourceRow(item, manager) {
-    const title = item.url ? `<a href="${this.esc(item.url)}" target="_blank">${this.esc(item.title)}</a>` : this.esc(item.title);
+    const title = item.url ? `<a href="${this.esc(item.url)}" target="_blank" rel="noopener noreferrer">${this.esc(item.title)}</a>` : this.esc(item.title);
     return `
       <div class="list-row">
         <div><strong>${title}</strong><small>${this.esc(item.type)} - ${this.esc(item.description || '')}</small></div>
@@ -460,16 +466,38 @@ export const CourseDetailPage = {
     `;
   },
 
-  weekRow(week, manager) {
+  weekRow(week, manager, resources = []) {
     return `
       <div class="list-row">
         <div>
           <strong>Week ${this.esc(week.weekNumber)} - ${this.esc(week.title)}</strong>
           <small>${this.esc(week.description || 'No description')} | ${this.esc(week.startsAt || '-')} to ${this.esc(week.endsAt || '-')} | ${this.esc(week.resourceCount || 0)} resources</small>
+          ${resources.length ? `<div class="resource-inline-list">
+            ${resources.map(resource => this.weekResourceChip(resource, manager)).join('')}
+          </div>` : ''}
         </div>
         ${manager ? `<button class="btn btn-ghost btn-sm" onclick="App.showWeekResourceForm(${week.id}, ${week.courseId})">Add resource</button>` : ''}
       </div>
     `;
+  },
+
+  weekResourceChip(resource, manager) {
+    const content = resource.content || '';
+    const label = this.esc(resource.title);
+    const body = resource.type === 'page' || !content
+      ? `<span>${label}</span>`
+      : `<a href="${this.esc(content)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    return `<span class="resource-chip">${body}${manager ? ` <button class="chip-delete" onclick="App.deleteWeekResource(${resource.id})" aria-label="Delete ${label}">x</button>` : ''}</span>`;
+  },
+
+  async deleteWeekResource(id) {
+    if (!confirm('Delete this week resource?')) return;
+    try {
+      await API.deleteWeekResource(id);
+      this.route();
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
   },
 
   threadRow(thread, manager = false) {

@@ -66,19 +66,22 @@ class RestrictionService {
   }
 
   assertAccessAllowed({ user, restrictionType, scopeType = 'global', scopeId = null, safeMessage }) {
-    const matches = this.activeRestrictionsForUser(user.id).filter(restriction => {
-      if (restriction.restrictionType !== restrictionType) return false;
-      if (restriction.scopeType === 'global') return true;
-      if (restriction.scopeType !== scopeType) return false;
-      return Number(restriction.scopeId) === Number(scopeId);
-    });
-
-    if (matches.length > 0) {
+    if (this.hasActiveRestriction({ user, restrictionType, scopeType, scopeId })) {
       throw forbiddenError(
         safeMessage || 'Your access is restricted. Please contact your instructor or administrator.',
         'USER_RESTRICTED'
       );
     }
+  }
+
+  hasActiveRestriction({ user, restrictionType, scopeType = 'global', scopeId = null }) {
+    if (!user || !user.id) return false;
+    return this.activeRestrictionsForUser(user.id).some(restriction => {
+      if (restriction.restrictionType !== restrictionType) return false;
+      if (restriction.scopeType === 'global') return true;
+      if (restriction.scopeType !== scopeType) return false;
+      return Number(restriction.scopeId) === Number(scopeId);
+    });
   }
 
   countActive() {

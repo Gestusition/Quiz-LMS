@@ -48,6 +48,7 @@ export const AssignmentsPage = {
         this.user.role === 'student' ? API.getAssignments({ courseOfferingId: assignment.courseOfferingId }) : Promise.resolve([])
       ]);
       const own = assignmentRows.find(item => Number(item.id) === Number(assignmentId)) || {};
+      const canSubmit = this.user.role === 'student' && assignment.status === 'published';
 
       this.setApp(`
         <header class="page-header">
@@ -57,8 +58,8 @@ export const AssignmentsPage = {
             <p>${this.esc(assignment.courseCode)} - ${this.esc(assignment.termName)} - ${this.esc(assignment.status)}</p>
           </div>
           <div class="header-actions">
-            ${this.user.role === 'student' ? `<button class="btn btn-primary" onclick="App.showSubmissionForm(${assignment.id})">${own.ownSubmissionId ? 'Resubmit' : 'Submit'}</button>` : ''}
-            ${manager ? `<button class="btn btn-ghost" onclick="App.showAssignmentForm(${assignment.id})">Edit</button><button class="btn btn-primary" onclick="App.showSubmissions(${assignment.id})">Submissions</button>` : ''}
+            ${this.user.role === 'student' ? `<button class="btn btn-primary" ${canSubmit ? `onclick="App.showSubmissionForm(${assignment.id})"` : 'disabled'}>${assignment.status === 'closed' ? 'Closed' : (own.ownSubmissionId ? 'Resubmit' : 'Submit')}</button>` : ''}
+            ${manager ? `<button class="btn btn-ghost" onclick="App.showAssignmentForm(${assignment.id})">Edit</button><button class="btn btn-danger" onclick="App.deleteAssignment(${assignment.id})">Delete</button><button class="btn btn-primary" onclick="App.showSubmissions(${assignment.id})">Submissions</button>` : ''}
           </div>
         </header>
         <section class="content-grid">
@@ -77,6 +78,7 @@ export const AssignmentsPage = {
               <div class="panel-header"><h2>Your Submission</h2><span>${this.esc(own.ownSubmissionStatus || 'not submitted')}</span></div>
               <div class="profile-list">
                 ${this.profileRow('Submitted at', own.ownSubmittedAt ? this.formatDate(own.ownSubmittedAt) : '')}
+                ${this.profileRow('Late', own.ownLate ? 'Yes' : '')}
                 ${this.profileRow('Grade', own.ownGrade || '')}
                 ${this.profileRow('Feedback', own.ownFeedback || '')}
               </div>
@@ -101,18 +103,19 @@ export const AssignmentsPage = {
 
   assignmentRow(item, manager) {
     const detail = `${item.courseCode || ''} - ${item.termName || ''}${item.dueDate ? ` - due ${this.formatDate(item.dueDate)}` : ''}`;
+    const canSubmit = item.status === 'published';
     const studentActions = this.user.role === 'student'
-      ? `<button class="btn btn-primary btn-sm" onclick="App.showSubmissionForm(${item.id})">${item.ownSubmissionId ? 'Resubmit' : 'Submit'}</button>`
+      ? `<button class="btn btn-primary btn-sm" ${canSubmit ? `onclick="App.showSubmissionForm(${item.id})"` : 'disabled'}>${item.status === 'closed' ? 'Closed' : (item.ownSubmissionId ? 'Resubmit' : 'Submit')}</button>`
       : '';
     const managerActions = manager
-      ? `<button class="btn btn-ghost btn-sm" onclick="App.showAssignmentForm(${item.id})">Edit</button><button class="btn btn-primary btn-sm" onclick="App.showSubmissions(${item.id})">Submissions</button>`
+      ? `<button class="btn btn-ghost btn-sm" onclick="App.showAssignmentForm(${item.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="App.deleteAssignment(${item.id})">Delete</button><button class="btn btn-primary btn-sm" onclick="App.showSubmissions(${item.id})">Submissions</button>`
       : '';
     return `
       <div class="list-row">
         <div>
           <strong><a href="#/assignments/${item.id}">${this.esc(item.title)}</a></strong>
           <small>${this.esc(detail)}</small>
-          ${item.ownSubmissionStatus ? `<small>Submission: ${this.esc(item.ownSubmissionStatus)}${item.ownGrade ? ` - Grade: ${this.esc(item.ownGrade)}` : ''}</small>` : ''}
+          ${item.ownSubmissionStatus ? `<small>Submission: ${this.esc(item.ownSubmissionStatus)}${item.ownLate ? ' - late' : ''}${item.ownGrade ? ` - Grade: ${this.esc(item.ownGrade)}` : ''}</small>` : ''}
         </div>
         <div class="row-actions">
           <span class="status ${item.status}">${this.esc(item.status)}</span>
@@ -186,6 +189,17 @@ export const AssignmentsPage = {
     });
   },
 
+  async deleteAssignment(id) {
+    if (!confirm('Delete this assignment? Existing submissions will also be removed.')) return;
+    try {
+      await API.deleteAssignment(id);
+      this.toast('Assignment deleted.', 'success');
+      this.renderAssignments();
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
   async showSubmissions(assignmentId) {
     try {
       const submissions = await API.getAssignmentSubmissions(assignmentId);
@@ -196,7 +210,7 @@ export const AssignmentsPage = {
               <div>
                 <strong>${this.esc(item.studentName)}</strong>
                 <small>${this.esc(item.studentNumber || item.studentEmail)} - ${this.esc(item.status)}</small>
-                ${item.submissionUrl ? `<small><a href="${this.esc(item.submissionUrl)}" target="_blank">${this.esc(item.submissionUrl)}</a></small>` : ''}
+                ${item.submissionUrl ? `<small><a href="${this.esc(item.submissionUrl)}" target="_blank" rel="noopener noreferrer">${this.esc(item.submissionUrl)}</a></small>` : ''}
                 ${item.submissionText ? `<small>${this.esc(item.submissionText)}</small>` : ''}
                 ${item.grade ? `<small>Grade: ${this.esc(item.grade)} - ${this.esc(item.feedback || '')}</small>` : ''}
               </div>

@@ -9,6 +9,7 @@ const {
   enumValue,
   intInRange,
   optionalText,
+  optionalUrl,
   requiredText
 } = require('../utils/validation');
 const { nowIso } = require('../utils/security');
@@ -74,7 +75,11 @@ class CourseWeekService {
     const week = courseWeekRepository.findWeekById(weekId);
     if (!week) throw notFoundError('Course week not found.');
     this.ensureCourseAccess(week.courseId, user);
-    return courseWeekRepository.listWeekResources(weekId, filters);
+    return courseWeekRepository.listWeekResources(weekId, {
+      ...filters,
+      visibleOnly: user.role === 'student',
+      now: nowIso()
+    });
   }
 
   createWeekResource(weekId, user, data) {
@@ -90,7 +95,7 @@ class CourseWeekService {
       weekId,
       title: requiredText(data.title, 'title', { min: 2, max: LIMITS.resources.titleMax }),
       type: enumValue(data.type, 'type', RESOURCE_TYPES, 'link'),
-      content: optionalText(data.content || data.url, 'content', LIMITS.resources.urlMax),
+      content: this.validateResourceContent(data.content || data.url, data.type),
       visibleFrom,
       visibleUntil,
       createdBy: user.id
@@ -123,6 +128,17 @@ class CourseWeekService {
     if (!enrollmentRepository.canManageCourse(user, courseId)) {
       throw forbiddenError('Teacher or admin course access required.');
     }
+  }
+
+  validateResourceContent(value, type) {
+    const normalizedType = enumValue(type, 'type', RESOURCE_TYPES, 'link');
+    if (normalizedType === 'page') {
+      return optionalText(value, 'content', LIMITS.resources.urlMax);
+    }
+    return optionalUrl(value, 'content', LIMITS.resources.urlMax, {
+      allowRelative: normalizedType === 'file',
+      allowedRelativePrefixes: ['/uploads/']
+    });
   }
 }
 

@@ -21,6 +21,38 @@ function optionalText(value, field, max = 255) {
   return text;
 }
 
+function optionalUrl(value, field, max = 2000, options = {}) {
+  const text = optionalText(value, field, max);
+  if (!text) return '';
+
+  const {
+    allowRelative = false,
+    allowedProtocols = ['http:', 'https:'],
+    allowedRelativePrefixes = ['/uploads/']
+  } = options;
+
+  if (allowRelative && text.startsWith('/')) {
+    const allowed = allowedRelativePrefixes.some(prefix => text.startsWith(prefix));
+    if (!allowed || text.includes('\\')) {
+      throw validationError(field, `${field} must be a safe relative URL.`);
+    }
+    return text;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(text);
+  } catch (err) {
+    throw validationError(field, `${field} must be a valid URL.`);
+  }
+
+  if (!allowedProtocols.includes(parsed.protocol)) {
+    throw validationError(field, `${field} must use one of: ${allowedProtocols.join(', ')}.`);
+  }
+
+  return parsed.toString();
+}
+
 function requiredEmail(value) {
   const email = asTrimmedString(value).toLowerCase();
   if (!email) throw validationError('email', 'Email is required.');
@@ -135,6 +167,7 @@ module.exports = {
   numberInRange,
   optionalId,
   optionalText,
+  optionalUrl,
   parsePagination,
   requiredEmail,
   requiredId,

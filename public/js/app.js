@@ -86,11 +86,11 @@ const App = {
       ['#/', 'Dashboard'],
       ['#/profile', 'Profile'],
       ['#/courses', 'Courses'],
-      ['#/academic', 'Academic'],
       ['#/quizzes', 'Quizzes'],
       ['#/assignments', 'Assignments'],
       ['#/attendance', 'Attendance']
     ];
+    if (this.user.role !== 'student') items.splice(3, 0, ['#/academic', 'Academic']);
     if (this.canManageLearning()) items.push(['#/questions', 'Question Bank']);
     if (this.user.role === 'admin') items.push(['#/users', 'Users'], ['#/analytics', 'Analytics']);
 
@@ -131,6 +131,10 @@ const App = {
 
   canManageLearning() {
     return this.user && ['admin', 'teacher'].includes(this.user.role);
+  },
+
+  renderForbidden() {
+    this.setApp('<div class="empty-state"><h2>Access denied</h2><p>You do not have permission to open this page.</p><a class="btn btn-primary" href="#/">Dashboard</a></div>');
   }
 };
 

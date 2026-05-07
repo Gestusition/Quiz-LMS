@@ -1,9 +1,29 @@
 const { getDatabase } = require('../database/db');
+const { nowIso } = require('../utils/security');
+
+function hasCourseAccessBlock(user, courseId) {
+  if (!user || user.role === 'admin') return false;
+  return !!getDatabase().prepare(`
+    SELECT id
+    FROM user_restrictions
+    WHERE userId = ?
+      AND restrictionType = 'course_access_blocked'
+      AND isActive = 1
+      AND (TRIM(COALESCE(startsAt, '')) = '' OR startsAt <= ?)
+      AND (TRIM(COALESCE(endsAt, '')) = '' OR endsAt >= ?)
+      AND (
+        scopeType = 'global'
+        OR (scopeType = 'course' AND scopeId = ?)
+      )
+    LIMIT 1
+  `).get(user.id, nowIso(), nowIso(), courseId);
+}
 
 function canManageCourse(user, courseId) {
   if (!user) return false;
   if (user.role === 'admin') return true;
   if (user.role !== 'teacher') return false;
+  if (hasCourseAccessBlock(user, courseId)) return false;
 
   const enrollment = getDatabase().prepare(`
     SELECT id FROM enrollments
@@ -16,6 +36,7 @@ function canManageCourse(user, courseId) {
 function canAccessCourse(user, courseId) {
   if (!user) return false;
   if (user.role === 'admin') return true;
+  if (hasCourseAccessBlock(user, courseId)) return false;
 
   const enrollment = getDatabase().prepare(`
     SELECT id FROM enrollments

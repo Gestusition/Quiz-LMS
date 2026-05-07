@@ -3,10 +3,17 @@ const profileRepository = require('../repositories/profileRepository');
 const sessionRepository = require('../repositories/sessionRepository');
 const passwordResetRepository = require('../repositories/passwordResetRepository');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
+const academicRepository = require('../repositories/academicRepository');
 const courseRepository = require('../repositories/courseRepository');
+const courseWeekRepository = require('../repositories/courseWeekRepository');
+const discussionRepository = require('../repositories/discussionRepository');
+const gradeSchemeRepository = require('../repositories/gradeSchemeRepository');
+const importRepository = require('../repositories/importRepository');
 const questionRepository = require('../repositories/questionRepository');
 const quizRepository = require('../repositories/quizRepository');
 const contentRepository = require('../repositories/contentRepository');
+const restrictionRepository = require('../repositories/restrictionRepository');
+const validationIssueRepository = require('../repositories/validationIssueRepository');
 const { roleValues } = require('../constants/enums');
 const {
   validatePassword,
@@ -18,7 +25,7 @@ const { conflictError, notFoundError } = require('../utils/appError');
 const auditService = require('./auditService');
 
 class UserService {
-  createUser(data) {
+  createUser(data, actorUserId = null) {
     const payload = validateUserPayload(data, true);
 
     const duplicateEmail = userRepository.findDuplicateEmail(payload.email);
@@ -52,7 +59,7 @@ class UserService {
 
     const created = this.getUserById(userId);
     auditService.log({
-      actorUserId: userId,
+      actorUserId,
       action: 'USER_CREATED',
       entityType: 'user',
       entityId: userId,
@@ -73,7 +80,7 @@ class UserService {
     return serializeUser(userRepository.findPublicById(id));
   }
 
-  updateUser(id, data) {
+  updateUser(id, data, actorUserId = null) {
     const existing = userRepository.findById(id);
     if (!existing) {
       throw notFoundError('User not found.');
@@ -130,6 +137,15 @@ class UserService {
 
     userRepository.withTransaction(() => {
       userRepository.update(id, payload, nowIso());
+      if (existing.role !== payload.role) {
+        enrollmentRepository.deleteByUserId(id);
+        if (payload.role !== 'student') {
+          academicRepository.deleteOfferingEnrollmentsByStudent(id);
+          academicRepository.deleteSubmissionsByStudent(id);
+          academicRepository.deleteAttendanceRecordsByStudent(id);
+          quizRepository.deleteAttemptsByUserId(id);
+        }
+      }
 
       if (payload.password) {
         const hashed = hashPassword(payload.password);
@@ -142,7 +158,7 @@ class UserService {
 
     const updated = this.getUserById(id);
     auditService.log({
-      actorUserId: id,
+      actorUserId,
       action: 'USER_UPDATED',
       entityType: 'user',
       entityId: id,
@@ -151,7 +167,7 @@ class UserService {
     return updated;
   }
 
-  setUserPassword(id, password) {
+  setUserPassword(id, password, actorUserId = null) {
     const existing = userRepository.findById(id);
     if (!existing) {
       throw notFoundError('User not found.');
@@ -169,7 +185,7 @@ class UserService {
 
     const updated = this.getUserById(id);
     auditService.log({
-      actorUserId: id,
+      actorUserId,
       action: 'USER_UPDATED',
       entityType: 'user',
       entityId: id,
@@ -186,11 +202,22 @@ class UserService {
 
     userRepository.withTransaction(() => {
       enrollmentRepository.deleteByUserId(id);
+      academicRepository.deleteOfferingEnrollmentsByStudent(id);
+      academicRepository.deleteSubmissionsByStudent(id);
+      academicRepository.deleteAttendanceRecordsByStudent(id);
       quizRepository.deleteAttemptsByUserId(id);
       courseRepository.clearCreatedBy(id);
+      courseWeekRepository.clearCreatedBy(id);
+      discussionRepository.clearCreatedBy(id);
       questionRepository.clearCreatedBy(id);
       quizRepository.clearCreatedBy(id);
       contentRepository.clearCreatedBy(id);
+      academicRepository.clearUserReferences(id);
+      gradeSchemeRepository.clearCreatedBy(id);
+      importRepository.clearUserReferences(id);
+      restrictionRepository.deleteByUserId(id);
+      restrictionRepository.clearCreatedBy(id);
+      validationIssueRepository.clearUserReferences(id);
       passwordResetRepository.deleteByUserId(id);
       sessionRepository.deleteByUserId(id);
       profileRepository.deleteForUser(id);

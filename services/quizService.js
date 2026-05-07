@@ -19,7 +19,14 @@ const { LIMITS } = require('../constants/limits');
 
 class QuizService {
   getAll(user, filters = {}) {
-    return quizRepository.list(user, filters, quizStatusValues).map(serializeQuiz);
+    return quizRepository.list(user, filters, quizStatusValues)
+      .map(serializeQuiz)
+      .filter(quiz => user.role === 'admin' || !restrictionService.hasActiveRestriction({
+        user,
+        restrictionType: 'course_access_blocked',
+        scopeType: 'course',
+        scopeId: quiz.courseId
+      }));
   }
 
   getById(id, options = {}) {
@@ -41,6 +48,9 @@ class QuizService {
     const course = courseRepository.findById(payload.courseId);
     if (!course) {
       throw notFoundError('Course not found.');
+    }
+    if (payload.status === 'published') {
+      throw validationError('questions', 'Create the quiz as a draft, assign at least one valid question, then publish it.');
     }
 
     const result = quizRepository.insert(payload, user.id);
@@ -84,11 +94,14 @@ class QuizService {
       templateName: data.templateName !== undefined ? data.templateName : existing.templateName
     }), data.templateName);
 
+    if (payload.status === 'published') {
+      this.assertQuizPublishable(this.buildPublishableCandidate(id, payload));
+    }
+
     quizRepository.update(id, payload, nowIso());
     const quiz = this.getById(id, { includeQuestions: true, includeCorrect: true });
 
     if (quiz.status === 'published') {
-      this.assertQuizPublishable(quiz);
       auditService.log({
         actorUserId: user ? user.id : null,
         action: 'QUIZ_PUBLISHED',
@@ -136,6 +149,14 @@ class QuizService {
     if (questions.some(question => question.courseId !== quiz.courseId)) {
       throw validationError('question_ids', 'All quiz questions must belong to the same course as the quiz.');
     }
+    if (quiz.status === 'published') {
+      const validIncoming = uniqueIds
+        .map(questionId => questionService.getById(questionId))
+        .filter(question => this.validateQuestionIntegrity(question).valid);
+      if (validIncoming.length === 0) {
+        throw validationError('questions', 'A published quiz must keep at least one valid question.');
+      }
+    }
 
     quizRepository.withTransaction(() => {
       quizRepository.replaceQuestions(quizId, questions, uniqueIds);
@@ -143,6 +164,9 @@ class QuizService {
 
     const updated = this.getById(quizId, { includeQuestions: true, includeCorrect: true });
     this.validateQuestionsForQuiz(updated, actorUserId);
+    if (updated.status === 'published') {
+      this.assertQuizPublishable(updated);
+    }
     return updated;
   }
 
@@ -181,6 +205,13 @@ class QuizService {
     if (!quiz) {
       throw notFoundError('Quiz not found.');
     }
+    restrictionService.assertAccessAllowed({
+      user,
+      restrictionType: 'course_access_blocked',
+      scopeType: 'course',
+      scopeId: quiz.courseId,
+      safeMessage: 'Your access to this course is restricted. Please contact your instructor or administrator.'
+    });
     if (quiz.status !== 'published') {
       throw validationError('status', 'This quiz is not published.');
     }
@@ -210,7 +241,11 @@ class QuizService {
 
     const active = quizRepository.findActiveAttempt(quizId, user.id);
     if (active) {
-      return this.getAttempt(active.id, user, { includeQuestions: true });
+      if (this.isAttemptExpired(active)) {
+        this.expireAttempt(active, quiz, user);
+      } else {
+        return this.getAttempt(active.id, user, { includeQuestions: true });
+      }
     }
 
     const submittedCount = quizRepository.countSubmittedAttempts(quizId, user.id);
@@ -351,12 +386,7 @@ class QuizService {
     };
 
     if (user.role === 'student' && !canSeeResult && attempt.status === 'submitted') {
-      result.hiddenByPolicy = true;
-      result.policyMessage = this.resultPolicyMessage(policy);
-      result.score = null;
-      result.maxScore = null;
-      result.percentage = null;
-      result.letterGrade = null;
+      this.hideAttemptResult(result, policy);
     }
 
     if (options.includeQuestions) {
@@ -371,6 +401,8 @@ class QuizService {
         result.answers = result.answers.map(answer => {
           const copy = { ...answer };
           delete copy.correctAnswer;
+          delete copy.isCorrect;
+          delete copy.pointsAwarded;
           return copy;
         });
       }
@@ -380,7 +412,36 @@ class QuizService {
   }
 
   getAttemptsForQuiz(quizId, user) {
-    return quizRepository.getAttemptsForQuiz(quizId, user);
+    const quiz = this.getById(quizId);
+    const policy = quiz ? quiz.showResultPolicy : 'immediately';
+    const canSeeResult = this.canStudentSeeResult(policy, quiz);
+    return quizRepository.getAttemptsForQuiz(quizId, user).map(attempt => {
+      const result = {
+        ...attempt,
+        lifecycleStatus: attempt.lifecycleStatus || attempt.status,
+        letterGrade: attempt.letterGrade || null,
+        gradeStatus: attempt.gradeStatus || 'ready',
+        gradeMessage: attempt.gradeMessage || ''
+      };
+      if (user.role === 'student' && attempt.status === 'submitted' && !canSeeResult) {
+        this.hideAttemptResult(result, policy);
+      }
+      return result;
+    });
+  }
+
+  releaseResults(quizId, user) {
+    const quiz = this.getById(quizId);
+    if (!quiz) throw notFoundError('Quiz not found.');
+    quizRepository.setManualResultReleasedAt(quizId, nowIso());
+    auditService.log({
+      actorUserId: user ? user.id : null,
+      action: 'QUIZ_RESULTS_RELEASED',
+      entityType: 'quiz',
+      entityId: quizId,
+      details: { showResultPolicy: quiz.showResultPolicy }
+    });
+    return this.getById(quizId, { includeQuestions: true, includeCorrect: true });
   }
 
   getGradebook(courseId) {
@@ -730,6 +791,7 @@ class QuizService {
   stripQuestionCorrectData(question) {
     if (!question) return question;
     delete question.correctAnswer;
+    question.explanationText = '';
     if (Array.isArray(question.acceptedAnswers)) question.acceptedAnswers = [];
     if (Array.isArray(question.parts)) {
       question.parts = question.parts.map(part => {
@@ -782,6 +844,56 @@ class QuizService {
     if (validCount === 0) {
       throw validationError('questions', 'Quiz cannot be published without at least one valid question.');
     }
+  }
+
+  buildPublishableCandidate(quizId, payload) {
+    const questions = this.getQuizQuestions(quizId, { includeCorrect: true })
+      .filter(question => Number(question.courseId) === Number(payload.courseId));
+    return {
+      ...payload,
+      id: quizId,
+      questions
+    };
+  }
+
+  hideAttemptResult(attempt, policy) {
+    attempt.hiddenByPolicy = true;
+    attempt.policyMessage = this.resultPolicyMessage(policy);
+    attempt.score = null;
+    attempt.maxScore = null;
+    attempt.percentage = null;
+    attempt.letterGrade = null;
+    attempt.gradeStatus = 'hidden';
+    attempt.gradeMessage = '';
+    return attempt;
+  }
+
+  isAttemptExpired(attempt) {
+    if (!attempt || !attempt.expiresAt) return false;
+    const expiresAt = new Date(attempt.expiresAt).getTime();
+    return Number.isFinite(expiresAt) && Date.now() > expiresAt;
+  }
+
+  expireAttempt(attempt, quiz, user) {
+    const now = Date.now();
+    const startedAt = new Date(attempt.startedAt).getTime();
+    const timeSpentSeconds = Number.isFinite(startedAt) ? Math.max(0, Math.round((now - startedAt) / 1000)) : 0;
+    const maxScore = Number(attempt.maxScore || 0);
+    quizRepository.markAttemptExpired(attempt.id, nowIso(), 0, maxScore, 0, timeSpentSeconds);
+    const gradeResolution = gradeSchemeService.resolveLetterGrade(quiz.courseId, 0);
+    quizRepository.setAttemptGradeStatus(attempt.id, {
+      letterGrade: gradeResolution.letterGrade,
+      gradeStatus: gradeResolution.status,
+      gradeMessage: gradeResolution.message,
+      lifecycleStatus: 'expired'
+    });
+    auditService.log({
+      actorUserId: user.id,
+      action: 'ATTEMPT_AUTO_EXPIRED',
+      entityType: 'quiz_attempt',
+      entityId: attempt.id,
+      details: { quizId: quiz.id }
+    });
   }
 
   applyTemplate(payload, templateName) {
