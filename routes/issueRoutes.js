@@ -7,6 +7,64 @@ const { sendError } = require('../utils/appError');
 
 router.use(requireAuth);
 
+/**
+ * @swagger
+ * /api/issues:
+ *   get:
+ *     summary: List validation issues
+ *     tags: [Issues]
+ *     parameters:
+ *       - in: query
+ *         name: entityType
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: entityId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: severity
+ *         schema:
+ *           type: string
+ *           enum: [info, warning, error, critical]
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [open, resolved, ignored]
+ *       - in: query
+ *         name: relatedCourseId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: relatedUserId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Paginated validation issues
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/ValidationIssue'
+ *                 pagination:
+ *                   $ref: '#/components/schemas/Pagination'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     const filters = {
@@ -35,6 +93,30 @@ router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/issues:
+ *   post:
+ *     summary: Create a validation issue
+ *     tags: [Issues]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateValidationIssueRequest'
+ *     responses:
+ *       201:
+ *         description: Created validation issue
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ValidationIssue'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.post('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     const relatedCourseId = req.body.relatedCourseId ? Number(req.body.relatedCourseId) : null;
@@ -60,6 +142,38 @@ router.post('/', requireRole(['admin', 'teacher']), (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/issues/{id}/status:
+ *   put:
+ *     summary: Update validation issue status
+ *     tags: [Issues]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateValidationIssueStatusRequest'
+ *     responses:
+ *       200:
+ *         description: Updated validation issue
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ValidationIssue'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.put('/:id/status', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     const issueId = Number(req.params.id);

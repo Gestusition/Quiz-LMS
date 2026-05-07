@@ -755,6 +755,286 @@ const options = {
             sessionDate: { type: 'string' },
             topic: { type: 'string' }
           }
+        },
+        Pagination: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer' },
+            limit: { type: 'integer' },
+            total: { type: 'integer' },
+            totalPages: { type: 'integer' }
+          }
+        },
+        UserRestriction: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            userId: { type: 'integer' },
+            restrictionType: {
+              type: 'string',
+              enum: ['account_suspended', 'quiz_blocked', 'assignment_blocked', 'chat_muted', 'course_access_blocked', 'manual_review_required']
+            },
+            scopeType: { type: 'string', enum: ['global', 'course', 'quiz', 'assignment'] },
+            scopeId: { type: 'integer', nullable: true },
+            reason: { type: 'string' },
+            startsAt: { type: 'string', format: 'date-time' },
+            endsAt: { type: 'string', format: 'date-time', nullable: true },
+            createdBy: { type: 'integer', nullable: true },
+            isActive: { type: 'integer', enum: [0, 1] },
+            createdAt: { type: 'string', format: 'date-time' },
+            userName: { type: 'string' },
+            userEmail: { type: 'string' },
+            createdByName: { type: 'string', nullable: true }
+          }
+        },
+        CreateUserRestrictionRequest: {
+          type: 'object',
+          required: ['userId', 'restrictionType'],
+          properties: {
+            userId: { type: 'integer' },
+            restrictionType: {
+              type: 'string',
+              enum: ['account_suspended', 'quiz_blocked', 'assignment_blocked', 'chat_muted', 'course_access_blocked', 'manual_review_required']
+            },
+            scopeType: { type: 'string', enum: ['global', 'course', 'quiz', 'assignment'], default: 'global' },
+            scopeId: { type: 'integer', nullable: true },
+            reason: { type: 'string' },
+            startsAt: { type: 'string', format: 'date-time' },
+            endsAt: { type: 'string', format: 'date-time' },
+            isActive: { type: 'boolean' }
+          }
+        },
+        ValidationIssue: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            entityType: { type: 'string' },
+            entityId: { type: 'integer', nullable: true },
+            severity: { type: 'string', enum: ['info', 'warning', 'error', 'critical'] },
+            field: { type: 'string' },
+            message: { type: 'string' },
+            status: { type: 'string', enum: ['open', 'resolved', 'ignored'] },
+            visibleToUser: { type: 'integer', enum: [0, 1] },
+            relatedCourseId: { type: 'integer', nullable: true },
+            relatedUserId: { type: 'integer', nullable: true },
+            resolvedBy: { type: 'integer', nullable: true },
+            resolvedAt: { type: 'string', format: 'date-time', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            resolvedByName: { type: 'string', nullable: true }
+          }
+        },
+        CreateValidationIssueRequest: {
+          type: 'object',
+          required: ['entityType', 'message'],
+          properties: {
+            entityType: { type: 'string' },
+            entityId: { type: 'integer', nullable: true },
+            severity: { type: 'string', enum: ['info', 'warning', 'error', 'critical'], default: 'error' },
+            field: { type: 'string' },
+            message: { type: 'string' },
+            status: { type: 'string', enum: ['open', 'resolved', 'ignored'], default: 'open' },
+            visibleToUser: { type: 'boolean' },
+            relatedCourseId: { type: 'integer', nullable: true },
+            relatedUserId: { type: 'integer', nullable: true }
+          }
+        },
+        UpdateValidationIssueStatusRequest: {
+          type: 'object',
+          required: ['status'],
+          properties: {
+            status: { type: 'string', enum: ['open', 'resolved', 'ignored'] }
+          }
+        },
+        ImportBatch: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            type: { type: 'string', enum: ['users', 'students', 'teachers', 'questions', 'enrollments'] },
+            uploadedBy: { type: 'integer', nullable: true },
+            fileName: { type: 'string' },
+            status: { type: 'string', enum: ['processed', 'partially_failed', 'failed', 'completed'] },
+            totalRows: { type: 'integer' },
+            successCount: { type: 'integer' },
+            failedCount: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CreateImportBatchRequest: {
+          type: 'object',
+          required: ['type', 'fileName'],
+          properties: {
+            type: { type: 'string', enum: ['users', 'students', 'teachers', 'questions', 'enrollments'] },
+            fileName: { type: 'string' },
+            status: { type: 'string', enum: ['processed', 'partially_failed', 'failed', 'completed'], default: 'processed' },
+            totalRows: { type: 'integer' },
+            successCount: { type: 'integer' },
+            failedCount: { type: 'integer' }
+          }
+        },
+        ImportError: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            batchId: { type: 'integer' },
+            rowNumber: { type: 'integer' },
+            rawDataJson: { type: 'string' },
+            errorField: { type: 'string' },
+            errorMessage: { type: 'string' },
+            status: { type: 'string', enum: ['unresolved', 'fixed', 'ignored'] },
+            fixedDataJson: { type: 'string' },
+            resolvedBy: { type: 'integer', nullable: true },
+            resolvedAt: { type: 'string', format: 'date-time', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CreateImportErrorRequest: {
+          type: 'object',
+          required: ['rowNumber', 'errorMessage'],
+          properties: {
+            rowNumber: { type: 'integer' },
+            rawDataJson: { type: 'string' },
+            rawData: { type: 'object' },
+            errorField: { type: 'string' },
+            errorMessage: { type: 'string' }
+          }
+        },
+        ResolveImportErrorRequest: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['unresolved', 'fixed', 'ignored'], default: 'fixed' },
+            fixedDataJson: { type: 'string' },
+            fixedData: { type: 'object' }
+          }
+        },
+        DiscussionThread: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            courseId: { type: 'integer' },
+            title: { type: 'string' },
+            body: { type: 'string' },
+            createdBy: { type: 'integer', nullable: true },
+            status: { type: 'string', enum: ['open', 'locked', 'archived'] },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+            createdByName: { type: 'string', nullable: true },
+            replyCount: { type: 'integer' },
+            lastReplyAt: { type: 'string', format: 'date-time', nullable: true }
+          }
+        },
+        CreateDiscussionThreadRequest: {
+          type: 'object',
+          required: ['title', 'body'],
+          properties: {
+            title: { type: 'string' },
+            body: { type: 'string' }
+          }
+        },
+        UpdateDiscussionThreadStatusRequest: {
+          type: 'object',
+          required: ['status'],
+          properties: {
+            status: { type: 'string', enum: ['open', 'locked', 'archived'] }
+          }
+        },
+        DiscussionReply: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            threadId: { type: 'integer' },
+            body: { type: 'string' },
+            createdBy: { type: 'integer', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            createdByName: { type: 'string', nullable: true },
+            createdByRole: { type: 'string', nullable: true }
+          }
+        },
+        CreateDiscussionReplyRequest: {
+          type: 'object',
+          required: ['body'],
+          properties: {
+            body: { type: 'string' }
+          }
+        },
+        CourseWeek: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            courseId: { type: 'integer' },
+            weekNumber: { type: 'integer' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            startsAt: { type: 'string', format: 'date-time', nullable: true },
+            endsAt: { type: 'string', format: 'date-time', nullable: true },
+            visible: { type: 'integer', enum: [0, 1] },
+            createdBy: { type: 'integer', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+            resourceCount: { type: 'integer' }
+          }
+        },
+        CreateCourseWeekRequest: {
+          type: 'object',
+          required: ['weekNumber', 'title'],
+          properties: {
+            weekNumber: { type: 'integer', minimum: 1, maximum: 60 },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            startsAt: { type: 'string', format: 'date-time' },
+            endsAt: { type: 'string', format: 'date-time' },
+            visible: { type: 'boolean' }
+          }
+        },
+        UpdateCourseWeekRequest: {
+          type: 'object',
+          properties: {
+            weekNumber: { type: 'integer', minimum: 1, maximum: 60 },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            startsAt: { type: 'string', format: 'date-time' },
+            endsAt: { type: 'string', format: 'date-time' },
+            visible: { type: 'boolean' }
+          }
+        },
+        WeekResource: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            weekId: { type: 'integer' },
+            title: { type: 'string' },
+            type: { type: 'string', enum: ['link', 'file', 'page'] },
+            content: { type: 'string' },
+            visibleFrom: { type: 'string', format: 'date-time', nullable: true },
+            visibleUntil: { type: 'string', format: 'date-time', nullable: true },
+            createdBy: { type: 'integer', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CreateWeekResourceRequest: {
+          type: 'object',
+          required: ['title'],
+          properties: {
+            title: { type: 'string' },
+            type: { type: 'string', enum: ['link', 'file', 'page'], default: 'link' },
+            content: { type: 'string' },
+            url: { type: 'string', description: 'Alias for content' },
+            visibleFrom: { type: 'string', format: 'date-time' },
+            visibleUntil: { type: 'string', format: 'date-time' }
+          }
+        },
+        AuditLog: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            actorUserId: { type: 'integer', nullable: true },
+            actorName: { type: 'string' },
+            actorRole: { type: 'string' },
+            action: { type: 'string' },
+            entityType: { type: 'string' },
+            entityId: { type: 'integer', nullable: true },
+            details: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
         }
       }
     },
