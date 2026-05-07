@@ -16,6 +16,7 @@ const gradeSchemeService = require('./gradeSchemeService');
 const questionService = require('./questionService');
 const { forbiddenError, notFoundError, validationError } = require('../utils/appError');
 const { LIMITS } = require('../constants/limits');
+const { VALIDATION_ISSUE_MESSAGES } = require('../constants/validationIssues');
 
 class QuizService {
   getAll(user, filters = {}) {
@@ -230,7 +231,7 @@ class QuizService {
         entityId: quiz.id,
         severity: 'critical',
         field: 'questions',
-        message: 'Quiz has no valid questions and cannot be attempted.',
+        message: VALIDATION_ISSUE_MESSAGES.quizNoValidQuestions,
         status: 'open',
         relatedCourseId: quiz.courseId,
         relatedUserId: user.id,

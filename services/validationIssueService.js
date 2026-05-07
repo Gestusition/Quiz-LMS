@@ -7,6 +7,7 @@ const VALID_SEVERITIES = ['info', 'warning', 'error', 'critical'];
 
 class ValidationIssueService {
   list(filters = {}) {
+    this.reconcileOpenIssues();
     return validationIssueRepository.list(filters);
   }
 
@@ -42,7 +43,12 @@ class ValidationIssueService {
   }
 
   countOpen() {
+    this.reconcileOpenIssues();
     return validationIssueRepository.countOpen();
+  }
+
+  reconcileOpenIssues() {
+    validationIssueRepository.resolveStaleQuizQuestionIssues(nowIso());
   }
 }
 

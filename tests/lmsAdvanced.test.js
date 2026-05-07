@@ -8,6 +8,7 @@ const quizService = require('../services/quizService');
 const restrictionService = require('../services/restrictionService');
 const gradeSchemeService = require('../services/gradeSchemeService');
 const validationIssueService = require('../services/validationIssueService');
+const { VALIDATION_ISSUE_MESSAGES } = require('../constants/validationIssues');
 
 const TEST_DB = path.join(__dirname, 'test_lms_advanced.db');
 
@@ -231,6 +232,39 @@ describe('Advanced LMS controls', () => {
       .set('Cookie', cookie(otherSession))
       .send({ status: 'resolved' })
       .expect(403);
+  });
+
+  test('stale quiz question validation issues are resolved before health reporting', () => {
+    const db = getDatabase();
+    const quiz = db.prepare(`
+      SELECT q.id
+      FROM quizzes q
+      JOIN quiz_questions qq ON qq.quizId = q.id
+      JOIN questions question ON question.id = qq.questionId
+      WHERE q.status = 'published'
+        AND COALESCE(NULLIF(question.status, ''), 'valid') != 'invalid'
+      LIMIT 1
+    `).get();
+
+    const issue = validationIssueService.create({
+      entityType: 'quiz',
+      entityId: quiz.id,
+      severity: 'critical',
+      field: 'questions',
+      message: VALIDATION_ISSUE_MESSAGES.quizNoValidQuestions,
+      status: 'open'
+    });
+
+    const result = validationIssueService.list({
+      status: 'open',
+      entityType: 'quiz',
+      entityId: quiz.id
+    });
+    const updated = validationIssueService.getById(issue.id);
+
+    expect(result.items.some(item => item.id === issue.id)).toBe(false);
+    expect(updated.status).toBe('resolved');
+    expect(db.prepare("SELECT COUNT(*) as count FROM validation_issues WHERE id = ? AND status = 'open'").get(issue.id).count).toBe(0);
   });
 
   test('course deletion removes attached-database course data and student resource visibility is time-gated', async () => {

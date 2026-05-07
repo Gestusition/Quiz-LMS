@@ -1,5 +1,6 @@
 const { getDatabase } = require('../database/db');
 const { parsePagination } = require('../utils/validation');
+const { VALIDATION_ISSUE_MESSAGES } = require('../constants/validationIssues');
 
 function list(filters = {}) {
   const paging = parsePagination(filters);
@@ -100,6 +101,26 @@ function countOpen() {
   `).get().count;
 }
 
+function resolveStaleQuizQuestionIssues(resolvedAt) {
+  return getDatabase().prepare(`
+    UPDATE validation_issues
+    SET status = 'resolved',
+      resolvedBy = NULL,
+      resolvedAt = ?
+    WHERE status = 'open'
+      AND entityType = 'quiz'
+      AND field = 'questions'
+      AND message = ?
+      AND EXISTS (
+        SELECT 1
+        FROM quiz_questions qq
+        JOIN questions q ON q.id = qq.questionId
+        WHERE qq.quizId = validation_issues.entityId
+          AND COALESCE(NULLIF(q.status, ''), 'valid') != 'invalid'
+      )
+  `).run(resolvedAt || '', VALIDATION_ISSUE_MESSAGES.quizNoValidQuestions);
+}
+
 function clearUserReferences(userId) {
   const db = getDatabase();
   db.prepare('UPDATE validation_issues SET relatedUserId = NULL WHERE relatedUserId = ?').run(userId);
@@ -121,5 +142,6 @@ module.exports = {
   deleteByCourseId,
   findById,
   list,
+  resolveStaleQuizQuestionIssues,
   updateStatus
 };
