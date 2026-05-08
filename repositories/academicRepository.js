@@ -849,12 +849,16 @@ function listAttendanceRecordDetails(user, filters = {}) {
 function listAttendanceForStudent(studentId) {
   return getDatabase().prepare(`
     SELECT ar.*, ats.sessionDate, ats.topic, co.courseId, c.code as courseCode, c.title as courseTitle,
-      t.name as termName
+      t.name as termName,
+      m.name as markedByName,
+      r.name as removedByName
     FROM attendance_records ar
     JOIN attendance_sessions ats ON ats.id = ar.sessionId
     JOIN course_offerings co ON co.id = ats.courseOfferingId
     JOIN courses c ON c.id = co.courseId
     JOIN academic_terms t ON t.id = ats.termId
+    LEFT JOIN users m ON m.id = ar.markedBy
+    LEFT JOIN users r ON r.id = ar.removedBy
     WHERE ar.studentId = ?
     ORDER BY ats.sessionDate DESC
   `).all(studentId);

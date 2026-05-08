@@ -620,7 +620,10 @@ class AcademicService {
       .filter(record => !this.isCourseAccessBlocked(user, record.courseId))
       .map(record => {
         const copy = { ...record };
-        delete copy.removalNote;
+        // Only show markedByName if it was marked by someone else (not the student)
+        if (record.markedBy && Number(record.markedBy) === Number(user.id)) {
+          delete copy.markedByName;
+        }
         return copy;
       });
   }

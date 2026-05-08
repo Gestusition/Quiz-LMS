@@ -89,12 +89,14 @@ export const AttendancePage = {
   },
 
   studentAttendanceRow(record) {
+    const note = record.removalNote || record.note;
+    const performer = record.removedByName || record.markedByName;
     return `
       <div class="list-row">
         <div>
           <strong>${this.esc(record.courseCode)} - ${this.esc(record.courseTitle)}</strong>
           <small>${this.esc(this.formatDate(record.sessionDate))}${record.topic ? ` - ${this.esc(record.topic)}` : ''}</small>
-          ${record.note ? `<small>${this.esc(record.note)}</small>` : ''}
+          ${note ? `<small>${this.esc(note)}${performer ? ` (by ${this.esc(performer)})` : ''}</small>` : ''}
         </div>
         <span class="status ${this.esc(record.status)}">${this.esc(record.status)}</span>
       </div>
