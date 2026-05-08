@@ -958,6 +958,111 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .diff-medium { background: #fef3c7; color: #a16207; }
 .diff-hard { background: #fee2e2; color: #b91c1c; }
 
+/* Compact difficulty badge for mini items */
+.diff-badge-mini {
+  display: inline-flex;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.diff-badge-mini.diff-easy { background: #dcfce7; color: #15803d; }
+.diff-badge-mini.diff-medium { background: #fef3c7; color: #a16207; }
+.diff-badge-mini.diff-hard { background: #fee2e2; color: #b91c1c; }
+
+/* ── Question Bank Points Toolbar ── */
+.qb-points-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+  flex-wrap: wrap;
+}
+
+.qb-points-total {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.qb-points-total .qb-total-value {
+  color: var(--primary);
+  font-size: 1.05rem;
+}
+
+.qb-points-total.qb-over-100 .qb-total-value {
+  color: var(--danger);
+}
+
+.btn-sync-100 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-sync-100:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Inline points input on question cards */
+.qb-card-pts-input {
+  width: 56px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+  background: var(--surface-strong);
+  transition: var(--transition);
+}
+
+.qb-card-pts-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+  outline: none;
+  background: #fff;
+}
+
+.qb-card-pts-input.pts-synced {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.qb-card-pts-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.qb-card-pts-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+
 /* ── Grading Type Badges ── */
 .grading-badge {
   display: inline-flex;

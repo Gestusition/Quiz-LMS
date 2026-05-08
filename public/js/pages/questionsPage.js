@@ -25,7 +25,10 @@ export const QuestionsPage = {
       const selectedCourseId = this.activeCourseId || (courses[0] ? String(courses[0].id) : '');
       this.activeCourseId = selectedCourseId;
       const [categories, questions] = selectedCourseId
-        ? await Promise.all([API.getCategories({ courseId: selectedCourseId }), API.getQuestions({ courseId: selectedCourseId })])
+        ? await Promise.all([
+            API.getCategories({ courseId: selectedCourseId }), 
+            API.getQuestions({ courseId: selectedCourseId, ...this._qbFilters })
+          ])
         : [[], []];
 
       // Count questions by type for filter badges
@@ -124,12 +127,99 @@ export const QuestionsPage = {
             <div class="qb-results-header">
               <span class="qb-results-count" id="qb-results-count">${questions.length} question${questions.length === 1 ? '' : 's'}</span>
             </div>
+            <div class="qb-points-bar" id="qb-points-bar" style="display: ${this._qbFilters.categoryId ? 'flex' : 'none'}">
+              <span class="qb-points-total" id="qb-points-total">Total: <span class="qb-total-value" id="qb-total-value">${Math.round(questions.reduce((s, q) => s + (q.points || 0), 0) * 100) / 100}</span> pts</span>
+              <button type="button" class="btn-sync-100" id="btn-sync-100" title="Distribute 100 points across visible questions, respecting manually-set values">⚖️ Sync to 100</button>
+            </div>
             <div class="qb-question-list" id="question-rows">
               ${questions.map(question => this.questionCard(question)).join('') || this.emptyLine('No questions found.')}
             </div>
           </main>
         </section>
       `);
+
+      // ── Points live-total updater ──
+      this._qbUpdateTotal = () => {
+        const inputs = document.querySelectorAll('.qb-card-pts-input');
+        let total = 0;
+        inputs.forEach(inp => { total += Number(inp.value) || 0; });
+        
+        const roundedTotal = Math.round(total * 100) / 100;
+        const totalEl = document.getElementById('qb-total-value');
+        const wrapEl = document.getElementById('qb-points-total');
+        const barEl = document.getElementById('qb-points-bar');
+        
+        if (totalEl) totalEl.textContent = roundedTotal;
+        if (wrapEl) {
+          wrapEl.classList.toggle('qb-over-100', roundedTotal > 100.005);
+        }
+        if (barEl) {
+          barEl.style.display = this._qbFilters.categoryId ? 'flex' : 'none';
+        }
+      };
+
+      // ── Sync to 100 algorithm ──
+      document.getElementById('btn-sync-100')?.addEventListener('click', async () => {
+        if (!this._qbFilters.categoryId) {
+          this.toast('Please select a specific category first to sync points.', 'warning');
+          return;
+        }
+        const inputs = Array.from(document.querySelectorAll('.qb-card-pts-input'));
+        if (inputs.length === 0) return;
+
+        // Find which inputs were manually edited (have a data-edited flag)
+        const locked = inputs.filter(inp => inp.dataset.edited === 'true');
+        const unlocked = inputs.filter(inp => inp.dataset.edited !== 'true');
+
+        const lockedSum = locked.reduce((s, inp) => s + (Number(inp.value) || 0), 0);
+        if (lockedSum > 100) {
+          this.toast(`Manually-set points (${lockedSum}) already exceed 100. Reduce them first.`, 'error');
+          return;
+        }
+        if (unlocked.length === 0 && lockedSum !== 100) {
+          this.toast('All questions have manually-set points. Clear some to redistribute.', 'error');
+          return;
+        }
+
+        const remaining = 100 - lockedSum;
+        const perQuestion = remaining / (unlocked.length || 1);
+        // Round to 2 decimal places, adjust last to hit exactly 100
+        let distributed = 0;
+        unlocked.forEach((inp, i) => {
+          if (i < unlocked.length - 1) {
+            const pts = Math.round(perQuestion * 100) / 100;
+            inp.value = pts;
+            distributed += pts;
+          } else {
+            // Last one gets the remainder
+            inp.value = Math.round((remaining - distributed) * 100) / 100;
+          }
+          inp.classList.add('pts-synced');
+          setTimeout(() => inp.classList.remove('pts-synced'), 1200);
+        });
+
+        this._qbUpdateTotal();
+
+        // Save all changed points via API
+        const promises = [];
+        inputs.forEach(inp => {
+          const qId = Number(inp.dataset.qid);
+          const pts = Number(inp.value) || 0;
+          if (pts !== Number(inp.dataset.original)) {
+            promises.push(API.updateQuestion(qId, { points: pts }));
+          }
+        });
+        if (promises.length > 0) {
+          try {
+            await Promise.all(promises);
+            this.toast('Points synced to 100!', 'success');
+            // Update original values
+            inputs.forEach(inp => { inp.dataset.original = inp.value; });
+          } catch (err) {
+            this.toast(err.message, 'error');
+          }
+        }
+      });
 
       // Course filter triggers full reload
       document.getElementById('question-course-filter').addEventListener('change', event => {
@@ -157,6 +247,8 @@ export const QuestionsPage = {
         document.getElementById('qb-results-count').textContent = `${filtered.length} question${filtered.length === 1 ? '' : 's'}`;
         document.getElementById('qb-active-filters-area').innerHTML = buildActiveFilters();
         this.bindFilterChips();
+        this.bindPointsInputs();
+        this._qbUpdateTotal();
       };
 
       document.getElementById('question-search').addEventListener('input', filterQuestions);
@@ -178,6 +270,8 @@ export const QuestionsPage = {
       });
 
       this.bindFilterChips();
+      this.bindPointsInputs();
+      this._qbUpdateTotal();
 
       document.getElementById('btn-new-category').addEventListener('click', () => this.showCategoryForm(Number(this.activeCourseId)));
       document.getElementById('btn-new-question').addEventListener('click', () => this.showQuestionForm(null, Number(this.activeCourseId)));
@@ -688,12 +782,17 @@ export const QuestionsPage = {
         : '';
     const truncText = question.text.length > 120 ? question.text.slice(0, 120) + '…' : question.text;
     return `
-      <div class="qb-card">
+      <div class="qb-card" data-qid="${question.id}">
         <div class="qb-card-top">
           <span class="type-badge" style="--type-color: ${typeColor}" title="${this.esc(typeLabel)}">${question.type}</span>
           <span class="diff-badge diff-${question.difficulty.toLowerCase()}">${this.esc(question.difficulty)}</span>
           ${gradingBadge}
-          <span class="qb-card-pts" title="Points">${question.points} pt${question.points === 1 ? '' : 's'}</span>
+          <div class="qb-card-pts-wrap">
+            <span class="qb-card-pts-label">pts</span>
+            <input type="number" class="qb-card-pts-input" min="0" max="100" step="any"
+              value="${question.points}" data-qid="${question.id}" data-original="${question.points}"
+              title="Points (max 100)">
+          </div>
         </div>
         <div class="qb-card-body">
           <p class="qb-card-text">${this.esc(truncText)}</p>
@@ -719,6 +818,39 @@ export const QuestionsPage = {
         </div>
       </div>
     `;
+  },
+
+  // Bind change/blur events on inline point inputs in Question Bank cards
+  bindPointsInputs() {
+    document.querySelectorAll('.qb-card-pts-input').forEach(inp => {
+      // Mark as edited when user manually changes the value
+      inp.addEventListener('input', () => {
+        inp.dataset.edited = 'true';
+        // Clamp to max 100
+        if (Number(inp.value) > 100) inp.value = 100;
+        if (this._qbUpdateTotal) this._qbUpdateTotal();
+      });
+
+      // Save on blur if changed
+      inp.addEventListener('change', async () => {
+        let pts = Number(inp.value) || 0;
+        if (pts > 100) { pts = 100; inp.value = 100; }
+        if (pts < 0) { pts = 0; inp.value = 0; }
+        const qId = Number(inp.dataset.qid);
+        const original = Number(inp.dataset.original);
+        if (pts === original) return;
+
+        try {
+          await API.updateQuestion(qId, { points: pts });
+          inp.dataset.original = pts;
+          this.toast('Points updated.', 'success');
+        } catch (err) {
+          this.toast(err.message, 'error');
+          inp.value = original;
+        }
+        if (this._qbUpdateTotal) this._qbUpdateTotal();
+      });
+    });
   },
 
   // Keep legacy method for any other page that might use it

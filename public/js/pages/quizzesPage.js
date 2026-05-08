@@ -279,18 +279,28 @@ export const QuizzesPage = {
     // Build a map of categoryId -> category for quick lookup
     const categoryMap = new Map(categories.map(c => [c.id, c]));
 
-    // Helper: render available questions grouped by category
-    const renderAvailableGrouped = (questions, selectedCategoryId) => {
-      const available = questions.filter(q => !this._assignedIds.has(q.id));
-      const filtered = selectedCategoryId
-        ? available.filter(q => String(q.categoryId) === String(selectedCategoryId))
-        : available;
+    // Difficulty badge helper
+    const diffBadge = (diff) => {
+      if (!diff) return '';
+      const cls = diff.toLowerCase();
+      return `<span class="diff-badge-mini diff-${cls}">${diff}</span>`;
+    };
 
-      if (filtered.length === 0) return '<p class="muted">No available questions.</p>';
+    // Helper: render available questions grouped by category
+    const renderAvailableGrouped = (questions, selectedCategoryId, selectedDifficulty) => {
+      let available = questions.filter(q => !this._assignedIds.has(q.id));
+      if (selectedCategoryId) {
+        available = available.filter(q => String(q.categoryId) === String(selectedCategoryId));
+      }
+      if (selectedDifficulty) {
+        available = available.filter(q => q.difficulty === selectedDifficulty);
+      }
+
+      if (available.length === 0) return '<p class="muted">No available questions.</p>';
 
       // Group by category
       const grouped = new Map();
-      for (const q of filtered) {
+      for (const q of available) {
         const catId = q.categoryId || 0;
         if (!grouped.has(catId)) grouped.set(catId, []);
         grouped.get(catId).push(q);
@@ -299,7 +309,7 @@ export const QuizzesPage = {
       let html = '';
       for (const [catId, catQuestions] of grouped) {
         const catName = (categoryMap.get(catId) || {}).name || 'Uncategorized';
-        const totalPts = catQuestions.reduce((sum, q) => sum + (q.points || 0), 0);
+        const totalPts = Math.round(catQuestions.reduce((sum, q) => sum + (q.points || 0), 0) * 100) / 100;
         html += `
           <div class="category-group" data-category-id="${catId}">
             <div class="category-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
@@ -312,9 +322,10 @@ export const QuizzesPage = {
                 <div class="question-mini-item" data-id="${q.id}" data-category="${catId}">
                   <button class="btn btn-ghost btn-sm" onclick="App.addAssigned(${q.id})">+</button>
                   <span class="type-badge-sm">${q.type}</span>
-                  <span>${this.esc(q.text.slice(0, 60))}</span>
+                  ${diffBadge(q.difficulty)}
+                  <span>${this.esc(q.text.slice(0, 55))}</span>
                   ${q.gradingType === 'negative' ? '<span class="grading-badge grading-negative" title="Negative marking">➖</span>' : q.gradingType === 'manual' ? '<span class="grading-badge grading-manual" title="Manual grading">📝</span>' : ''}
-                  <span class="pts">${q.points} pts</span>
+                  <span class="pts">${Math.round(q.points * 100) / 100} pts</span>
                 </div>
               `).join('')}
             </div>
@@ -338,9 +349,10 @@ export const QuizzesPage = {
               <div class="question-mini-item assigned" data-id="${q.id}">
                 <button class="btn btn-ghost btn-sm" onclick="App.removeAssigned(${q.id})">✕</button>
                 <span class="type-badge-sm">${q.type}</span>
-                <span>${this.esc(q.text.slice(0, 60))}</span>
+                ${diffBadge(q.difficulty)}
+                <span>${this.esc(q.text.slice(0, 55))}</span>
                 ${q.gradingType === 'negative' ? '<span class="grading-badge grading-negative" title="Negative marking">➖</span>' : q.gradingType === 'manual' ? '<span class="grading-badge grading-manual" title="Manual grading">📝</span>' : ''}
-                <span class="pts">${q.points} pts</span>
+                <span class="pts">${Math.round(q.points * 100) / 100} pts</span>
               </div>
             `).join('') || '<p class="muted">No questions assigned.</p>'}
           </div>
@@ -355,10 +367,16 @@ export const QuizzesPage = {
                 return `<option value="${c.id}">${this.esc(c.name)} (${count})</option>`;
               }).join('')}
             </select>
+            <select class="form-select" id="assign-difficulty-filter">
+              <option value="">All Difficulties</option>
+              <option value="EASY">Easy</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HARD">Hard</option>
+            </select>
             <input class="form-input" id="assign-search" placeholder="Search...">
           </div>
           <div id="available-list" class="question-mini-list">
-            ${renderAvailableGrouped(allQuestions, '')}
+            ${renderAvailableGrouped(allQuestions, '', '')}
           </div>
         </div>
         <div class="modal-actions">
@@ -398,18 +416,20 @@ export const QuizzesPage = {
     const refreshAvailable = () => {
       const searchTerm = (document.getElementById('assign-search')?.value || '').toLowerCase();
       const catFilter = document.getElementById('assign-category-filter')?.value || '';
+      const diffFilter = document.getElementById('assign-difficulty-filter')?.value || '';
       const filtered = searchTerm
         ? this._allQuestions.filter(q => q.text.toLowerCase().includes(searchTerm))
         : this._allQuestions;
       const el = document.getElementById('available-list');
       if (el) {
-        el.innerHTML = renderAvailableGrouped(filtered, catFilter);
+        el.innerHTML = renderAvailableGrouped(filtered, catFilter, diffFilter);
       }
     };
 
     this._refreshAvailable = refreshAvailable;
 
     document.getElementById('assign-category-filter')?.addEventListener('change', refreshAvailable);
+    document.getElementById('assign-difficulty-filter')?.addEventListener('change', refreshAvailable);
     document.getElementById('assign-search')?.addEventListener('input', refreshAvailable);
 
     document.getElementById('btn-save-assign')?.addEventListener('click', async () => {
