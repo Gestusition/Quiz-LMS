@@ -63,4 +63,22 @@ describe('rate limiter middleware', () => {
     const allowedAgainAfterTrim = runLimiter(limiter, { body: { identifier: 'one' } });
     expect(allowedAgainAfterTrim.nextCalled).toBe(true);
   });
+
+  test('login identifier aliases normalize to real buckets instead of none', () => {
+    const aliases = [
+      { identifier: ' Student@Example.com ' },
+      { login: 'Student@Example.com' },
+      { email: 'student@example.com' },
+      { student_number: ' STU-0003 ' },
+      { username: 'Admin' }
+    ];
+
+    const keys = aliases.map(body => identifierKey({ ip: '127.0.0.1', body }));
+    expect(keys[0]).toBe('127.0.0.1:student@example.com');
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).toBe(keys[0]);
+    expect(keys[3]).toBe('127.0.0.1:stu-0003');
+    expect(keys[4]).toBe('127.0.0.1:admin');
+    keys.forEach(key => expect(key.endsWith(':none')).toBe(false));
+  });
 });

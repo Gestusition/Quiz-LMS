@@ -30,6 +30,7 @@ export const CourseDetailPage = {
       }));
       const courseAssignments = assignments.filter(item => Number(item.courseId) === Number(courseId));
       const courseAttendance = attendanceSessions.filter(item => Number(item.courseId) === Number(courseId));
+      const gradeSchemes = manager ? await API.getGradeSchemes(courseId).catch(() => []) : [];
 
       this.setApp(`
         <header class="page-header">
@@ -97,6 +98,8 @@ export const CourseDetailPage = {
               </div>
             </div>
 
+            ${manager ? this.gradeSettingsPanel(course.id, gradeSchemes) : ''}
+
             ${manager ? this.gradebookPanel(gradebook) : ''}
 
             ${manager ? `
@@ -130,7 +133,8 @@ export const CourseDetailPage = {
               <div class="list compact">
                 ${courseAttendance.map(item => `
                   <div class="list-row">
-                    <div><strong>${this.esc(item.topic || 'Attendance session')}</strong><small>${this.esc(this.formatDate(item.sessionDate))} - ${this.esc(item.recordCount || 0)} records</small></div>
+                    <div><strong>${this.esc(item.topic || 'Attendance session')}</strong><small>${this.esc(this.formatDate(item.sessionDate))} - ${this.esc(item.status || 'open')} - ${this.esc(item.recordCount || 0)} records</small></div>
+                    ${this.attendanceAction(item, manager)}
                   </div>
                 `).join('') || this.emptyLine('No attendance sessions yet')}
               </div>
@@ -464,7 +468,7 @@ export const CourseDetailPage = {
   },
 
   resourceRow(item, manager) {
-    const url = item.url || '';
+    const url = item.downloadUrl || item.url || '';
     const title = url ? `<a href="${this.esc(url)}" target="_blank" rel="noopener noreferrer">${this.esc(item.title)}</a>` : this.esc(item.title);
     const detail = item.type === 'file'
       ? `${this.esc(item.fileName || 'file')} - ${this.esc(this.formatFileSize(item.fileSizeBytes))}`
@@ -518,7 +522,7 @@ export const CourseDetailPage = {
   },
 
   weekResourceChip(resource, manager) {
-    const content = resource.content || '';
+    const content = resource.downloadUrl || resource.content || '';
     const label = this.esc(resource.title);
     const body = content
       ? `<a href="${this.esc(content)}" target="_blank" rel="noopener noreferrer">${label}</a>`
@@ -655,22 +659,138 @@ export const CourseDetailPage = {
         </div>
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th>Student</th>${gradebook.quizzes.map(quiz => `<th>${this.esc(quiz.title)}</th>`).join('')}<th>Average</th></tr></thead>
+            <thead><tr><th>Student</th><th>Student Number</th>${gradebook.quizzes.map(quiz => `<th>${this.esc(quiz.title)}</th>`).join('')}<th>Weighted Average</th><th>Final Letter Grade</th></tr></thead>
             <tbody>${gradebook.students.map(student => `
               <tr>
                 <td>
                   <strong>${this.esc(student.name)}</strong>
-                  <small>Student No: ${this.esc(student.studentNumber || '-')}</small>
                   ${student.cohort ? `<small>${this.esc(student.cohort)}</small>` : ''}
                 </td>
-                ${student.quizzes.map(item => `<td>${item.percentage === null ? '-' : `${item.percentage}%`}</td>`).join('')}
-                <td>${student.average === null ? '-' : `${student.average}%`}</td>
+                <td>${this.esc(student.studentNumber || '-')}</td>
+                ${student.quizzes.map(item => `<td>${item.percentage === null ? '-' : `${item.percentage}%`}<small>${item.score === null ? 'Missing' : `${item.score}/${item.maxScore}`}</small></td>`).join('')}
+                <td>${student.weightedAverage === null ? '-' : `${student.weightedAverage}%`}<small>${this.esc(student.completedQuizCount || 0)}/${this.esc(student.totalQuizCount || 0)} submitted</small></td>
+                <td><strong>${this.esc(student.finalLetterGrade || '-')}</strong>${student.gradeStatus && student.gradeStatus !== 'ready' ? `<small>${this.esc(student.gradeMessage || student.gradeStatus)}</small>` : ''}</td>
               </tr>
             `).join('') || '<tr><td>No students.</td></tr>'}</tbody>
           </table>
         </div>
       </div>
     `;
+  },
+
+  gradeSettingsPanel(courseId, schemes = []) {
+    const scheme = schemes[0];
+    const thresholds = scheme?.thresholds || [
+      { letterGrade: 'AA', minScore: 90 }, { letterGrade: 'BA', minScore: 85 }, { letterGrade: 'BB', minScore: 80 },
+      { letterGrade: 'CB', minScore: 75 }, { letterGrade: 'CC', minScore: 70 }, { letterGrade: 'DC', minScore: 60 },
+      { letterGrade: 'DD', minScore: 50 }, { letterGrade: 'FD', minScore: 40 }, { letterGrade: 'FF', minScore: 0 }
+    ];
+    if (!scheme) {
+      return `<div class="panel"><div class="panel-header"><h2>Grade Settings</h2></div>${this.emptyLine('Grade scale is not available yet.')}</div>`;
+    }
+    return `
+      <div class="panel">
+        <div class="panel-header"><h2>Grade Settings</h2><span>${this.esc(scheme.name || 'Grade scale')}</span></div>
+        <div class="table-wrap">
+          <table class="table grade-scale-table">
+            <thead><tr><th>Letter Grade</th><th>Minimum Score</th></tr></thead>
+            <tbody>
+              ${thresholds.map(item => `
+                <tr>
+                  <td><strong>${this.esc(item.letterGrade)}</strong></td>
+                  <td><input class="form-input grade-threshold-input" data-grade="${this.esc(item.letterGrade)}" value="${this.esc(item.minScore)}" type="number" min="0" max="100" step="0.01"></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-sm" onclick="App.resetGradeThresholds(${scheme.id}, ${courseId})">Reset to default</button>
+          <button class="btn btn-primary btn-sm" onclick="App.saveGradeThresholds(${scheme.id}, ${courseId})">Save</button>
+        </div>
+      </div>
+    `;
+  },
+
+  collectGradeThresholds() {
+    return Array.from(document.querySelectorAll('.grade-threshold-input')).map(input => ({
+      letterGrade: input.dataset.grade,
+      minScore: input.value
+    }));
+  },
+
+  validateGradeThresholds(thresholds) {
+    const order = ['AA', 'BA', 'BB', 'CB', 'CC', 'DC', 'DD', 'FD', 'FF'];
+    const values = new Map(thresholds.map(item => [item.letterGrade, Number(item.minScore)]));
+    for (const grade of order) {
+      const value = values.get(grade);
+      if (!Number.isFinite(value) || value < 0 || value > 100) return 'Thresholds must be numbers between 0 and 100.';
+    }
+    for (let i = 0; i < order.length - 1; i += 1) {
+      if (values.get(order[i]) <= values.get(order[i + 1])) return `${order[i]} must be greater than ${order[i + 1]}.`;
+    }
+    if (values.get('FF') !== 0) return 'FF threshold must be 0.';
+    return '';
+  },
+
+  async saveGradeThresholds(schemeId, courseId) {
+    const thresholds = this.collectGradeThresholds();
+    const error = this.validateGradeThresholds(thresholds);
+    if (error) return this.toast(error, 'error');
+    try {
+      await API.updateGradeSchemeThresholds(schemeId, thresholds);
+      this.toast('Grade thresholds saved.', 'success');
+      this.renderCourseDetail(courseId);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  async resetGradeThresholds(schemeId, courseId) {
+    const thresholds = [
+      ['AA', 90], ['BA', 85], ['BB', 80], ['CB', 75], ['CC', 70], ['DC', 60], ['DD', 50], ['FD', 40], ['FF', 0]
+    ].map(([letterGrade, minScore]) => ({ letterGrade, minScore }));
+    try {
+      await API.updateGradeSchemeThresholds(schemeId, thresholds);
+      this.toast('Default grade scale restored.', 'success');
+      this.renderCourseDetail(courseId);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  attendanceAction(session, manager) {
+    if (manager) {
+      return session.status === 'open'
+        ? `<button class="btn btn-ghost btn-sm" onclick="App.closeAttendanceSession(${session.id})">Close</button>`
+        : `<span class="status-chip closed">closed</span>`;
+    }
+    if (this.user.role !== 'student') return '';
+    if (session.ownAttendanceStatus && session.ownAttendanceStatus !== 'removed') {
+      return `<span class="status-chip present">Attendance marked</span>`;
+    }
+    if (session.status !== 'open') return `<span class="status-chip closed">closed</span>`;
+    return `<button class="btn btn-primary btn-sm" onclick="App.markSelfAttendance(${session.id})">Mark Attendance</button>`;
+  },
+
+  async markSelfAttendance(sessionId) {
+    try {
+      await API.markSelfAttendance(sessionId);
+      this.toast('Attendance marked.', 'success');
+      this.route();
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  async closeAttendanceSession(sessionId) {
+    try {
+      await API.closeAttendanceSession(sessionId);
+      this.toast('Attendance session closed.', 'success');
+      this.route();
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
   },
 
   isCourseManager(participants) {

@@ -1,3 +1,5 @@
+const { parseRequiredPositiveInt } = require('../utils/validation');
+
 /**
  * Middleware for input validation on request bodies.
  * Ensures all inputs are validated on the backend before processing.
@@ -31,11 +33,11 @@ function requireFields(fields) {
  * @param {Function} next - Express next function.
  */
 function validateId(req, res, next) {
-  const id = parseInt(req.params.id);
-  if (isNaN(id) || id < 1) {
+  try {
+    req.params.id = parseRequiredPositiveInt(req.params.id, 'id');
+  } catch (err) {
     return res.status(400).json({ error: 'Invalid ID. Must be a positive integer.' });
   }
-  req.params.id = id;
   next();
 }
 

@@ -80,6 +80,7 @@ export const AssignmentsPage = {
                 ${this.profileRow('Submitted at', own.ownSubmittedAt ? this.formatDate(own.ownSubmittedAt) : '')}
                 ${this.submissionInfoRow('Submitted work', this.submissionLinkHtml({
                   submissionUrl: own.ownSubmissionUrl,
+                  downloadUrl: own.ownSubmissionDownloadUrl,
                   fileName: own.ownFileName,
                   fileSizeBytes: own.ownFileSizeBytes
                 }))}
@@ -303,7 +304,7 @@ export const AssignmentsPage = {
   },
 
   submissionLinkHtml(item) {
-    const url = item?.submissionUrl || '';
+    const url = item?.downloadUrl || item?.submissionUrl || '';
     if (!url) return '';
     const fileName = item.fileName || '';
     const label = fileName || url;

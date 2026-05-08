@@ -38,8 +38,19 @@ function defaultKey(req) {
 }
 
 function identifierKey(req) {
-  const identifier = String(req.body?.identifier || req.body?.username || '').trim().toLowerCase();
+  const identifier = extractLoginIdentifier(req.body);
   return `${defaultKey(req)}:${identifier || 'none'}`;
+}
+
+function extractLoginIdentifier(body = {}) {
+  const aliases = ['identifier', 'login', 'email', 'student_number', 'username'];
+  for (const alias of aliases) {
+    const value = body && body[alias];
+    if (value === undefined || value === null) continue;
+    const normalized = String(value).trim().toLowerCase();
+    if (normalized) return normalized;
+  }
+  return '';
 }
 
 function pruneExpiredBuckets(buckets, now) {
@@ -58,5 +69,6 @@ function trimOldestBuckets(buckets, maxBuckets) {
 
 module.exports = {
   createRateLimiter,
+  extractLoginIdentifier,
   identifierKey
 };

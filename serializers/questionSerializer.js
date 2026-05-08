@@ -10,7 +10,8 @@ function serializeQuestion(question) {
     richText: question.richText || '',
     explanationText: question.explanationText || '',
     hintText: question.hintText || '',
-    mediaUrl: question.mediaUrl || ''
+    mediaUrl: question.mediaUrl || '',
+    gradingType: question.gradingType || 'standard'
   };
 }
 

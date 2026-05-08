@@ -3,7 +3,7 @@ const userRepository = require('../repositories/userRepository');
 const { LIMITS } = require('../constants/limits');
 const { forbiddenError, notFoundError, validationError } = require('../utils/appError');
 const { nowIso } = require('../utils/security');
-const { dateValue, enumValue, optionalId, optionalText } = require('../utils/validation');
+const { dateValue, enumValue, optionalId, optionalText, parseOptionalPositiveInt, parseRequiredPositiveInt } = require('../utils/validation');
 
 const RESTRICTION_TYPES = [
   'account_suspended',
@@ -18,14 +18,15 @@ const SCOPE_TYPES = ['global', 'course', 'quiz', 'assignment'];
 
 class RestrictionService {
   list(filters = {}) {
-    return restrictionRepository.list(filters);
+    return restrictionRepository.list({
+      ...filters,
+      userId: parseOptionalPositiveInt(filters.userId, 'userId'),
+      scopeId: parseOptionalPositiveInt(filters.scopeId, 'scopeId')
+    });
   }
 
   create(data, actorUserId) {
-    const userId = Number(data.userId);
-    if (!Number.isInteger(userId) || userId < 1) {
-      throw validationError('user_id', 'user_id must be a positive integer.');
-    }
+    const userId = parseRequiredPositiveInt(data.userId, 'user_id');
     const user = userRepository.findById(userId);
     if (!user) throw notFoundError('User not found.');
 

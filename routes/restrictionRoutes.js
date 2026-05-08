@@ -4,6 +4,7 @@ const restrictionService = require('../services/restrictionService');
 const auditService = require('../services/auditService');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendError } = require('../utils/appError');
+const { parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 router.use(requireRole('admin'));
@@ -152,7 +153,7 @@ router.post('/', (req, res) => {
  */
 router.put('/:id/deactivate', (req, res) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseRequiredPositiveInt(req.params.id, 'restrictionId');
     const updated = restrictionService.deactivate(id);
     auditService.log({
       actorUserId: req.user.id,

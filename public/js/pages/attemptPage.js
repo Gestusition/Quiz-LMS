@@ -201,7 +201,7 @@ export const AttemptPage = {
       case 'FB':
       case 'SA':
         return `<input class="form-input answer-input" data-qid="${question.id}" value="${this.esc(answeredValue)}" placeholder="${question.type === 'SA' ? 'Enter numeric answer...' : 'Type your answer...'}" ${disabled ? 'disabled' : ''}>
-          ${question.type === 'SA' ? '<small class="form-hint">Supports scientific notation (e.g. 1.23456E+00)</small>' : ''}`;
+          ${question.type === 'SA' ? '<small class="form-hint">LaTeX is for display only. Correct numeric answers should be plain numbers; scientific notation is supported.</small>' : ''}`;
 
       case 'ES':
         return `<textarea class="form-input answer-textarea" data-qid="${question.id}" rows="8" placeholder="Write your essay response..." ${disabled ? 'disabled' : ''}>${this.esc(answeredValue)}</textarea>`;

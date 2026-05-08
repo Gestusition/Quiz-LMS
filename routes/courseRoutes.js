@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 const courseService = require('../services/courseService');
 const contentService = require('../services/contentService');
@@ -6,14 +8,18 @@ const quizService = require('../services/quizService');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const contentRepository = require('../repositories/contentRepository');
 const { requireAuth, requireRole, canAccessCourse, canManageCourse } = require('../middleware/auth');
-const { resourceUpload, removeUploadedFile } = require('../middleware/upload');
+const { resourceUpload, removeUploadedFile, validateUploadedResource } = require('../middleware/upload');
 const { sendError } = require('../utils/appError');
+const { parseOptionalPositiveInt, parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 
 function parseId(value) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  try {
+    return parseOptionalPositiveInt(value, 'id');
+  } catch (err) {
+    return null;
+  }
 }
 
 function requireCourseAccess(req, res, next) {
@@ -43,7 +49,7 @@ function contentCourseId(table, id) {
 function uploadResourceFile(req, res, next) {
   resourceUpload.single('file')(req, res, err => {
     if (err) return sendError(res, err, 400);
-    next();
+    validateUploadedResource(req, res, next);
   });
 }
 
@@ -57,6 +63,18 @@ function resourcePayload(req) {
     fileSizeBytes: req.file.size,
     mimeType: req.file.mimetype
   };
+}
+
+function sendProtectedDownload(res, fileInfo) {
+  const fileName = path.basename(fileInfo.storageUrl || '');
+  const filePath = path.join(__dirname, '..', 'public', 'uploads', 'resources', fileName);
+  const root = path.join(__dirname, '..', 'public', 'uploads', 'resources');
+  if (!fileName || !filePath.startsWith(root) || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found.' });
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+  return res.download(filePath, fileInfo.fileName || fileName);
 }
 
 /**
@@ -299,6 +317,17 @@ router.delete('/resources/:id', (req, res) => {
   }
 });
 
+router.get('/resources/:id/download', (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid resource ID.' });
+  try {
+    const fileInfo = contentService.getResourceDownload(id, req.user);
+    return sendProtectedDownload(res, fileInfo);
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
 /**
  * @swagger
  * /api/courses/{courseId}/participants:
@@ -363,7 +392,8 @@ router.get('/:courseId/participants', requireCourseAccess, (req, res) => {
  */
 router.post('/:courseId/enrollments', requireCourseManager, (req, res) => {
   try {
-    res.status(201).json(courseService.enroll(req.courseId, Number(req.body.userId), req.body.role));
+    const userId = parseRequiredPositiveInt(req.body.userId, 'userId');
+    res.status(201).json(courseService.enroll(req.courseId, userId, req.body.role));
   } catch (err) {
     sendError(res, err, 400);
   }

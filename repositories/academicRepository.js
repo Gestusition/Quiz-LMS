@@ -710,9 +710,26 @@ function findAttendanceSessionById(id) {
 
 function insertAttendanceSession(payload, termId, createdBy) {
   return getDatabase().prepare(`
-    INSERT INTO attendance_sessions (courseOfferingId, termId, sessionDate, topic, createdBy)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(payload.courseOfferingId, termId, payload.sessionDate, payload.topic, createdBy);
+    INSERT INTO attendance_sessions (courseOfferingId, termId, sessionDate, topic, status, openedAt, expiresAt, createdBy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    payload.courseOfferingId,
+    termId,
+    payload.sessionDate,
+    payload.topic,
+    payload.status || 'open',
+    payload.status === 'open' ? (payload.openedAt || new Date().toISOString()) : '',
+    payload.expiresAt || '',
+    createdBy
+  );
+}
+
+function closeAttendanceSession(id, closedAt) {
+  return getDatabase().prepare(`
+    UPDATE attendance_sessions
+    SET status = 'closed', closedAt = ?, updatedAt = ?
+    WHERE id = ?
+  `).run(closedAt, closedAt, id);
 }
 
 function upsertAttendanceRecord(sessionId, record, markedBy, updatedAt) {
@@ -733,6 +750,39 @@ function upsertAttendanceRecord(sessionId, record, markedBy, updatedAt) {
     INSERT INTO attendance_records (sessionId, studentId, status, note, markedBy)
     VALUES (?, ?, ?, ?, ?)
   `).run(sessionId, record.studentId, record.status, record.note, markedBy);
+}
+
+function createSelfAttendanceRecord(sessionId, studentId, markedBy, markedAt) {
+  return getDatabase().prepare(`
+    INSERT INTO attendance_records (sessionId, studentId, status, note, markedBy, createdAt, updatedAt)
+    VALUES (?, ?, 'present', '', ?, ?, ?)
+  `).run(sessionId, studentId, markedBy, markedAt, markedAt);
+}
+
+function findAttendanceRecord(sessionId, studentId) {
+  return getDatabase().prepare(`
+    SELECT *
+    FROM attendance_records
+    WHERE sessionId = ? AND studentId = ?
+  `).get(sessionId, studentId) || null;
+}
+
+function findAttendanceRecordById(id) {
+  return getDatabase().prepare(`
+    SELECT ar.*, ats.courseOfferingId, co.courseId, co.instructorId
+    FROM attendance_records ar
+    JOIN attendance_sessions ats ON ats.id = ar.sessionId
+    JOIN course_offerings co ON co.id = ats.courseOfferingId
+    WHERE ar.id = ?
+  `).get(id) || null;
+}
+
+function removeAttendanceRecord(id, payload) {
+  return getDatabase().prepare(`
+    UPDATE attendance_records
+    SET status = 'removed', removedBy = ?, removedAt = ?, removalNote = ?, updatedAt = ?
+    WHERE id = ?
+  `).run(payload.removedBy, payload.removedAt, payload.removalNote, payload.removedAt, id);
 }
 
 function listAttendanceRecords(sessionId) {
@@ -815,7 +865,7 @@ function attendanceSummary(courseOfferingId) {
     SELECT ar.status, COUNT(*) as count
     FROM attendance_records ar
     JOIN attendance_sessions ats ON ats.id = ar.sessionId
-    WHERE ats.courseOfferingId = ?
+    WHERE ats.courseOfferingId = ? AND ar.status != 'removed'
     GROUP BY ar.status
   `).all(courseOfferingId);
 }
@@ -896,6 +946,7 @@ module.exports = {
   adminAnalytics,
   attendanceSummary,
   clearUserReferences,
+  closeAttendanceSession,
   countActiveOfferingEnrollments,
   deleteAttendanceRecordsByStudent,
   deleteClassYear,
@@ -912,6 +963,8 @@ module.exports = {
   findActiveTerm,
   findAssignmentById,
   findAttendanceSessionById,
+  findAttendanceRecord,
+  findAttendanceRecordById,
   findClassYearById,
   findClassYearDuplicate,
   findCourseOfferingById,
@@ -929,6 +982,7 @@ module.exports = {
   gradeSubmission,
   insertAssignment,
   insertAttendanceSession,
+  createSelfAttendanceRecord,
   insertClassYear,
   insertCourseOffering,
   insertDepartment,
@@ -953,6 +1007,7 @@ module.exports = {
   setActiveTerm,
   updateAssignment,
   updateAttendanceRecord: upsertAttendanceRecord,
+  removeAttendanceRecord,
   updateClassYear,
   updateCourseOffering,
   updateDepartment,

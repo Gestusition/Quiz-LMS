@@ -1,18 +1,26 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 const academicService = require('../services/academicService');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { removeUploadedFile, submissionUpload } = require('../middleware/upload');
+const { removeUploadedFile, submissionUpload, validateUploadedResource } = require('../middleware/upload');
+const { parseOptionalPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 
 function parseId(value) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  try {
+    return parseOptionalPositiveInt(value, 'id');
+  } catch (err) {
+    return null;
+  }
 }
 
 function sendError(res, err) {
   if (err.status === 403) return res.status(403).json({ error: err.message });
+  if (err.status === 409) return res.status(409).json({ error: err.message });
+  if (err.status === 400) return res.status(400).json({ error: err.message });
   if (/not found/i.test(err.message)) return res.status(404).json({ error: err.message });
   return res.status(400).json({ error: err.message });
 }
@@ -30,6 +38,25 @@ function handleSubmissionUpload(req, res, next) {
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     return res.status(status).json({ error: err.message });
   });
+}
+
+function handleValidatedSubmissionUpload(req, res, next) {
+  handleSubmissionUpload(req, res, err => {
+    if (err) return next(err);
+    validateUploadedResource(req, res, next);
+  });
+}
+
+function sendProtectedSubmissionDownload(res, fileInfo) {
+  const fileName = path.basename(fileInfo.storageUrl || '');
+  const root = path.join(__dirname, '..', 'public', 'uploads', 'submissions');
+  const filePath = path.join(root, fileName);
+  if (!fileName || !filePath.startsWith(root) || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found.' });
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+  return res.download(filePath, fileInfo.fileName || fileName);
 }
 
 /**
@@ -538,7 +565,7 @@ router.post('/assignments', requireRole(['admin', 'teacher']), (req, res) => {
 router.get('/assignments/:id/submissions', requireValidId, (req, res) => {
   try { res.json(academicService.listSubmissions(req.params.id, req.user)); } catch (err) { sendError(res, err); }
 });
-router.post('/assignments/:id/submissions', requireValidId, handleSubmissionUpload, (req, res) => {
+router.post('/assignments/:id/submissions', requireValidId, handleValidatedSubmissionUpload, (req, res) => {
   const payload = { ...req.body };
   if (req.file) {
     payload.submissionUrl = `/uploads/submissions/${req.file.filename}`;
@@ -624,6 +651,15 @@ router.put('/submissions/:id/grade', requireRole(['admin', 'teacher']), requireV
   try { res.json(academicService.gradeSubmission(req.params.id, req.body, req.user)); } catch (err) { sendError(res, err); }
 });
 
+router.get('/submissions/:id/download', requireValidId, (req, res) => {
+  try {
+    const fileInfo = academicService.getSubmissionDownload(req.params.id, req.user);
+    return sendProtectedSubmissionDownload(res, fileInfo);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
 /**
  * @swagger
  * /api/academic/attendance/sessions:
@@ -667,12 +703,24 @@ router.post('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']
   try { res.json(academicService.markAttendance(req.params.id, req.body.records, req.user)); } catch (err) { sendError(res, err); }
 });
 
+router.post('/attendance/sessions/:id/self', requireRole('student'), requireValidId, (req, res) => {
+  try { res.status(201).json(academicService.markSelfAttendance(req.params.id, req.user)); } catch (err) { sendError(res, err); }
+});
+
+router.put('/attendance/sessions/:id/close', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
+  try { res.json(academicService.closeAttendanceSession(req.params.id, req.user)); } catch (err) { sendError(res, err); }
+});
+
 router.get('/attendance/records', requireRole(['admin', 'teacher']), (req, res) => {
   try { res.json(academicService.listAttendanceRecordDetails(req.user, req.query)); } catch (err) { sendError(res, err); }
 });
 
 router.get('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
   try { res.json(academicService.listAttendanceRecords(req.params.id, req.user)); } catch (err) { sendError(res, err); }
+});
+
+router.put('/attendance/records/:id/remove', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
+  try { res.json(academicService.removeAttendanceRecord(req.params.id, req.body, req.user)); } catch (err) { sendError(res, err); }
 });
 
 /**

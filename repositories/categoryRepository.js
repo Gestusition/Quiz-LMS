@@ -41,12 +41,24 @@ function findById(id) {
   return getDatabase().prepare('SELECT * FROM categories WHERE id = ?').get(id) || null;
 }
 
-function findDuplicateName(name, excludeId) {
+function findDuplicateName(name, courseId = null, excludeId = null) {
   const db = getDatabase();
+  const normalizedCourseId = courseId || null;
   if (excludeId) {
-    return db.prepare('SELECT id FROM categories WHERE LOWER(name) = LOWER(?) AND id != ?').get(name, excludeId) || null;
+    return db.prepare(`
+      SELECT id
+      FROM categories
+      WHERE LOWER(name) = LOWER(?)
+        AND COALESCE(courseId, 0) = COALESCE(?, 0)
+        AND id != ?
+    `).get(name, normalizedCourseId, excludeId) || null;
   }
-  return db.prepare('SELECT id FROM categories WHERE LOWER(name) = LOWER(?)').get(name) || null;
+  return db.prepare(`
+    SELECT id
+    FROM categories
+    WHERE LOWER(name) = LOWER(?)
+      AND COALESCE(courseId, 0) = COALESCE(?, 0)
+  `).get(name, normalizedCourseId) || null;
 }
 
 function findIdsByCourseId(courseId) {

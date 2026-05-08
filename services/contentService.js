@@ -1,6 +1,8 @@
 const courseRepository = require('../repositories/courseRepository');
 const contentRepository = require('../repositories/contentRepository');
+const enrollmentRepository = require('../repositories/enrollmentRepository');
 const { removeUploadedResourceByUrl } = require('../middleware/upload');
+const { forbiddenError, notFoundError } = require('../utils/appError');
 const {
   validateAnnouncement,
   validateResource
@@ -32,7 +34,7 @@ class ContentService {
   }
 
   getResources(courseId) {
-    return contentRepository.getResources(courseId);
+    return contentRepository.getResources(courseId).map(resource => this.withDownloadUrl(resource));
   }
 
   createResource(courseId, data, user) {
@@ -54,6 +56,30 @@ class ContentService {
     contentRepository.deleteResource(id);
     removeUploadedResourceByUrl(existing.url);
     return true;
+  }
+
+  getResourceDownload(id, user) {
+    const resource = contentRepository.findResourceById(id);
+    if (!resource || resource.type !== 'file') {
+      throw notFoundError('Resource not found.');
+    }
+    if (!enrollmentRepository.canAccessCourse(user, resource.courseId)) {
+      throw forbiddenError('Course access required.');
+    }
+    return {
+      id: resource.id,
+      fileName: resource.fileName,
+      storageUrl: resource.url,
+      mimeType: resource.mimeType
+    };
+  }
+
+  withDownloadUrl(resource) {
+    if (!resource || resource.type !== 'file') return resource;
+    return {
+      ...resource,
+      downloadUrl: `/api/courses/resources/${resource.id}/download`
+    };
   }
 }
 

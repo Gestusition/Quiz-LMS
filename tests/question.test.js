@@ -167,6 +167,103 @@ describe('QuestionService', () => {
     }).toThrow('not found');
   });
 
+  test('rejects multiple response correct indexes that do not match options', () => {
+    expect(() => questionService.create({
+      categoryId: testCategoryId,
+      text: 'Pick valid letters.',
+      type: 'MR',
+      options: ['A', 'B'],
+      correctAnswer: '0,5'
+    })).toThrow('valid option indexes');
+
+    expect(() => questionService.create({
+      categoryId: testCategoryId,
+      text: 'Pick unique letters.',
+      type: 'MR',
+      options: ['A', 'B'],
+      correctAnswer: '0,0'
+    })).toThrow('duplicates');
+  });
+
+  test('ordering questions filter blank options before storing correctAnswer', () => {
+    const ordering = questionService.create({
+      categoryId: testCategoryId,
+      text: 'Order the steps.',
+      type: 'OR',
+      options: ['First', '', 'Second'],
+      correctAnswer: '0,1,2'
+    });
+
+    expect(ordering.options).toEqual(['First', 'Second']);
+    expect(ordering.correctAnswer).toBe('0,1');
+  });
+
+  test('stores LaTeX and script-looking text as inert question content', () => {
+    const latex = questionService.create({
+      categoryId: testCategoryId,
+      text: 'Compute $$\\frac{1}{2}$$ <script>alert(1)</script>',
+      type: 'FB',
+      correctAnswer: '0.5',
+      richText: 'Use \\(a^2+b^2\\).',
+      explanationText: 'Because $$1/2 = 0.5$$.',
+      hintText: 'Write a decimal.'
+    });
+
+    const found = questionService.getById(latex.id);
+    expect(found.text).toContain('\\frac{1}{2}');
+    expect(found.text).toContain('<script>');
+    expect(found.richText).toContain('\\(a^2+b^2\\)');
+  });
+
+  test('multi-part partial updates preserve existing parts and reject invalid nested updates', () => {
+    const multi = questionService.create({
+      categoryId: testCategoryId,
+      text: 'Solve both parts.',
+      type: 'MP',
+      difficulty: 'MEDIUM',
+      points: 2,
+      parts: [
+        { partLabel: '(a)', partText: 'Compute $1+1$.', answerType: 'numeric', correctAnswer: '2', points: 1 },
+        { partLabel: '(b)', partText: 'Compute $2+2$.', answerType: 'numeric', correctAnswer: '4', points: 1 }
+      ]
+    });
+
+    const updated = questionService.update(multi.id, { text: 'Solve the updated parts.' });
+    expect(updated.parts).toHaveLength(2);
+    expect(updated.parts[0].correctAnswer).toBe('2');
+
+    expect(() => questionService.update(multi.id, {
+      parts: [{ partLabel: '(a)', partText: 'Missing answer', answerType: 'numeric', correctAnswer: '', points: 1 }]
+    })).toThrow('correct answer');
+  });
+
+  test('math table partial updates preserve tableConfig and reject invalid cell keys', () => {
+    const table = questionService.create({
+      categoryId: testCategoryId,
+      text: 'Fill the table.',
+      type: 'MT',
+      difficulty: 'HARD',
+      points: 3,
+      tableConfig: {
+        columns: [{ header: 'n', type: 'label' }, { header: 'value', type: 'input' }],
+        rowCount: 2,
+        prefill: { r0_c0: '1', r1_c0: '2' },
+        correctData: { r0_c1: '10', r1_c1: '20' }
+      }
+    });
+
+    const updated = questionService.update(table.id, { difficulty: 'MEDIUM' });
+    expect(updated.tableConfig.correctData.r0_c1).toBe('10');
+
+    expect(() => questionService.update(table.id, {
+      tableConfig: {
+        columns: [{ header: 'n', type: 'label' }, { header: 'value', type: 'input' }],
+        rowCount: 1,
+        correctData: { r9_c1: 'bad' }
+      }
+    })).toThrow('table shape');
+  });
+
   // ===== DELETE =====
   test('should delete a question', () => {
     const result = questionService.delete(fbId);

@@ -1,8 +1,8 @@
 const { LIMITS } = require('../constants/limits');
-const { optionalText, requiredText } = require('../utils/validation');
+const { optionalId, optionalText, requiredText } = require('../utils/validation');
 
 function validateCategory(data) {
-  const courseId = data.courseId;
+  const courseId = optionalId(data.courseId, 'courseId');
 
   return {
     courseId,

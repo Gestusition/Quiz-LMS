@@ -70,6 +70,7 @@ class QuestionService {
     if (!existing) {
       throw new Error('Question not found.');
     }
+    const enrichedExisting = this.enrichQuestion(serializeQuestion(existing));
 
     const payload = validateQuestion({
       categoryId: data.categoryId !== undefined ? data.categoryId : existing.categoryId,
@@ -83,10 +84,11 @@ class QuestionService {
       explanationText: data.explanationText !== undefined ? data.explanationText : existing.explanationText,
       hintText: data.hintText !== undefined ? data.hintText : existing.hintText,
       mediaUrl: data.mediaUrl !== undefined ? data.mediaUrl : existing.mediaUrl,
-      acceptedAnswers: data.acceptedAnswers,
-      caseSensitive: data.caseSensitive,
-      parts: data.parts,
-      tableConfig: data.tableConfig
+      acceptedAnswers: data.acceptedAnswers !== undefined ? data.acceptedAnswers : enrichedExisting.acceptedAnswers,
+      caseSensitive: data.caseSensitive !== undefined ? data.caseSensitive : enrichedExisting.caseSensitive,
+      gradingType: data.gradingType !== undefined ? data.gradingType : (existing.gradingType || 'standard'),
+      parts: data.parts !== undefined ? data.parts : enrichedExisting.parts,
+      tableConfig: data.tableConfig !== undefined ? data.tableConfig : enrichedExisting.tableConfig
     });
 
     const category = categoryRepository.findById(payload.categoryId);
@@ -139,6 +141,7 @@ class QuestionService {
       mediaUrl: original.mediaUrl,
       acceptedAnswers: original.acceptedAnswers,
       caseSensitive: original.caseSensitive,
+      gradingType: original.gradingType || 'standard',
       parts: original.parts,
       tableConfig: original.tableConfig
     };

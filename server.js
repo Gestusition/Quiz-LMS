@@ -53,6 +53,10 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Serve static frontend files
+app.use(['/uploads/resources', '/uploads/submissions'], (req, res) => {
+  res.status(404).json({ error: 'Use the protected download endpoint for course files.' });
+});
+
 app.use(express.static(publicDir, {
   setHeaders(res, filePath) {
     const uploadRoots = [resourceUploadRoot, submissionUploadRoot];

@@ -150,6 +150,15 @@ export const QuizzesPage = {
     this.openModal(id ? 'Edit quiz' : 'New quiz / exam', `
       <form id="quiz-form" class="stack quiz-form-advanced">
         <div class="form-section">
+          <h3>Workflow</h3>
+          <div class="workflow-steps">
+            <span class="status-chip draft">1 Create draft</span>
+            <span class="status-chip">2 Assign questions</span>
+            <span class="status-chip">3 Review</span>
+            <span class="status-chip published">4 Publish</span>
+          </div>
+        </div>
+        <div class="form-section">
           <h3>Template</h3>
           <select class="form-select" id="quiz-template">
             <option value="">No template (custom)</option>
@@ -188,19 +197,14 @@ export const QuizzesPage = {
             <label class="form-field"><span>Show results</span><select class="form-select" id="quiz-show-result">
               ${['immediately', 'after_close', 'after_manual_release', 'never'].map(policy => `<option value="${policy}" ${quiz.showResultPolicy === policy ? 'selected' : ''}>${policy.replace(/_/g, ' ')}</option>`).join('')}
             </select></label>
-            <label class="form-field"><span>Grading mode</span><select class="form-select" id="quiz-grading-mode">
-              ${['standard', 'negative_marking', 'manual_review'].map(mode => `<option value="${mode}" ${quiz.gradingMode === mode ? 'selected' : ''}>${mode.replace(/_/g, ' ')}</option>`).join('')}
-            </select></label>
+            ${this.input('quiz-penalty-amount', 'Penalty per wrong answer', quiz.penaltyPerWrong || 0, 'number', '', { min: 0, max: 100, step: 'any' })}
           </div>
+          <p class="form-hint" style="margin-top:4px;color:var(--text-muted)">Penalty applies to questions set as "Negative marking" grading type. Set per question in Question Bank.</p>
           <div class="check-grid">
             <label class="check-field"><input type="checkbox" id="quiz-shuffle-q" ${quiz.shuffleQuestions ? 'checked' : ''}> Shuffle questions</label>
             <label class="check-field"><input type="checkbox" id="quiz-shuffle-o" ${quiz.shuffleOptions ? 'checked' : ''}> Shuffle options</label>
             <label class="check-field"><input type="checkbox" id="quiz-show-correct" ${quiz.showCorrectAnswers ? 'checked' : ''}> Show correct answers</label>
-            <label class="check-field"><input type="checkbox" id="quiz-penalty" ${quiz.penaltyEnabled ? 'checked' : ''}> Negative marking</label>
             <label class="check-field"><input type="checkbox" id="quiz-seb" ${quiz.requiresSeb ? 'checked' : ''}> Require SEB</label>
-          </div>
-          <div class="form-grid" id="penalty-options" style="${quiz.penaltyEnabled ? '' : 'display:none'}">
-            ${this.input('quiz-penalty-amount', 'Penalty per wrong answer', quiz.penaltyPerWrong || 0, 'number', '', { min: 0, max: 100, step: 'any' })}
           </div>
         </div>
         <div class="modal-actions">
@@ -219,19 +223,12 @@ export const QuizzesPage = {
         if (defaults.durationMinutes) document.getElementById('quiz-duration').value = defaults.durationMinutes;
         if (defaults.maxAttempts) document.getElementById('quiz-max-attempts').value = defaults.maxAttempts;
         if (defaults.showResultPolicy) document.getElementById('quiz-show-result').value = defaults.showResultPolicy;
-        if (defaults.gradingMode) document.getElementById('quiz-grading-mode').value = defaults.gradingMode;
         document.getElementById('quiz-shuffle-q').checked = !!defaults.shuffleQuestions;
         document.getElementById('quiz-shuffle-o').checked = !!defaults.shuffleOptions;
         document.getElementById('quiz-show-correct').checked = !!defaults.showCorrectAnswers;
-        document.getElementById('quiz-penalty').checked = !!defaults.penaltyEnabled;
         document.getElementById('quiz-seb').checked = !!defaults.requiresSeb;
         if (defaults.penaltyPerWrong) document.getElementById('quiz-penalty-amount').value = defaults.penaltyPerWrong;
-        document.getElementById('penalty-options').style.display = defaults.penaltyEnabled ? '' : 'none';
       } catch (e) { /* ignore */ }
-    });
-
-    document.getElementById('quiz-penalty').addEventListener('change', (event) => {
-      document.getElementById('penalty-options').style.display = event.target.checked ? '' : 'none';
     });
 
     document.getElementById('quiz-form').addEventListener('submit', async event => {
@@ -249,18 +246,22 @@ export const QuizzesPage = {
         shuffleOptions: document.getElementById('quiz-shuffle-o').checked,
         showCorrectAnswers: document.getElementById('quiz-show-correct').checked,
         showResultPolicy: value('quiz-show-result'),
-        gradingMode: value('quiz-grading-mode'),
-        penaltyEnabled: document.getElementById('quiz-penalty').checked,
         penaltyPerWrong: Number(value('quiz-penalty-amount') || 0),
         requiresSeb: document.getElementById('quiz-seb').checked,
         templateName: document.getElementById('quiz-template').selectedOptions[0]?.dataset.templateName || ''
       };
 
       try {
-        if (id) await API.updateQuiz(id, data);
-        else await API.createQuiz(data);
+        if (!id && data.status === 'published') {
+          this.toast('Create the quiz as a draft, assign questions, then publish.', 'error');
+          return;
+        }
+        const saved = id ? await API.updateQuiz(id, data) : await API.createQuiz(data);
         this.closeModal();
         this.renderQuizzes();
+        if (!id && confirm('Quiz created. Assign questions now?')) {
+          this.showAssignQuestions(saved.id);
+        }
       } catch (err) {
         this.toast(err.message, 'error');
       }
@@ -269,24 +270,76 @@ export const QuizzesPage = {
 
   async showAssignQuestions(quizId) {
     const quiz = await API.getQuiz(quizId);
-    const allQuestions = await API.getQuestions({ courseId: quiz.courseId });
+    const [allQuestions, categories] = await Promise.all([
+      API.getQuestions({ courseId: quiz.courseId }),
+      API.getCategories({ courseId: quiz.courseId })
+    ]);
     const assignedIds = new Set((quiz.questions || []).map(q => q.id));
-    const TYPE_LABELS = {
-      MC: 'Multiple Choice', TF: 'True/False', FB: 'Fill Blank',
-      MT: 'Math Table', MP: 'Multi-Part', SA: 'Numeric',
-      ES: 'Essay', OR: 'Ordering', MR: 'Multiple Response'
+
+    // Build a map of categoryId -> category for quick lookup
+    const categoryMap = new Map(categories.map(c => [c.id, c]));
+
+    // Helper: render available questions grouped by category
+    const renderAvailableGrouped = (questions, selectedCategoryId) => {
+      const available = questions.filter(q => !this._assignedIds.has(q.id));
+      const filtered = selectedCategoryId
+        ? available.filter(q => String(q.categoryId) === String(selectedCategoryId))
+        : available;
+
+      if (filtered.length === 0) return '<p class="muted">No available questions.</p>';
+
+      // Group by category
+      const grouped = new Map();
+      for (const q of filtered) {
+        const catId = q.categoryId || 0;
+        if (!grouped.has(catId)) grouped.set(catId, []);
+        grouped.get(catId).push(q);
+      }
+
+      let html = '';
+      for (const [catId, catQuestions] of grouped) {
+        const catName = (categoryMap.get(catId) || {}).name || 'Uncategorized';
+        const totalPts = catQuestions.reduce((sum, q) => sum + (q.points || 0), 0);
+        html += `
+          <div class="category-group" data-category-id="${catId}">
+            <div class="category-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+              <span class="category-group-toggle">▾</span>
+              <strong>${this.esc(catName)}</strong>
+              <span class="category-group-meta">${catQuestions.length} question${catQuestions.length !== 1 ? 's' : ''} · ${totalPts} pts</span>
+            </div>
+            <div class="category-group-body">
+              ${catQuestions.map(q => `
+                <div class="question-mini-item" data-id="${q.id}" data-category="${catId}">
+                  <button class="btn btn-ghost btn-sm" onclick="App.addAssigned(${q.id})">+</button>
+                  <span class="type-badge-sm">${q.type}</span>
+                  <span>${this.esc(q.text.slice(0, 60))}</span>
+                  ${q.gradingType === 'negative' ? '<span class="grading-badge grading-negative" title="Negative marking">➖</span>' : q.gradingType === 'manual' ? '<span class="grading-badge grading-manual" title="Manual grading">📝</span>' : ''}
+                  <span class="pts">${q.points} pts</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+      return html;
     };
+
+    this._assignedIds = new Set(assignedIds);
+    this._quizId = quizId;
+    this._allQuestions = allQuestions;
+    this._categories = categories;
 
     this.openModal('Assign questions to ' + quiz.title, `
       <div class="assign-questions-panel">
         <div class="assigned-section">
-          <h3>Assigned (${assignedIds.size})</h3>
+          <h3>Assigned (<span id="assigned-count">${assignedIds.size}</span>)</h3>
           <div id="assigned-list" class="question-mini-list">
             ${(quiz.questions || []).map(q => `
               <div class="question-mini-item assigned" data-id="${q.id}">
                 <button class="btn btn-ghost btn-sm" onclick="App.removeAssigned(${q.id})">✕</button>
                 <span class="type-badge-sm">${q.type}</span>
                 <span>${this.esc(q.text.slice(0, 60))}</span>
+                ${q.gradingType === 'negative' ? '<span class="grading-badge grading-negative" title="Negative marking">➖</span>' : q.gradingType === 'manual' ? '<span class="grading-badge grading-manual" title="Manual grading">📝</span>' : ''}
                 <span class="pts">${q.points} pts</span>
               </div>
             `).join('') || '<p class="muted">No questions assigned.</p>'}
@@ -294,16 +347,18 @@ export const QuizzesPage = {
         </div>
         <div class="available-section">
           <h3>Available</h3>
-          <input class="form-input" id="assign-search" placeholder="Search...">
+          <div class="assign-filters">
+            <select class="form-select" id="assign-category-filter">
+              <option value="">All Categories</option>
+              ${categories.map(c => {
+                const count = allQuestions.filter(q => q.categoryId === c.id && !assignedIds.has(q.id)).length;
+                return `<option value="${c.id}">${this.esc(c.name)} (${count})</option>`;
+              }).join('')}
+            </select>
+            <input class="form-input" id="assign-search" placeholder="Search...">
+          </div>
           <div id="available-list" class="question-mini-list">
-            ${allQuestions.filter(q => !assignedIds.has(q.id)).map(q => `
-              <div class="question-mini-item" data-id="${q.id}">
-                <button class="btn btn-ghost btn-sm" onclick="App.addAssigned(${q.id})">+</button>
-                <span class="type-badge-sm">${q.type}</span>
-                <span>${this.esc(q.text.slice(0, 60))}</span>
-                <span class="pts">${q.points} pts</span>
-              </div>
-            `).join('')}
+            ${renderAvailableGrouped(allQuestions, '')}
           </div>
         </div>
         <div class="modal-actions">
@@ -313,8 +368,49 @@ export const QuizzesPage = {
       </div>
     `);
 
-    this._assignedIds = new Set(assignedIds);
-    this._quizId = quizId;
+    // After modal renders, give the available-list a concrete pixel height
+    // so overflow-y creates a real scrollbar.
+    requestAnimationFrame(() => {
+      const modal = document.getElementById('modal');
+      const availableList = document.getElementById('available-list');
+      if (!modal || !availableList) return;
+
+      // Set a concrete pixel height on the list
+      const listHeight = 340;
+      availableList.style.height = listHeight + 'px';
+      availableList.style.maxHeight = listHeight + 'px';
+      availableList.style.overflowY = 'scroll';
+      availableList.style.overflowX = 'hidden';
+      availableList.style.display = 'block';
+
+      // Prevent mouse wheel from bubbling to the modal when inside the list
+      availableList.addEventListener('wheel', (e) => {
+        const { scrollTop, scrollHeight, clientHeight } = availableList;
+        const atTop = scrollTop === 0 && e.deltaY < 0;
+        const atBottom = scrollTop + clientHeight >= scrollHeight - 1 && e.deltaY > 0;
+        if (!atTop && !atBottom) {
+          e.stopPropagation();
+        }
+      }, { passive: true });
+    });
+
+    // Re-render available list based on filters
+    const refreshAvailable = () => {
+      const searchTerm = (document.getElementById('assign-search')?.value || '').toLowerCase();
+      const catFilter = document.getElementById('assign-category-filter')?.value || '';
+      const filtered = searchTerm
+        ? this._allQuestions.filter(q => q.text.toLowerCase().includes(searchTerm))
+        : this._allQuestions;
+      const el = document.getElementById('available-list');
+      if (el) {
+        el.innerHTML = renderAvailableGrouped(filtered, catFilter);
+      }
+    };
+
+    this._refreshAvailable = refreshAvailable;
+
+    document.getElementById('assign-category-filter')?.addEventListener('change', refreshAvailable);
+    document.getElementById('assign-search')?.addEventListener('input', refreshAvailable);
 
     document.getElementById('btn-save-assign')?.addEventListener('click', async () => {
       try {
@@ -336,18 +432,32 @@ export const QuizzesPage = {
       item.querySelector('button').textContent = '✕';
       item.querySelector('button').setAttribute('onclick', `App.removeAssigned(${questionId})`);
       document.getElementById('assigned-list')?.appendChild(item);
+      // Remove "No questions assigned" placeholder if present
+      const placeholder = document.querySelector('#assigned-list .muted');
+      if (placeholder) placeholder.remove();
     }
+    // Update count
+    const countEl = document.getElementById('assigned-count');
+    if (countEl) countEl.textContent = this._assignedIds.size;
+    // Refresh the available grouped list
+    if (this._refreshAvailable) this._refreshAvailable();
   },
 
   removeAssigned(questionId) {
     this._assignedIds.delete(questionId);
-    const item = document.querySelector(`.question-mini-item[data-id="${questionId}"]`);
-    if (item) {
-      item.classList.remove('assigned');
-      item.querySelector('button').textContent = '+';
-      item.querySelector('button').setAttribute('onclick', `App.addAssigned(${questionId})`);
-      document.getElementById('available-list')?.appendChild(item);
+    // Remove the item from assigned list
+    const item = document.querySelector(`#assigned-list .question-mini-item[data-id="${questionId}"]`);
+    if (item) item.remove();
+    // Show placeholder if no questions assigned
+    const assignedList = document.getElementById('assigned-list');
+    if (assignedList && assignedList.querySelectorAll('.question-mini-item').length === 0) {
+      assignedList.innerHTML = '<p class="muted">No questions assigned.</p>';
     }
+    // Update count
+    const countEl = document.getElementById('assigned-count');
+    if (countEl) countEl.textContent = this._assignedIds.size;
+    // Refresh the available grouped list
+    if (this._refreshAvailable) this._refreshAvailable();
   },
 
   async showQuizAttempts(quizId) {
@@ -480,12 +590,12 @@ export const QuizzesPage = {
             <label class="form-field"><span>Show results</span><select class="form-select" id="tpl-show-result">
               ${['immediately', 'after_close', 'after_manual_release', 'never'].map(p => `<option value="${p}">${p.replace(/_/g, ' ')}</option>`).join('')}
             </select></label>
+            ${this.input('tpl-penalty-amount', 'Penalty per wrong answer', 0, 'number', '', { min: 0, max: 100, step: 'any' })}
           </div>
           <div class="check-grid">
             <label class="check-field"><input type="checkbox" id="tpl-shuffle-q"> Shuffle questions</label>
             <label class="check-field"><input type="checkbox" id="tpl-shuffle-o"> Shuffle options</label>
             <label class="check-field"><input type="checkbox" id="tpl-show-correct"> Show correct answers</label>
-            <label class="check-field"><input type="checkbox" id="tpl-penalty"> Negative marking</label>
             <label class="check-field"><input type="checkbox" id="tpl-seb"> Require SEB</label>
           </div>
         </div>
@@ -509,7 +619,7 @@ export const QuizzesPage = {
             shuffleQuestions: document.getElementById('tpl-shuffle-q').checked,
             shuffleOptions: document.getElementById('tpl-shuffle-o').checked,
             showCorrectAnswers: document.getElementById('tpl-show-correct').checked,
-            penaltyEnabled: document.getElementById('tpl-penalty').checked,
+            penaltyPerWrong: Number(value('tpl-penalty-amount') || 0),
             requiresSeb: document.getElementById('tpl-seb').checked
           }
         });

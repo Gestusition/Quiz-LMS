@@ -1,6 +1,7 @@
 const authService = require('../services/authService');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const restrictionService = require('../services/restrictionService');
+const { parseOptionalPositiveInt } = require('../utils/validation');
 
 const SESSION_COOKIE_NAME = 'auth_token';
 
@@ -92,7 +93,12 @@ function canAccessCourse(user, courseId) {
 
 function requireCourseAccess(paramName = 'courseId') {
   return (req, res, next) => {
-    const courseId = Number(req.params[paramName] || req.body.courseId || req.query.courseId);
+    let courseId;
+    try {
+      courseId = parseOptionalPositiveInt(req.params[paramName] || req.body.courseId || req.query.courseId, 'courseId');
+    } catch (err) {
+      return res.status(400).json({ error: 'Invalid course ID.' });
+    }
     if (!courseId || !canAccessCourse(req.user, courseId)) {
       return res.status(403).json({ error: 'Course access required.' });
     }
@@ -102,7 +108,12 @@ function requireCourseAccess(paramName = 'courseId') {
 
 function requireCourseManager(paramName = 'courseId') {
   return (req, res, next) => {
-    const courseId = Number(req.params[paramName] || req.body.courseId || req.query.courseId);
+    let courseId;
+    try {
+      courseId = parseOptionalPositiveInt(req.params[paramName] || req.body.courseId || req.query.courseId, 'courseId');
+    } catch (err) {
+      return res.status(400).json({ error: 'Invalid course ID.' });
+    }
     if (!courseId || !canManageCourse(req.user, courseId)) {
       return res.status(403).json({ error: 'Teacher or admin course access required.' });
     }

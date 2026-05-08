@@ -1,4 +1,4 @@
-const { initDatabase, closeDatabase, resolveDatabaseFiles } = require('../database/db');
+const { initDatabase, closeDatabase, resolveDatabaseFiles, getDatabase } = require('../database/db');
 const categoryService = require('../services/categoryService');
 const path = require('path');
 const fs = require('fs');
@@ -84,6 +84,25 @@ describe('CategoryService', () => {
     expect(() => {
       categoryService.update(createdId, { name: 'Another Category' });
     }).toThrow('already exists');
+  });
+
+  test('allows the same category name in different courses but not twice in one course', () => {
+    const db = getDatabase();
+    const courseA = db.prepare("INSERT INTO courses (code, title, visibility) VALUES (?, ?, 'published')")
+      .run(`CAT-A-${Date.now()}`, 'Category Course A');
+    const courseB = db.prepare("INSERT INTO courses (code, title, visibility) VALUES (?, ?, 'published')")
+      .run(`CAT-B-${Date.now()}`, 'Category Course B');
+    const courseAId = Number(courseA.lastInsertRowid);
+    const courseBId = Number(courseB.lastInsertRowid);
+
+    const first = categoryService.create({ courseId: courseAId, name: 'Midterm' });
+    const second = categoryService.create({ courseId: courseBId, name: 'Midterm' });
+
+    expect(first.name).toBe('Midterm');
+    expect(second.name).toBe('Midterm');
+    expect(first.courseId).toBe(courseAId);
+    expect(second.courseId).toBe(courseBId);
+    expect(() => categoryService.create({ courseId: courseAId, name: 'midterm' })).toThrow('already exists');
   });
 
   test('should throw when updating non-existent category', () => {

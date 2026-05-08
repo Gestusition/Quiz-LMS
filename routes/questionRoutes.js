@@ -4,6 +4,7 @@ const questionService = require('../services/questionService');
 const categoryService = require('../services/categoryService');
 const { validateId, requireFields, sanitizeStrings } = require('../middleware/validation');
 const { requireAuth, requireRole, canManageCourse } = require('../middleware/auth');
+const { parseOptionalPositiveInt, parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 
@@ -89,8 +90,8 @@ function ensureCategoryManager(req, res, categoryId) {
 router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     const filters = {
-      categoryId: req.query.categoryId ? parseInt(req.query.categoryId) : undefined,
-      courseId: req.query.courseId ? parseInt(req.query.courseId) : undefined,
+      categoryId: parseOptionalPositiveInt(req.query.categoryId, 'categoryId') || undefined,
+      courseId: parseOptionalPositiveInt(req.query.courseId, 'courseId') || undefined,
       difficulty: req.query.difficulty,
       type: req.query.type,
       search: req.query.search,
@@ -99,7 +100,7 @@ router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
     const questions = questionService.getAll(filters);
     res.json(questions);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 
@@ -147,16 +148,16 @@ router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
 router.get('/random', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     const opts = {
-      categoryId: req.query.categoryId ? parseInt(req.query.categoryId) : undefined,
-      courseId: req.query.courseId ? parseInt(req.query.courseId) : undefined,
+      categoryId: parseOptionalPositiveInt(req.query.categoryId, 'categoryId') || undefined,
+      courseId: parseOptionalPositiveInt(req.query.courseId, 'courseId') || undefined,
       difficulty: req.query.difficulty,
-      limit: req.query.limit,
+      limit: parseOptionalPositiveInt(req.query.limit, 'limit') || undefined,
       user: req.user
     };
     const questions = questionService.getRandom(opts);
     res.json(questions);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 
@@ -220,8 +221,7 @@ router.get('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => 
  */
 router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId', 'text', 'type']), sanitizeStrings(['text']), (req, res) => {
   try {
-    // Ensure categoryId is a number
-    req.body.categoryId = parseInt(req.body.categoryId);
+    req.body.categoryId = parseRequiredPositiveInt(req.body.categoryId, 'categoryId');
     if (!ensureCategoryManager(req, res, req.body.categoryId)) return;
     req.body.createdBy = req.user.id;
     const question = questionService.create(req.body);
@@ -268,7 +268,7 @@ router.put('/:id', requireRole(['admin', 'teacher']), validateId, sanitizeString
     const existing = questionService.getById(req.params.id);
     if (!ensureQuestionManager(req, res, existing)) return;
     if (req.body.categoryId !== undefined) {
-      req.body.categoryId = parseInt(req.body.categoryId);
+      req.body.categoryId = parseRequiredPositiveInt(req.body.categoryId, 'categoryId');
       if (!ensureCategoryManager(req, res, req.body.categoryId)) return;
     }
     const question = questionService.update(req.params.id, req.body);

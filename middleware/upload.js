@@ -164,6 +164,49 @@ function validateUploadedImage(req, res, next) {
   next();
 }
 
+function hasValidResourceSignature(filePath, ext) {
+  const buffer = fs.readFileSync(filePath);
+  if (buffer.length === 0) return false;
+
+  if (ext === '.pdf') {
+    return buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+  }
+  if (['.zip', '.docx', '.xlsx', '.pptx'].includes(ext)) {
+    const header = buffer.subarray(0, 4);
+    return header.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])) ||
+      header.equals(Buffer.from([0x50, 0x4b, 0x05, 0x06])) ||
+      header.equals(Buffer.from([0x50, 0x4b, 0x07, 0x08]));
+  }
+  if (['.doc', '.xls', '.ppt'].includes(ext)) {
+    return buffer.length >= 8 &&
+      buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+  }
+  if (['.txt', '.csv', '.md', '.html', '.htm'].includes(ext)) {
+    return !buffer.includes(0);
+  }
+  if (ext === '.rtf') {
+    return buffer.subarray(0, 5).toString('ascii') === '{\\rtf' || !buffer.includes(0);
+  }
+  return false;
+}
+
+function validateUploadedResource(req, res, next) {
+  if (!req.file) return next();
+  const ext = path.extname(req.file.filename).toLowerCase();
+  try {
+    if (!hasValidResourceSignature(req.file.path, ext)) {
+      removeUploadedFile(req.file);
+      req.file = null;
+      return res.status(400).json({ error: 'Uploaded file content does not match the declared resource type.' });
+    }
+  } catch (err) {
+    removeUploadedFile(req.file);
+    req.file = null;
+    return res.status(400).json({ error: 'Uploaded file could not be validated.' });
+  }
+  next();
+}
+
 module.exports = {
   upload,
   resourceUpload,
@@ -171,5 +214,6 @@ module.exports = {
   removeUploadedFile,
   removeUploadedResourceByUrl,
   removeUploadedSubmissionByUrl,
-  validateUploadedImage
+  validateUploadedImage,
+  validateUploadedResource
 };

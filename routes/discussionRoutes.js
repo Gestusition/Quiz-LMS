@@ -4,6 +4,7 @@ const discussionService = require('../services/discussionService');
 const auditService = require('../services/auditService');
 const { requireAuth } = require('../middleware/auth');
 const { sendError } = require('../utils/appError');
+const { parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 
@@ -53,7 +54,7 @@ router.use(requireAuth);
  */
 router.get('/courses/:courseId/threads', (req, res) => {
   try {
-    const courseId = Number(req.params.courseId);
+    const courseId = parseRequiredPositiveInt(req.params.courseId, 'courseId');
     res.json(discussionService.listThreads(courseId, req.user, {
       status: req.query.status,
       page: req.query.page,
@@ -66,7 +67,7 @@ router.get('/courses/:courseId/threads', (req, res) => {
 
 router.get('/threads/:id', (req, res) => {
   try {
-    const threadId = Number(req.params.id);
+    const threadId = parseRequiredPositiveInt(req.params.id, 'threadId');
     res.json(discussionService.getThread(threadId, req.user));
   } catch (err) {
     sendError(res, err, 400);
@@ -107,7 +108,7 @@ router.get('/threads/:id', (req, res) => {
  */
 router.post('/courses/:courseId/threads', (req, res) => {
   try {
-    const courseId = Number(req.params.courseId);
+    const courseId = parseRequiredPositiveInt(req.params.courseId, 'courseId');
     const thread = discussionService.createThread(courseId, req.user, req.body);
     auditService.log({
       actorUserId: req.user.id,
@@ -156,7 +157,7 @@ router.post('/courses/:courseId/threads', (req, res) => {
  */
 router.put('/threads/:id/status', (req, res) => {
   try {
-    const threadId = Number(req.params.id);
+    const threadId = parseRequiredPositiveInt(req.params.id, 'threadId');
     const thread = discussionService.updateThreadStatus(threadId, req.user, req.body.status);
     res.json(thread);
   } catch (err) {
@@ -205,7 +206,7 @@ router.put('/threads/:id/status', (req, res) => {
  */
 router.get('/threads/:id/replies', (req, res) => {
   try {
-    const threadId = Number(req.params.id);
+    const threadId = parseRequiredPositiveInt(req.params.id, 'threadId');
     res.json(discussionService.listReplies(threadId, req.user, {
       page: req.query.page,
       limit: req.query.limit
@@ -249,7 +250,7 @@ router.get('/threads/:id/replies', (req, res) => {
  */
 router.post('/threads/:id/replies', (req, res) => {
   try {
-    const threadId = Number(req.params.id);
+    const threadId = parseRequiredPositiveInt(req.params.id, 'threadId');
     const reply = discussionService.createReply(threadId, req.user, req.body);
     auditService.log({
       actorUserId: req.user.id,

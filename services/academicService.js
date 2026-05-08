@@ -2,12 +2,15 @@ const academicRepository = require('../repositories/academicRepository');
 const courseRepository = require('../repositories/courseRepository');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const userRepository = require('../repositories/userRepository');
+const { LIMITS } = require('../constants/limits');
 const restrictionService = require('./restrictionService');
 const auditService = require('./auditService');
 const validationIssueService = require('./validationIssueService');
 const importService = require('./importService');
 const { removeUploadedSubmissionByUrl } = require('../middleware/upload');
 const { nowIso } = require('../utils/security');
+const { conflictError, forbiddenError, notFoundError, validationError } = require('../utils/appError');
+const { parseOptionalPositiveInt, parseRequiredPositiveInt, requiredText } = require('../utils/validation');
 const {
   ATTENDANCE_STATUSES,
   validateAssignment,
@@ -332,7 +335,16 @@ class AcademicService {
 
   listAssignments(user, filters = {}) {
     return academicRepository.listAssignments(user, normalizeFilters(filters))
-      .filter(assignment => !this.isCourseAccessBlocked(user, assignment.courseId));
+      .filter(assignment => !this.isCourseAccessBlocked(user, assignment.courseId))
+      .map(assignment => {
+        if (assignment.ownSubmissionId && assignment.ownSubmissionUrl) {
+          return {
+            ...assignment,
+            ownSubmissionDownloadUrl: `/api/academic/submissions/${assignment.ownSubmissionId}/download`
+          };
+        }
+        return assignment;
+      });
   }
 
   getAssignment(id, user) {
@@ -378,7 +390,7 @@ class AcademicService {
   listSubmissions(assignmentId, user) {
     const assignment = requireRow(academicRepository.findAssignmentById(assignmentId), 'Assignment not found.');
     if (!this.canManageOffering(user, assignment)) throw forbidden();
-    return academicRepository.listSubmissions(assignmentId);
+    return academicRepository.listSubmissions(assignmentId).map(submission => this.withSubmissionDownloadUrl(submission));
   }
 
   submitAssignment(assignmentId, data, user) {
@@ -425,7 +437,7 @@ class AcademicService {
       entityId: saved.id,
       details: { assignmentId: assignment.id }
     });
-    return saved;
+    return this.withSubmissionDownloadUrl(saved);
   }
 
   gradeSubmission(submissionId, data, user) {
@@ -444,20 +456,58 @@ class AcademicService {
     return graded;
   }
 
+  getSubmissionDownload(submissionId, user) {
+    const submission = requireRow(academicRepository.findSubmission(submissionId), 'Submission not found.');
+    if (!submission.submissionUrl) throw notFoundError('Submission file not found.');
+    if (this.canManageOffering(user, submission)) {
+      return this.submissionFileInfo(submission);
+    }
+    if (user.role === 'student' && Number(submission.studentId) === Number(user.id)) {
+      const enrollment = academicRepository.findOfferingEnrollmentByStudent(submission.courseOfferingId, user.id);
+      if (enrollment && enrollment.status === 'active' && !this.isCourseAccessBlocked(user, submission.courseId)) {
+        return this.submissionFileInfo(submission);
+      }
+    }
+    throw forbidden();
+  }
+
   listAttendanceSessions(user, filters = {}) {
-    return academicRepository.listAttendanceSessions(user, normalizeFilters(filters))
+    const sessions = academicRepository.listAttendanceSessions(user, normalizeFilters(filters))
       .filter(session => !this.isCourseAccessBlocked(user, session.courseId));
+    if (user.role !== 'student') return sessions;
+    const ownRecords = new Map(academicRepository.listAttendanceForStudent(user.id).map(record => [Number(record.sessionId), record]));
+    return sessions.map(session => {
+      const own = ownRecords.get(Number(session.id));
+      return own ? { ...session, ownAttendanceStatus: own.status } : session;
+    });
   }
 
   createAttendanceSession(data, user) {
     const payload = validateAttendanceSession(data);
     const offering = requireRow(academicRepository.findCourseOfferingById(payload.courseOfferingId), 'Course offering not found.');
     if (!this.canManageOffering(user, offering)) throw forbidden();
-    const result = academicRepository.insertAttendanceSession(payload, offering.termId, user.id);
+    const result = academicRepository.insertAttendanceSession({
+      ...payload,
+      openedAt: payload.status === 'open' ? nowIso() : ''
+    }, offering.termId, user.id);
     return {
       ...academicRepository.findAttendanceSessionById(result.lastInsertRowid),
       records: []
     };
+  }
+
+  closeAttendanceSession(sessionId, user) {
+    const session = requireRow(academicRepository.findAttendanceSessionById(sessionId), 'Attendance session not found.');
+    if (!this.canManageOffering(user, session)) throw forbidden();
+    academicRepository.closeAttendanceSession(sessionId, nowIso());
+    auditService.log({
+      actorUserId: user.id,
+      action: 'ATTENDANCE_SESSION_CLOSED',
+      entityType: 'attendance_session',
+      entityId: sessionId,
+      details: { courseOfferingId: session.courseOfferingId }
+    });
+    return academicRepository.findAttendanceSessionById(sessionId);
   }
 
   markAttendance(sessionId, records, user) {
@@ -493,10 +543,63 @@ class AcademicService {
     };
   }
 
+  markSelfAttendance(sessionId, user) {
+    if (user.role !== 'student') {
+      throw forbidden();
+    }
+    const session = requireRow(academicRepository.findAttendanceSessionById(sessionId), 'Attendance session not found.');
+    if (!this.canAccessOffering(user, session)) throw forbidden();
+    if (session.status !== 'open') {
+      throw validationError('attendance_session', 'Attendance session is closed.');
+    }
+    if (session.expiresAt && new Date(session.expiresAt).getTime() < Date.now()) {
+      throw validationError('attendance_session', 'Attendance session is closed.');
+    }
+    const existing = academicRepository.findAttendanceRecord(sessionId, user.id);
+    if (existing && existing.status !== 'removed') {
+      throw conflictError('attendance', 'Attendance has already been marked for this session.');
+    }
+    if (existing && existing.status === 'removed') {
+      throw conflictError('attendance', 'Attendance for this session was removed by an instructor.');
+    }
+    const result = academicRepository.createSelfAttendanceRecord(sessionId, user.id, user.id, nowIso());
+    auditService.log({
+      actorUserId: user.id,
+      action: 'ATTENDANCE_SELF_MARKED',
+      entityType: 'attendance_record',
+      entityId: result.lastInsertRowid,
+      details: { sessionId }
+    });
+    return academicRepository.listAttendanceRecords(sessionId)
+      .find(record => Number(record.id) === Number(result.lastInsertRowid));
+  }
+
   listAttendanceRecords(sessionId, user) {
     const session = requireRow(academicRepository.findAttendanceSessionById(sessionId), 'Attendance session not found.');
     if (!this.canManageOffering(user, session)) throw forbidden();
     return academicRepository.listAttendanceRecords(sessionId);
+  }
+
+  removeAttendanceRecord(recordId, data, user) {
+    const record = requireRow(academicRepository.findAttendanceRecordById(recordId), 'Attendance record not found.');
+    if (!this.canManageOffering(user, record)) throw forbidden();
+    const removalNote = requiredText(data.removalNote || data.note || data.reason, 'removalNote', {
+      min: 3,
+      max: LIMITS.attendance.noteMax
+    });
+    academicRepository.removeAttendanceRecord(recordId, {
+      removedBy: user.id,
+      removedAt: nowIso(),
+      removalNote
+    });
+    auditService.log({
+      actorUserId: user.id,
+      action: 'ATTENDANCE_REMOVED',
+      entityType: 'attendance_record',
+      entityId: recordId,
+      details: { sessionId: record.sessionId, studentId: record.studentId }
+    });
+    return academicRepository.findAttendanceRecordById(recordId);
   }
 
   listAttendanceRecordDetails(user, filters = {}) {
@@ -514,7 +617,12 @@ class AcademicService {
       throw new Error('Only students can use this attendance view.');
     }
     return academicRepository.listAttendanceForStudent(user.id)
-      .filter(record => !this.isCourseAccessBlocked(user, record.courseId));
+      .filter(record => !this.isCourseAccessBlocked(user, record.courseId))
+      .map(record => {
+        const copy = { ...record };
+        delete copy.removalNote;
+        return copy;
+      });
   }
 
   attendanceSummary(courseOfferingId, user) {
@@ -553,7 +661,8 @@ class AcademicService {
     if (this.canManageOffering(user, offering)) return true;
     if (user.role !== 'student') return false;
     if (this.isCourseAccessBlocked(user, offering.courseId)) return false;
-    const enrollment = academicRepository.findOfferingEnrollmentByStudent(offering.id || offering.courseOfferingId, user.id);
+    const offeringId = offering.courseOfferingId || offering.id;
+    const enrollment = academicRepository.findOfferingEnrollmentByStudent(offeringId, user.id);
     return !!enrollment && enrollment.status === 'active';
   }
 
@@ -564,6 +673,23 @@ class AcademicService {
     if (!['published', 'closed'].includes(assignment.status)) return false;
     const enrollment = academicRepository.findOfferingEnrollmentByStudent(assignment.courseOfferingId, user.id);
     return !!enrollment && enrollment.status === 'active';
+  }
+
+  withSubmissionDownloadUrl(submission) {
+    if (!submission || !submission.submissionUrl) return submission;
+    return {
+      ...submission,
+      downloadUrl: `/api/academic/submissions/${submission.id}/download`
+    };
+  }
+
+  submissionFileInfo(submission) {
+    return {
+      id: submission.id,
+      fileName: submission.fileName,
+      storageUrl: submission.submissionUrl,
+      mimeType: submission.mimeType
+    };
   }
 
   ensureOfferingReferences(payload) {
@@ -618,8 +744,7 @@ function normalizeFilters(filters) {
   const result = {};
   ['facultyId', 'departmentId', 'classYearId', 'termId', 'courseId', 'courseOfferingId'].forEach(key => {
     if (filters[key] !== undefined && filters[key] !== '') {
-      const id = Number(filters[key]);
-      if (Number.isInteger(id) && id > 0) result[key] = id;
+      result[key] = parseOptionalPositiveInt(filters[key], key);
     }
   });
   if (filters.activeTerm === true || filters.activeTerm === 'true' || filters.activeTerm === '1') {

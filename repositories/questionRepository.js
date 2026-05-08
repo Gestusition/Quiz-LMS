@@ -93,8 +93,8 @@ function insert(payload, userId) {
   return getDatabase().prepare(
     `INSERT INTO questions (
       categoryId, text, type, options, correctAnswer, difficulty, points, createdBy,
-      status, acceptedAnswers, caseSensitive, richText, explanationText, hintText, mediaUrl
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'valid', ?, ?, ?, ?, ?, ?)`
+      status, acceptedAnswers, caseSensitive, richText, explanationText, hintText, mediaUrl, gradingType
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'valid', ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     payload.categoryId,
     payload.text,
@@ -109,7 +109,8 @@ function insert(payload, userId) {
     payload.richText || '',
     payload.explanationText || '',
     payload.hintText || '',
-    payload.mediaUrl || ''
+    payload.mediaUrl || '',
+    payload.gradingType || 'standard'
   );
 }
 
@@ -118,7 +119,7 @@ function update(id, payload) {
     `UPDATE questions
     SET categoryId = ?, text = ?, type = ?, options = ?, correctAnswer = ?, difficulty = ?, points = ?,
       acceptedAnswers = ?, caseSensitive = ?, richText = ?, explanationText = ?, hintText = ?, mediaUrl = ?,
-      status = 'valid', validationMessage = ''
+      gradingType = ?, status = 'valid', validationMessage = ''
     WHERE id = ?`
   ).run(
     payload.categoryId,
@@ -134,6 +135,7 @@ function update(id, payload) {
     payload.explanationText || '',
     payload.hintText || '',
     payload.mediaUrl || '',
+    payload.gradingType || 'standard',
     id
   );
 }

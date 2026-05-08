@@ -3,7 +3,8 @@ const OFFERING_STATUSES = ['planned', 'active', 'completed', 'cancelled'];
 const OFFERING_ENROLLMENT_STATUSES = ['active', 'dropped', 'completed'];
 const ASSIGNMENT_STATUSES = ['draft', 'published', 'closed'];
 const SUBMISSION_STATUSES = ['submitted', 'graded', 'returned'];
-const ATTENDANCE_STATUSES = ['present', 'absent', 'late', 'excused'];
+const ATTENDANCE_STATUSES = ['present', 'absent', 'late', 'excused', 'removed', 'invalidated'];
+const ATTENDANCE_SESSION_STATUSES = ['open', 'closed'];
 const { LIMITS } = require('../constants/limits');
 const { validationError } = require('../utils/appError');
 const {
@@ -167,10 +168,13 @@ function validateSubmissionGrade(data) {
 }
 
 function validateAttendanceSession(data) {
+  const status = enumValue(data.status, 'status', ATTENDANCE_SESSION_STATUSES, 'open');
   return {
     courseOfferingId: requiredId(data.courseOfferingId, 'courseOfferingId'),
     sessionDate: dateText(data.sessionDate, 'sessionDate', true),
-    topic: shortText(data.topic, 'Topic', LIMITS.attendance.topicMax, false)
+    topic: shortText(data.topic || data.title, 'Topic', LIMITS.attendance.topicMax, false),
+    status,
+    expiresAt: dateText(data.expiresAt, 'expiresAt', false)
   };
 }
 
@@ -186,6 +190,7 @@ function validateAttendanceRecord(data) {
 module.exports = {
   ASSIGNMENT_STATUSES,
   ATTENDANCE_STATUSES,
+  ATTENDANCE_SESSION_STATUSES,
   OFFERING_ENROLLMENT_STATUSES,
   OFFERING_STATUSES,
   SEMESTER_TYPES,

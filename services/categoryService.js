@@ -23,9 +23,9 @@ class CategoryService {
       }
     }
 
-    const existing = categoryRepository.findDuplicateName(payload.name);
+    const existing = categoryRepository.findDuplicateName(payload.name, payload.courseId);
     if (existing) {
-      throw new Error('A category with this name already exists.');
+      throw new Error('A category with this name already exists for this course.');
     }
 
     const result = categoryRepository.insert(payload);
@@ -51,9 +51,9 @@ class CategoryService {
       }
     }
 
-    const duplicate = categoryRepository.findDuplicateName(payload.name, id);
+    const duplicate = categoryRepository.findDuplicateName(payload.name, payload.courseId, id);
     if (duplicate) {
-      throw new Error('A category with this name already exists.');
+      throw new Error('A category with this name already exists for this course.');
     }
 
     categoryRepository.update(id, payload);

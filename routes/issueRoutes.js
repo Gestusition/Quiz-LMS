@@ -4,6 +4,7 @@ const validationIssueService = require('../services/validationIssueService');
 const auditService = require('../services/auditService');
 const { requireAuth, requireRole, canManageCourse } = require('../middleware/auth');
 const { sendError } = require('../utils/appError');
+const { parseOptionalPositiveInt, parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 
@@ -69,17 +70,17 @@ router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
     const filters = {
       entityType: req.query.entityType,
-      entityId: req.query.entityId,
+      entityId: parseOptionalPositiveInt(req.query.entityId, 'entityId'),
       severity: req.query.severity,
       status: req.query.status,
-      relatedCourseId: req.query.relatedCourseId,
-      relatedUserId: req.query.relatedUserId,
+      relatedCourseId: parseOptionalPositiveInt(req.query.relatedCourseId, 'relatedCourseId'),
+      relatedUserId: parseOptionalPositiveInt(req.query.relatedUserId, 'relatedUserId'),
       page: req.query.page,
       limit: req.query.limit
     };
 
     if (req.user.role === 'teacher' && filters.relatedCourseId) {
-      if (!canManageCourse(req.user, Number(filters.relatedCourseId))) {
+      if (!canManageCourse(req.user, filters.relatedCourseId)) {
         return res.status(403).json({ error: 'Teacher or admin course access required.' });
       }
       delete filters.relatedUserId;
@@ -119,15 +120,17 @@ router.get('/', requireRole(['admin', 'teacher']), (req, res) => {
  */
 router.post('/', requireRole(['admin', 'teacher']), (req, res) => {
   try {
-    const relatedCourseId = req.body.relatedCourseId ? Number(req.body.relatedCourseId) : null;
+    const relatedCourseId = parseOptionalPositiveInt(req.body.relatedCourseId, 'relatedCourseId');
     if (req.user.role === 'teacher' && relatedCourseId && !canManageCourse(req.user, relatedCourseId)) {
       return res.status(403).json({ error: 'Teacher or admin course access required.' });
     }
     const created = validationIssueService.create({
       ...req.body,
+      entityId: parseOptionalPositiveInt(req.body.entityId, 'entityId'),
+      relatedCourseId,
       relatedUserId: req.user.role === 'teacher' && !relatedCourseId
         ? req.user.id
-        : (req.body.relatedUserId || null)
+        : parseOptionalPositiveInt(req.body.relatedUserId, 'relatedUserId')
     });
     auditService.log({
       actorUserId: req.user.id,
@@ -176,10 +179,7 @@ router.post('/', requireRole(['admin', 'teacher']), (req, res) => {
  */
 router.put('/:id/status', requireRole(['admin', 'teacher']), (req, res) => {
   try {
-    const issueId = Number(req.params.id);
-    if (!Number.isInteger(issueId) || issueId < 1) {
-      return res.status(400).json({ error: 'Invalid validation issue ID.' });
-    }
+    const issueId = parseRequiredPositiveInt(req.params.id, 'issueId');
     const issue = validationIssueService.getById(issueId);
     if (req.user.role === 'teacher') {
       const canUpdateOwn = Number(issue.relatedUserId) === Number(req.user.id);

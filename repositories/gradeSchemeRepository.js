@@ -6,6 +6,13 @@ function listSchemes(filters = {}) {
   if (filters.courseId) {
     query += ' AND courseId = ?';
     params.push(Number(filters.courseId));
+  } else if (filters.user && filters.user.role !== 'admin') {
+    query += ` AND courseId IN (
+      SELECT courseId
+      FROM enrollments
+      WHERE userId = ? AND role = 'teacher' AND status = 'active'
+    )`;
+    params.push(filters.user.id);
   }
   query += ' ORDER BY isDefault DESC, id DESC';
   return getDatabase().prepare(query).all(...params);

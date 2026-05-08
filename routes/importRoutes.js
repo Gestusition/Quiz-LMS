@@ -5,6 +5,7 @@ const auditService = require('../services/auditService');
 const validationIssueService = require('../services/validationIssueService');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendError } = require('../utils/appError');
+const { parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 router.use(requireRole('admin'));
@@ -150,7 +151,7 @@ router.post('/batches', (req, res) => {
  */
 router.get('/batches/:id/errors', (req, res) => {
   try {
-    const batchId = Number(req.params.id);
+    const batchId = parseRequiredPositiveInt(req.params.id, 'batchId');
     res.json(importService.listErrors(batchId, {
       status: req.query.status,
       page: req.query.page,
@@ -195,7 +196,7 @@ router.get('/batches/:id/errors', (req, res) => {
  */
 router.post('/batches/:id/errors', (req, res) => {
   try {
-    const batchId = Number(req.params.id);
+    const batchId = parseRequiredPositiveInt(req.params.id, 'batchId');
     const error = importService.addError(batchId, req.body);
     validationIssueService.create({
       entityType: 'import_error',
@@ -253,7 +254,7 @@ router.post('/batches/:id/errors', (req, res) => {
  */
 router.put('/errors/:id/resolve', (req, res) => {
   try {
-    const errorId = Number(req.params.id);
+    const errorId = parseRequiredPositiveInt(req.params.id, 'errorId');
     const updated = importService.resolveError(errorId, req.body, req.user.id);
     auditService.log({
       actorUserId: req.user.id,

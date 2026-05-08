@@ -304,13 +304,25 @@ function setManualResultReleasedAt(quizId, releasedAt) {
   `).run(releasedAt, releasedAt, quizId);
 }
 
-function listExamTemplates(filters = {}) {
+function listExamTemplates(filters = {}, user = null) {
   const db = getDatabase();
   let query = 'SELECT * FROM exam_templates WHERE 1=1';
   const params = [];
   if (filters.courseId) {
     query += ' AND (courseId = ? OR courseId IS NULL)';
     params.push(filters.courseId);
+  }
+  if (user && user.role !== 'admin') {
+    query += ` AND (
+      isSystem = 1
+      OR (courseId IS NULL AND createdBy = ?)
+      OR courseId IN (
+        SELECT courseId
+        FROM enrollments
+        WHERE userId = ? AND role = 'teacher' AND status = 'active'
+      )
+    )`;
+    params.push(user.id, user.id);
   }
   query += ' ORDER BY isSystem DESC, name ASC';
   return db.prepare(query).all(...params);
@@ -339,6 +351,21 @@ function insertExamTemplate(payload) {
     payload.isSystem ? 1 : 0,
     payload.courseId || null,
     payload.createdBy || null
+  );
+}
+
+function updateExamTemplate(id, payload) {
+  return getDatabase().prepare(`
+    UPDATE exam_templates
+    SET name = ?, description = ?, defaultsJson = ?, courseId = ?, updatedAt = ?
+    WHERE id = ?
+  `).run(
+    payload.name,
+    payload.description || '',
+    payload.defaultsJson || '{}',
+    payload.courseId || null,
+    payload.updatedAt || '',
+    id
   );
 }
 
@@ -405,6 +432,7 @@ module.exports = {
   getQuestions,
   insertAttemptAnswerWithJson,
   insertExamTemplate,
+  updateExamTemplate,
   listExamTemplates,
   markAttemptExpired,
   insert,

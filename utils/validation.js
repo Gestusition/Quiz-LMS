@@ -67,8 +67,8 @@ function requiredEmail(value) {
 
 function optionalId(value, field) {
   if (value === undefined || value === null || value === '') return null;
-  const id = Number(value);
-  if (!Number.isInteger(id) || id < 1) {
+  const id = parsePositiveInt(value);
+  if (id === null) {
     throw validationError(field, `${field} must be a positive integer.`);
   }
   return id;
@@ -77,6 +77,33 @@ function optionalId(value, field) {
 function requiredId(value, field) {
   const id = optionalId(value, field);
   if (!id) throw validationError(field, `${field} is required.`);
+  return id;
+}
+
+function parsePositiveInt(value) {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+  if (typeof value === 'bigint') {
+    if (value < 1n || value > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    return Number(value);
+  }
+  const text = asTrimmedString(value);
+  if (!/^[0-9]+$/.test(text)) return null;
+  const numeric = Number(text);
+  return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+function parseRequiredPositiveInt(value, fieldName = 'id') {
+  const id = parseOptionalPositiveInt(value, fieldName);
+  if (!id) throw validationError(fieldName, `${fieldName} is required.`);
+  return id;
+}
+
+function parseOptionalPositiveInt(value, fieldName = 'id') {
+  if (value === undefined || value === null || value === '') return null;
+  const id = parsePositiveInt(value);
+  if (!id) throw validationError(fieldName, `${fieldName} must be a positive integer.`);
   return id;
 }
 
@@ -168,7 +195,10 @@ module.exports = {
   optionalId,
   optionalText,
   optionalUrl,
+  parseOptionalPositiveInt,
   parsePagination,
+  parsePositiveInt,
+  parseRequiredPositiveInt,
   requiredEmail,
   requiredId,
   requiredText,

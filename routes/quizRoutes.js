@@ -3,12 +3,16 @@ const router = express.Router();
 const quizService = require('../services/quizService');
 const { requireAuth, canAccessCourse, canManageCourse } = require('../middleware/auth');
 const { sendError } = require('../utils/appError');
+const { parseRequiredPositiveInt, parseOptionalPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 
 function parseId(value) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  try {
+    return parseOptionalPositiveInt(value, 'id');
+  } catch (err) {
+    return null;
+  }
 }
 
 function loadQuiz(req, res, next) {
@@ -68,7 +72,7 @@ function requireQuizManager(req, res, next) {
 router.get('/', (req, res) => {
   try {
     res.json(quizService.getAll(req.user, {
-      courseId: req.query.courseId ? Number(req.query.courseId) : undefined,
+      courseId: parseOptionalPositiveInt(req.query.courseId, 'courseId') || undefined,
       status: req.query.status,
       search: req.query.search
     }));
@@ -102,7 +106,12 @@ router.get('/', (req, res) => {
  *         $ref: '#/components/responses/403Forbidden'
  */
 router.post('/', (req, res) => {
-  const courseId = Number(req.body.courseId);
+  let courseId;
+  try {
+    courseId = parseRequiredPositiveInt(req.body.courseId, 'courseId');
+  } catch (err) {
+    return sendError(res, err, 400);
+  }
   if (!courseId || !canManageCourse(req.user, courseId)) {
     return res.status(403).json({ error: 'Teacher or admin course access required.' });
   }
@@ -221,9 +230,8 @@ router.get('/templates', (req, res) => {
     if (req.user.role === 'student') {
       return res.status(403).json({ error: 'Teacher or admin course access required.' });
     }
-    const filters = {};
-    if (req.query.courseId) filters.courseId = Number(req.query.courseId);
-    res.json(quizService.getExamTemplates(filters));
+    const filters = { courseId: parseOptionalPositiveInt(req.query.courseId, 'courseId') || undefined };
+    res.json(quizService.getExamTemplates(filters, req.user));
   } catch (err) {
     sendError(res, err, 400);
   }
@@ -250,6 +258,24 @@ router.post('/templates', (req, res) => {
   }
 });
 
+router.get('/templates/:templateId', (req, res) => {
+  try {
+    const templateId = parseRequiredPositiveInt(req.params.templateId, 'templateId');
+    res.json(quizService.getExamTemplate(templateId, req.user));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.put('/templates/:templateId', (req, res) => {
+  try {
+    const templateId = parseRequiredPositiveInt(req.params.templateId, 'templateId');
+    res.json(quizService.updateExamTemplate(templateId, req.body, req.user));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
 /**
  * @swagger
  * /api/quizzes/templates/{templateId}:
@@ -268,8 +294,7 @@ router.post('/templates', (req, res) => {
  */
 router.delete('/templates/:templateId', (req, res) => {
   try {
-    const templateId = parseId(req.params.templateId);
-    if (!templateId) return res.status(400).json({ error: 'Invalid template ID.' });
+    const templateId = parseRequiredPositiveInt(req.params.templateId, 'templateId');
     quizService.deleteExamTemplate(templateId, req.user);
     res.json({ message: 'Template deleted successfully.' });
   } catch (err) {
@@ -349,7 +374,20 @@ router.get('/grade-schemes', (req, res) => {
     if (req.user.role === 'student') {
       return res.status(403).json({ error: 'Teacher or admin course access required.' });
     }
-    res.json(quizService.getGradeSchemes(req.query.courseId));
+    const courseId = parseOptionalPositiveInt(req.query.courseId, 'courseId');
+    res.json(quizService.getGradeSchemesForUser(req.user, courseId));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.get('/grade-schemes/:id', (req, res) => {
+  try {
+    if (req.user.role === 'student') {
+      return res.status(403).json({ error: 'Teacher or admin course access required.' });
+    }
+    const schemeId = parseRequiredPositiveInt(req.params.id, 'schemeId');
+    res.json(quizService.getGradeSchemeForUser(schemeId, req.user));
   } catch (err) {
     sendError(res, err, 400);
   }
@@ -376,7 +414,8 @@ router.put('/grade-schemes/:id/thresholds', (req, res) => {
     if (req.user.role === 'student') {
       return res.status(403).json({ error: 'Teacher or admin course access required.' });
     }
-    res.json(quizService.updateGradeSchemeThresholds(req.params.id, req.body.thresholds, req.user.id));
+    const schemeId = parseRequiredPositiveInt(req.params.id, 'schemeId');
+    res.json(quizService.updateGradeSchemeThresholds(schemeId, req.body.thresholds, req.user));
   } catch (err) {
     sendError(res, err, 400);
   }

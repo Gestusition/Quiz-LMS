@@ -82,6 +82,14 @@ export const API = {
   createResource(courseId, data) { return this.request(`/courses/${courseId}/resources`, { method: 'POST', body: data }); },
   deleteResource(id) { return this.request(`/courses/resources/${id}`, { method: 'DELETE' }); },
   getGradebook(courseId) { return this.request(`/courses/${courseId}/gradebook`); },
+  getGradeSchemes(courseId) {
+    const params = new URLSearchParams();
+    if (courseId) params.set('courseId', courseId);
+    return this.request(`/quizzes/grade-schemes${params.toString() ? `?${params}` : ''}`);
+  },
+  updateGradeSchemeThresholds(schemeId, thresholds) {
+    return this.request(`/quizzes/grade-schemes/${schemeId}/thresholds`, { method: 'PUT', body: { thresholds } });
+  },
 
   getFaculties() { return this.request('/academic/faculties'); },
   createFaculty(data) { return this.request('/academic/faculties', { method: 'POST', body: data }); },
@@ -158,6 +166,9 @@ export const API = {
     return this.request(`/academic/attendance/records${params.toString() ? `?${params}` : ''}`);
   },
   markAttendance(id, records) { return this.request(`/academic/attendance/sessions/${id}/records`, { method: 'POST', body: { records } }); },
+  markSelfAttendance(id) { return this.request(`/academic/attendance/sessions/${id}/self`, { method: 'POST' }); },
+  closeAttendanceSession(id) { return this.request(`/academic/attendance/sessions/${id}/close`, { method: 'PUT' }); },
+  removeAttendanceRecord(id, removalNote) { return this.request(`/academic/attendance/records/${id}/remove`, { method: 'PUT', body: { removalNote } }); },
   getMyAttendance() { return this.request('/academic/attendance/my'); },
   getAttendanceSummary(courseOfferingId) { return this.request(`/academic/attendance/offerings/${courseOfferingId}/summary`); },
   getAdminAnalytics() { return this.request('/analytics/admin'); },

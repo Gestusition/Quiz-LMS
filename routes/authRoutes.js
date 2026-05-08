@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
 const { requireAuth, getSessionToken, SESSION_COOKIE_NAME } = require('../middleware/auth');
-const { createRateLimiter, identifierKey } = require('../middleware/rateLimit');
+const { createRateLimiter, extractLoginIdentifier, identifierKey } = require('../middleware/rateLimit');
 const { sendError } = require('../utils/appError');
 const { LIMITS } = require('../constants/limits');
 
@@ -71,7 +71,7 @@ function sendSession(res, session) {
  */
 router.post('/login', loginLimiter, (req, res) => {
   try {
-    const identifier = req.body.identifier || req.body.login || req.body.email || req.body.student_number;
+    const identifier = extractLoginIdentifier(req.body);
     const session = authService.login(identifier, req.body.password);
     sendSession(res, session);
   } catch (err) {

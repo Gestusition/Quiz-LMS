@@ -76,11 +76,15 @@ class CourseWeekService {
     const week = courseWeekRepository.findWeekById(weekId);
     if (!week) throw notFoundError('Course week not found.');
     this.ensureCourseAccess(week.courseId, user);
-    return courseWeekRepository.listWeekResources(weekId, {
+    const result = courseWeekRepository.listWeekResources(weekId, {
       ...filters,
       visibleOnly: user.role === 'student',
       now: nowIso()
     });
+    return {
+      ...result,
+      items: result.items.map(resource => this.withDownloadUrl(resource))
+    };
   }
 
   createWeekResource(weekId, user, data) {
@@ -122,6 +126,34 @@ class CourseWeekService {
     courseWeekRepository.deleteWeekResource(resourceId);
     removeUploadedResourceByUrl(resource.content);
     return true;
+  }
+
+  getWeekResourceDownload(resourceId, user) {
+    const resource = courseWeekRepository.findWeekResourceById(resourceId);
+    if (!resource || resource.type !== 'file') throw notFoundError('Week resource not found.');
+    const week = courseWeekRepository.findWeekById(resource.weekId);
+    if (!week) throw notFoundError('Course week not found.');
+    this.ensureCourseAccess(week.courseId, user);
+    if (user.role === 'student') {
+      const now = nowIso();
+      if ((resource.visibleFrom && resource.visibleFrom > now) || (resource.visibleUntil && resource.visibleUntil < now)) {
+        throw forbiddenError('Resource is not visible yet.');
+      }
+    }
+    return {
+      id: resource.id,
+      fileName: resource.fileName,
+      storageUrl: resource.content,
+      mimeType: resource.mimeType
+    };
+  }
+
+  withDownloadUrl(resource) {
+    if (!resource || resource.type !== 'file') return resource;
+    return {
+      ...resource,
+      downloadUrl: `/api/weeks/week-resources/${resource.id}/download`
+    };
   }
 
   ensureCourseAccess(courseId, user) {

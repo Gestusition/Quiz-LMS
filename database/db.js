@@ -273,7 +273,7 @@ function createTables() {
     CREATE TABLE IF NOT EXISTS learning.categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER,
-      name TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
       description TEXT DEFAULT '',
       createdAt TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE SET NULL
@@ -285,6 +285,10 @@ function createTables() {
       termId INTEGER NOT NULL,
       sessionDate TEXT NOT NULL,
       topic TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed')),
+      openedAt TEXT DEFAULT (datetime('now')),
+      closedAt TEXT DEFAULT '',
+      expiresAt TEXT DEFAULT '',
       createdBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now')),
@@ -296,9 +300,12 @@ function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sessionId INTEGER NOT NULL,
       studentId INTEGER NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('present', 'absent', 'late', 'excused')),
+      status TEXT NOT NULL CHECK(status IN ('present', 'absent', 'late', 'excused', 'removed', 'invalidated')),
       note TEXT DEFAULT '',
       markedBy INTEGER,
+      removedBy INTEGER,
+      removedAt TEXT DEFAULT '',
+      removalNote TEXT DEFAULT '',
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now')),
       UNIQUE(sessionId, studentId),
@@ -651,6 +658,15 @@ function migrateExistingTables() {
   ensureColumn('learning', 'courses', 'departmentId', 'departmentId INTEGER');
   ensureColumn('learning', 'courses', 'credits', 'credits INTEGER NOT NULL DEFAULT 3');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
+  migrateCategoryUniqueness();
+  ensureColumn('learning', 'attendance_sessions', 'status', 'status TEXT NOT NULL DEFAULT \'open\'');
+  ensureColumn('learning', 'attendance_sessions', 'openedAt', 'openedAt TEXT DEFAULT \'\'');
+  ensureColumn('learning', 'attendance_sessions', 'closedAt', 'closedAt TEXT DEFAULT \'\'');
+  ensureColumn('learning', 'attendance_sessions', 'expiresAt', 'expiresAt TEXT DEFAULT \'\'');
+  ensureColumn('learning', 'attendance_records', 'removedBy', 'removedBy INTEGER');
+  ensureColumn('learning', 'attendance_records', 'removedAt', 'removedAt TEXT DEFAULT \'\'');
+  ensureColumn('learning', 'attendance_records', 'removalNote', 'removalNote TEXT DEFAULT \'\'');
+  migrateAttendanceRecordStatusConstraint();
   ensureColumn('assessment', 'questions', 'points', 'points REAL NOT NULL DEFAULT 1');
   ensureColumn('assessment', 'questions', 'createdBy', 'createdBy INTEGER');
   ensureColumn('assessment', 'questions', 'status', 'status TEXT NOT NULL DEFAULT \'valid\'');
@@ -661,6 +677,7 @@ function migrateExistingTables() {
   ensureColumn('assessment', 'questions', 'explanationText', 'explanationText TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'questions', 'hintText', 'hintText TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'questions', 'mediaUrl', 'mediaUrl TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'questions', 'gradingType', 'gradingType TEXT NOT NULL DEFAULT \'standard\'');
 
   ensureColumn('assessment', 'attempt_answers', 'answerJson', 'answerJson TEXT DEFAULT \'{}\'');
 
@@ -721,6 +738,21 @@ function migrateExistingTables() {
 function ensureAdvancedIndexes() {
   const database = getDatabase();
   database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS learning.idx_categories_course_name_ci
+    ON categories(COALESCE(courseId, 0), LOWER(name))
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS learning.idx_attendance_sessions_lookup
+    ON attendance_sessions(courseOfferingId, status, sessionDate)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS learning.idx_attendance_records_lookup
+    ON attendance_records(sessionId, studentId, status)
+  `);
+
+  database.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS student.idx_student_profiles_student_number_ci
     ON student_profiles(LOWER(studentNumber))
     WHERE TRIM(studentNumber) != ''
@@ -751,6 +783,98 @@ function ensureAdvancedIndexes() {
     CREATE INDEX IF NOT EXISTS users.idx_validation_issues_lookup
     ON validation_issues(entityType, entityId, status, severity)
   `);
+}
+
+function migrateCategoryUniqueness() {
+  const database = getDatabase();
+  const table = database.prepare(`
+    SELECT sql
+    FROM learning.sqlite_master
+    WHERE type = 'table' AND name = 'categories'
+  `).get();
+
+  if (!table || !/name\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(String(table.sql || ''))) return;
+
+  database.exec('PRAGMA foreign_keys = OFF');
+  database.exec('BEGIN TRANSACTION');
+  try {
+    database.exec(`
+      DROP TABLE IF EXISTS learning.categories_new;
+
+      CREATE TABLE learning.categories_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        courseId INTEGER,
+        name TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        createdAt TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE SET NULL
+      );
+
+      INSERT INTO learning.categories_new (id, courseId, name, description, createdAt)
+      SELECT id, courseId, name, description, createdAt
+      FROM learning.categories;
+
+      DROP TABLE learning.categories;
+      ALTER TABLE learning.categories_new RENAME TO categories;
+    `);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+function migrateAttendanceRecordStatusConstraint() {
+  const database = getDatabase();
+  const table = database.prepare(`
+    SELECT sql
+    FROM learning.sqlite_master
+    WHERE type = 'table' AND name = 'attendance_records'
+  `).get();
+
+  if (!table || String(table.sql || '').includes("'removed'")) return;
+
+  database.exec('PRAGMA foreign_keys = OFF');
+  database.exec('BEGIN TRANSACTION');
+  try {
+    database.exec(`
+      DROP TABLE IF EXISTS learning.attendance_records_new;
+
+      CREATE TABLE learning.attendance_records_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionId INTEGER NOT NULL,
+        studentId INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('present', 'absent', 'late', 'excused', 'removed', 'invalidated')),
+        note TEXT DEFAULT '',
+        markedBy INTEGER,
+        removedBy INTEGER,
+        removedAt TEXT DEFAULT '',
+        removalNote TEXT DEFAULT '',
+        createdAt TEXT DEFAULT (datetime('now')),
+        updatedAt TEXT DEFAULT (datetime('now')),
+        UNIQUE(sessionId, studentId),
+        FOREIGN KEY (sessionId) REFERENCES attendance_sessions(id) ON DELETE CASCADE
+      );
+
+      INSERT INTO learning.attendance_records_new (
+        id, sessionId, studentId, status, note, markedBy, removedBy, removedAt, removalNote, createdAt, updatedAt
+      )
+      SELECT
+        id, sessionId, studentId, status, note, markedBy, removedBy, removedAt, removalNote, createdAt, updatedAt
+      FROM learning.attendance_records;
+
+      DROP TABLE learning.attendance_records;
+      ALTER TABLE learning.attendance_records_new RENAME TO attendance_records;
+    `);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.exec('PRAGMA foreign_keys = ON');
+  }
 }
 
 function migrateQuestionTypeConstraint() {

@@ -56,8 +56,8 @@ export const QuestionsPage = {
           <div class="panel wide">
             <div class="table-wrap">
               <table class="table">
-                <thead><tr><th>Question</th><th>Type</th><th>Category</th><th>Difficulty</th><th>Pts</th><th></th></tr></thead>
-                <tbody id="question-rows">${questions.map(question => this.questionTableRow(question)).join('') || '<tr><td colspan="6">No questions.</td></tr>'}</tbody>
+                <thead><tr><th>Question</th><th>Type</th><th>Category</th><th>Difficulty</th><th>Pts</th><th>Grading</th><th></th></tr></thead>
+                <tbody id="question-rows">${questions.map(question => this.questionTableRow(question)).join('') || '<tr><td colspan="7">No questions.</td></tr>'}</tbody>
               </table>
             </div>
           </div>
@@ -75,7 +75,7 @@ export const QuestionsPage = {
           type: document.getElementById('question-type-filter').value
         });
         document.getElementById('question-rows').innerHTML =
-          filtered.map(question => this.questionTableRow(question)).join('') || '<tr><td colspan="6">No questions.</td></tr>';
+          filtered.map(question => this.questionTableRow(question)).join('') || '<tr><td colspan="7">No questions.</td></tr>';
       };
       document.getElementById('question-search').addEventListener('input', filterQuestions);
       document.getElementById('question-type-filter').addEventListener('change', filterQuestions);
@@ -128,6 +128,9 @@ export const QuestionsPage = {
           </select></label>
           <label class="form-field"><span>Difficulty</span><select class="form-select" id="question-difficulty">
             ${['EASY', 'MEDIUM', 'HARD'].map(level => `<option value="${level}" ${question.difficulty === level ? 'selected' : ''}>${level}</option>`).join('')}
+          </select></label>
+          <label class="form-field"><span>Grading type</span><select class="form-select" id="question-grading-type">
+            ${[['standard', 'Standard'], ['negative', 'Negative marking'], ['manual', 'Manual grading']].map(([val, label]) => `<option value="${val}" ${(question.gradingType || 'standard') === val ? 'selected' : ''}>${label}</option>`).join('')}
           </select></label>
           ${this.input('question-points', 'Points', question.points || 1, 'number')}
         </div>
@@ -268,61 +271,13 @@ export const QuestionsPage = {
     // Preview handler
     document.getElementById('btn-preview-question')?.addEventListener('click', () => {
       const previewArea = document.getElementById('question-preview-area');
-      const text = value('question-text');
-      const richText = value('question-richtext');
-      const mediaUrl = value('question-media-url');
-      previewArea.innerHTML = `
-        <div class="question-preview-card">
-          <h3>Preview</h3>
-          <div class="preview-body">${this.esc(text)}</div>
-          ${richText ? `<div class="preview-rich">${this.esc(richText)}</div>` : ''}
-          ${mediaUrl ? `<img src="${this.esc(mediaUrl)}" class="preview-media" alt="Question image">` : ''}
-        </div>
-      `;
+      previewArea.innerHTML = this.questionPreviewHtml(this.collectQuestionDraft());
       this.renderLatex(previewArea);
     });
 
     document.getElementById('question-form').addEventListener('submit', async event => {
       event.preventDefault();
-      const type = value('question-type');
-      const data = {
-        categoryId: Number(value('question-category')),
-        text: value('question-text'),
-        type,
-        difficulty: value('question-difficulty'),
-        points: Number(value('question-points')),
-        options: [],
-        correctAnswer: '',
-        richText: value('question-richtext') || '',
-        explanationText: value('question-explanation') || '',
-        hintText: value('question-hint') || '',
-        mediaUrl: value('question-media-url') || ''
-      };
-
-      if (type === 'MC') {
-        data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim());
-        const selected = document.querySelector('input[name="question-correct"]:checked');
-        data.correctAnswer = selected ? selected.value : '0';
-      } else if (type === 'MR') {
-        data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim());
-        const checked = Array.from(document.querySelectorAll('input[name="question-correct-mr"]:checked'));
-        data.correctAnswer = checked.map(c => c.value).join(',');
-      } else if (type === 'OR') {
-        data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim());
-        data.correctAnswer = data.options.map((_, i) => i).join(',');
-      } else if (type === 'MT') {
-        data.tableConfig = this.collectTableConfig();
-        data.correctAnswer = '';
-      } else if (type === 'MP') {
-        data.parts = this.collectMultiParts();
-        data.correctAnswer = '';
-      } else {
-        data.correctAnswer = value('question-answer') || '';
-      }
-
-      if (type === 'FB') {
-        data.caseSensitive = document.getElementById('question-case-sensitive')?.checked || false;
-      }
+      const data = this.collectQuestionDraft();
 
       try {
         if (id) await API.updateQuestion(id, data);
@@ -333,6 +288,99 @@ export const QuestionsPage = {
         this.toast(err.message, 'error');
       }
     });
+  },
+
+  collectQuestionDraft() {
+    const type = value('question-type');
+    const data = {
+      categoryId: Number(value('question-category')),
+      text: value('question-text'),
+      type,
+      difficulty: value('question-difficulty'),
+      gradingType: value('question-grading-type') || 'standard',
+      points: Number(value('question-points')),
+      options: [],
+      correctAnswer: '',
+      richText: value('question-richtext') || '',
+      explanationText: value('question-explanation') || '',
+      hintText: value('question-hint') || '',
+      mediaUrl: value('question-media-url') || ''
+    };
+
+    if (type === 'MC') {
+      data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim());
+      const selected = document.querySelector('input[name="question-correct"]:checked');
+      data.correctAnswer = selected ? selected.value : '0';
+    } else if (type === 'MR') {
+      data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim());
+      const checked = Array.from(document.querySelectorAll('input[name="question-correct-mr"]:checked'));
+      data.correctAnswer = checked.map(c => c.value).join(',');
+    } else if (type === 'OR') {
+      data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim()).filter(Boolean);
+      data.correctAnswer = data.options.map((_, i) => i).join(',');
+    } else if (type === 'MT') {
+      data.tableConfig = this.collectTableConfig();
+      data.correctAnswer = '';
+    } else if (type === 'MP') {
+      data.parts = this.collectMultiParts();
+      data.correctAnswer = '';
+    } else {
+      data.correctAnswer = value('question-answer') || '';
+    }
+
+    if (type === 'FB') {
+      data.caseSensitive = document.getElementById('question-case-sensitive')?.checked || false;
+    }
+    return data;
+  },
+
+  questionPreviewHtml(question) {
+    return `
+      <div class="question-preview-card">
+        <h3>Preview</h3>
+        <div class="preview-body">${this.esc(question.text || '')}</div>
+        ${question.richText ? `<div class="preview-rich">${this.esc(question.richText)}</div>` : ''}
+        ${question.mediaUrl ? `<img src="${this.esc(question.mediaUrl)}" class="preview-media" alt="Question image">` : ''}
+        ${this.previewAnswerArea(question)}
+        ${question.hintText ? `<div class="preview-note"><strong>Hint</strong><p>${this.esc(question.hintText)}</p></div>` : ''}
+        ${question.explanationText ? `<div class="preview-note"><strong>Explanation</strong><p>${this.esc(question.explanationText)}</p></div>` : ''}
+      </div>
+    `;
+  },
+
+  previewAnswerArea(question) {
+    const options = (question.options || []).filter(Boolean);
+    if (question.type === 'MC') {
+      return `<div class="preview-options">${options.map((option, index) => `<label><input type="radio" disabled> <span>${this.esc(option || `Option ${index + 1}`)}</span></label>`).join('')}</div>`;
+    }
+    if (question.type === 'MR') {
+      return `<div class="preview-options">${options.map((option, index) => `<label><input type="checkbox" disabled> <span>${this.esc(option || `Option ${index + 1}`)}</span></label>`).join('')}</div>`;
+    }
+    if (question.type === 'TF') {
+      return `<div class="preview-options"><label><input type="radio" disabled> True</label><label><input type="radio" disabled> False</label></div>`;
+    }
+    if (question.type === 'FB') {
+      return `<input class="form-input" disabled placeholder="Type your answer">`;
+    }
+    if (question.type === 'SA') {
+      return `<input class="form-input" disabled placeholder="Numeric answer"><small>LaTeX is for display only. Correct numeric answers should be plain numbers.</small>`;
+    }
+    if (question.type === 'OR') {
+      return `<ol class="preview-ordering">${options.map(option => `<li>${this.esc(option)}</li>`).join('')}</ol>`;
+    }
+    if (question.type === 'ES') {
+      return `<textarea class="form-input" disabled rows="4" placeholder="Essay response"></textarea>`;
+    }
+    if (question.type === 'MT') {
+      const config = question.tableConfig || {};
+      const columns = config.columns || [];
+      const rows = Array.from({ length: Number(config.rowCount || 1) });
+      return `<div class="table-wrap"><table class="table"><thead><tr>${columns.map(col => `<th>${this.esc(col.header || '')}</th>`).join('')}</tr></thead><tbody>${rows.map((_, rowIndex) => `<tr>${columns.map((col, colIndex) => `<td>${col.type === 'input' || col.type === 'sign' ? '<input class="form-input" disabled>' : this.esc((config.prefill || {})[`r${rowIndex}_c${colIndex}`] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    }
+    if (question.type === 'MP') {
+      return `<div class="preview-parts">${(question.parts || []).map(part => `<div class="list-row"><div><strong>${this.esc(part.partLabel || '')}</strong><small>${this.esc(part.partText || '')}</small></div><input class="form-input" disabled placeholder="${this.esc(part.placeholder || 'Answer')}"></div>`).join('')}</div>`;
+    }
+    return '';
   },
 
   renderMathTableBuilder(container, question) {
@@ -506,6 +554,11 @@ export const QuestionsPage = {
 
   questionTableRow(question) {
     const typeColor = TYPE_COLORS[question.type] || '#64748b';
+    const gradingBadge = question.gradingType === 'negative'
+      ? '<span class="grading-badge grading-negative" title="Negative marking">➖ Negative</span>'
+      : question.gradingType === 'manual'
+        ? '<span class="grading-badge grading-manual" title="Manual grading">📝 Manual</span>'
+        : '';
     return `
       <tr>
         <td>
@@ -517,6 +570,7 @@ export const QuestionsPage = {
         <td>${this.esc(question.categoryName || '-')}</td>
         <td><span class="diff-badge diff-${question.difficulty.toLowerCase()}">${this.esc(question.difficulty)}</span></td>
         <td>${question.points}</td>
+        <td>${gradingBadge}</td>
         <td class="table-actions">
           <button class="btn btn-ghost btn-sm" onclick="App.showQuestionForm(${question.id}, ${question.courseId})">Edit</button>
           <button class="btn btn-ghost btn-sm" onclick="App.duplicateQuestion(${question.id})" title="Duplicate">⧉</button>

@@ -64,12 +64,6 @@ function validateQuiz(data) {
     showCorrectAnswers: data.showCorrectAnswers !== false
   };
 
-  if (payload.gradingMode !== 'negative_marking') {
-    payload.penaltyEnabled = false;
-    payload.penaltyPerWrong = 0;
-    payload.penaltyRatio = 0;
-  }
-
   return payload;
 }
 

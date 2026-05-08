@@ -1,4 +1,5 @@
 const courseRepository = require('../repositories/courseRepository');
+const enrollmentRepository = require('../repositories/enrollmentRepository');
 const questionRepository = require('../repositories/questionRepository');
 const quizRepository = require('../repositories/quizRepository');
 const { quizStatusValues } = require('../constants/enums');
@@ -17,6 +18,7 @@ const questionService = require('./questionService');
 const { forbiddenError, notFoundError, validationError } = require('../utils/appError');
 const { LIMITS } = require('../constants/limits');
 const { VALIDATION_ISSUE_MESSAGES } = require('../constants/validationIssues');
+const { parseRequiredPositiveInt, parseOptionalPositiveInt } = require('../utils/validation');
 
 class QuizService {
   getAll(user, filters = {}) {
@@ -130,7 +132,14 @@ class QuizService {
       throw validationError('question_ids', 'questionIds must be an array.');
     }
 
-    const uniqueIds = [...new Set(questionIds.map(id => Number(id)).filter(Boolean))];
+    const parsedIds = questionIds.map((id, index) => {
+      try {
+        return parseRequiredPositiveInt(id, `questionIds[${index}]`);
+      } catch (err) {
+        throw validationError('question_ids', 'questionIds must contain only positive integer IDs.');
+      }
+    });
+    const uniqueIds = [...new Set(parsedIds)];
     if (uniqueIds.length === 0) {
       throw validationError('question_ids', 'At least one question is required.');
     }
@@ -462,27 +471,62 @@ class QuizService {
         };
       });
 
-      const completed = quizGrades.filter(item => item.percentage !== null);
-      const average = completed.length
-        ? Math.round((completed.reduce((sum, item) => sum + item.percentage, 0) / completed.length) * 100) / 100
-        : null;
+      const completed = quizGrades.filter(item => item.score !== null && item.maxScore !== null && Number(item.maxScore) > 0);
+      const earned = completed.reduce((sum, item) => sum + Number(item.score || 0), 0);
+      const possible = completed.reduce((sum, item) => sum + Number(item.maxScore || 0), 0);
+      const weightedAverage = possible > 0 ? Math.round((earned / possible) * 10000) / 100 : null;
+      const gradeResolution = weightedAverage === null
+        ? { letterGrade: null, status: 'pending', message: 'No submitted quiz attempts yet.' }
+        : gradeSchemeService.resolveLetterGrade(courseId, weightedAverage);
 
-      return { ...student, average, quizzes: quizGrades };
+      return {
+        ...student,
+        average: weightedAverage,
+        weightedAverage,
+        finalLetterGrade: gradeResolution.letterGrade,
+        gradeStatus: gradeResolution.status,
+        gradeMessage: gradeResolution.message,
+        completedQuizCount: completed.length,
+        totalQuizCount: quizzes.length,
+        quizzes: quizGrades
+      };
     });
 
     return serializeGradebook({ quizzes, students: grades });
   }
 
-  getExamTemplates(filters = {}) {
-    return quizRepository.listExamTemplates(filters).map(template => ({
+  getExamTemplates(filters = {}, user = null) {
+    const courseId = parseOptionalPositiveInt(filters.courseId, 'courseId');
+    if (user && user.role === 'student') {
+      throw forbiddenError('Teacher or admin access required.');
+    }
+    if (courseId && user && !enrollmentRepository.canManageCourse(user, courseId)) {
+      throw forbiddenError('Teacher or admin course access required.');
+    }
+    return quizRepository.listExamTemplates({ ...filters, courseId }, user).map(template => ({
       ...template,
       defaults: parseJson(template.defaultsJson, {})
     }));
   }
 
+  getExamTemplate(id, user) {
+    const templateId = parseRequiredPositiveInt(id, 'templateId');
+    const template = quizRepository.findExamTemplateById(templateId);
+    if (!template) throw notFoundError('Template not found.');
+    this.assertCanAccessTemplate(template, user);
+    return {
+      ...template,
+      defaults: parseJson(template.defaultsJson, {})
+    };
+  }
+
   createExamTemplate(data, user) {
     if (!data.name || !String(data.name).trim()) {
       throw validationError('name', 'Template name is required.');
+    }
+    const courseId = parseOptionalPositiveInt(data.courseId, 'courseId');
+    if (courseId && !enrollmentRepository.canManageCourse(user, courseId)) {
+      throw forbiddenError('Teacher or admin course access required.');
     }
     const result = quizRepository.insertExamTemplate({
       name: String(data.name).trim(),
@@ -490,7 +534,7 @@ class QuizService {
       defaults: data.defaults || {},
       defaultsJson: JSON.stringify(data.defaults || {}),
       isSystem: false,
-      courseId: data.courseId || null,
+      courseId,
       createdBy: user.id
     });
     return {
@@ -498,24 +542,45 @@ class QuizService {
       name: data.name,
       description: data.description || '',
       defaults: data.defaults || {},
-      courseId: data.courseId || null,
+      courseId,
       createdBy: user.id,
       isSystem: 0
     };
   }
 
+  updateExamTemplate(id, data, user) {
+    const templateId = parseRequiredPositiveInt(id, 'templateId');
+    const template = quizRepository.findExamTemplateById(templateId);
+    if (!template) throw notFoundError('Template not found.');
+    this.assertCanModifyTemplate(template, user);
+    if (template.isSystem && user.role !== 'admin') {
+      throw forbiddenError('Only admins can update system templates.');
+    }
+    const courseId = data.courseId !== undefined
+      ? parseOptionalPositiveInt(data.courseId, 'courseId')
+      : (template.courseId || null);
+    if (courseId && !enrollmentRepository.canManageCourse(user, courseId)) {
+      throw forbiddenError('Teacher or admin course access required.');
+    }
+
+    quizRepository.updateExamTemplate(templateId, {
+      name: data.name !== undefined ? String(data.name).trim() : template.name,
+      description: data.description !== undefined ? String(data.description || '').trim() : template.description,
+      defaultsJson: JSON.stringify(data.defaults !== undefined ? (data.defaults || {}) : parseJson(template.defaultsJson, {})),
+      courseId,
+      updatedAt: nowIso()
+    });
+    return this.getExamTemplate(templateId, user);
+  }
+
   deleteExamTemplate(id, user) {
-    const template = quizRepository.findExamTemplateById(id);
+    const templateId = parseRequiredPositiveInt(id, 'templateId');
+    const template = quizRepository.findExamTemplateById(templateId);
     if (!template) {
       throw notFoundError('Template not found.');
     }
-    if (template.isSystem && user.role !== 'admin') {
-      throw forbiddenError('Only admins can delete system templates.');
-    }
-    if (!template.isSystem && template.createdBy !== user.id && user.role !== 'admin') {
-      throw forbiddenError('You can only delete your own templates.');
-    }
-    quizRepository.deleteExamTemplate(id);
+    this.assertCanModifyTemplate(template, user);
+    quizRepository.deleteExamTemplate(templateId);
     return true;
   }
 
@@ -548,16 +613,48 @@ class QuizService {
     return gradeSchemeService.list(courseId ? Number(courseId) : undefined);
   }
 
-  updateGradeSchemeThresholds(schemeId, thresholds, actorUserId = null) {
-    const updated = gradeSchemeService.updateThresholds(Number(schemeId), thresholds);
+  getGradeSchemesForUser(user, courseId) {
+    return gradeSchemeService.list(courseId, user);
+  }
+
+  getGradeSchemeForUser(schemeId, user) {
+    return gradeSchemeService.getForUser(schemeId, user);
+  }
+
+  updateGradeSchemeThresholds(schemeId, thresholds, actor = null) {
+    const updated = gradeSchemeService.updateThresholds(schemeId, thresholds, actor);
     auditService.log({
-      actorUserId,
+      actorUserId: actor ? actor.id : null,
       action: 'GRADE_SCHEME_UPDATED',
       entityType: 'grade_scheme',
       entityId: updated.id,
       details: { thresholdCount: updated.thresholds.length }
     });
     return updated;
+  }
+
+  assertCanAccessTemplate(template, user) {
+    if (!user || user.role === 'student') {
+      throw forbiddenError('Teacher or admin access required.');
+    }
+    if (user.role === 'admin') return;
+    if (template.isSystem) return;
+    if (template.courseId) {
+      if (enrollmentRepository.canManageCourse(user, template.courseId)) return;
+      throw forbiddenError('Teacher or admin course access required.');
+    }
+    if (Number(template.createdBy) === Number(user.id)) return;
+    throw forbiddenError('You can only access your own, system, or managed-course templates.');
+  }
+
+  assertCanModifyTemplate(template, user) {
+    this.assertCanAccessTemplate(template, user);
+    if (template.isSystem && user.role !== 'admin') {
+      throw forbiddenError('Only admins can manage system templates.');
+    }
+    if (!template.courseId && !template.isSystem && user.role !== 'admin' && Number(template.createdBy) !== Number(user.id)) {
+      throw forbiddenError('You can only manage your own templates.');
+    }
   }
 
   withAvailability(quiz) {
@@ -570,8 +667,14 @@ class QuizService {
 
   evaluateAnswer(question, answer, quiz) {
     const points = Number(question.points || 1);
+    const questionGradingType = question.gradingType || 'standard';
 
-    // Essay questions are always manually graded
+    // Manual grading type: always needs manual review (like Essay)
+    if (questionGradingType === 'manual') {
+      return { isCorrect: false, pointsAwarded: 0, needsReview: true };
+    }
+
+    // Essay questions are always manually graded regardless of gradingType
     if (question.type === 'ES') {
       return { isCorrect: false, pointsAwarded: 0, needsReview: true };
     }
@@ -598,7 +701,7 @@ class QuizService {
       return { isCorrect: true, pointsAwarded: points };
     }
 
-    const penalty = this.calculatePenalty(points, quiz);
+    const penalty = this.calculatePenalty(points, quiz, question);
     return { isCorrect: false, pointsAwarded: -penalty };
   }
 
@@ -728,8 +831,12 @@ class QuizService {
     return userAnswer.trim() === correctAnswer.trim();
   }
 
-  calculatePenalty(points, quiz) {
-    if (!quiz.penaltyEnabled || quiz.gradingMode !== 'negative_marking') return 0;
+  calculatePenalty(points, quiz, question = {}) {
+    // Per-question grading type takes priority
+    const questionGradingType = question.gradingType || 'standard';
+    if (questionGradingType !== 'negative') return 0;
+
+    // Use quiz-level penalty amount
     const fixed = Number(quiz.penaltyPerWrong || 0);
     const ratioPenalty = Number(quiz.penaltyRatio || 0) * Number(points || 0);
     return Math.max(0, fixed || ratioPenalty || 0);

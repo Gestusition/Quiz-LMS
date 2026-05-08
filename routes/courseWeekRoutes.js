@@ -1,17 +1,20 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 const courseWeekService = require('../services/courseWeekService');
 const auditService = require('../services/auditService');
 const { requireAuth } = require('../middleware/auth');
-const { resourceUpload, removeUploadedFile } = require('../middleware/upload');
+const { resourceUpload, removeUploadedFile, validateUploadedResource } = require('../middleware/upload');
 const { sendError } = require('../utils/appError');
+const { parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 
 function uploadResourceFile(req, res, next) {
   resourceUpload.single('file')(req, res, err => {
     if (err) return sendError(res, err, 400);
-    next();
+    validateUploadedResource(req, res, next);
   });
 }
 
@@ -25,6 +28,18 @@ function resourcePayload(req) {
     fileSizeBytes: req.file.size,
     mimeType: req.file.mimetype
   };
+}
+
+function sendProtectedDownload(res, fileInfo) {
+  const fileName = path.basename(fileInfo.storageUrl || '');
+  const root = path.join(__dirname, '..', 'public', 'uploads', 'resources');
+  const filePath = path.join(root, fileName);
+  if (!fileName || !filePath.startsWith(root) || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found.' });
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+  return res.download(filePath, fileInfo.fileName || fileName);
 }
 
 /**
@@ -68,7 +83,7 @@ function resourcePayload(req) {
  */
 router.get('/courses/:courseId/weeks', (req, res) => {
   try {
-    const courseId = Number(req.params.courseId);
+    const courseId = parseRequiredPositiveInt(req.params.courseId, 'courseId');
     res.json(courseWeekService.listWeeks(courseId, req.user, {
       page: req.query.page,
       limit: req.query.limit
@@ -112,7 +127,7 @@ router.get('/courses/:courseId/weeks', (req, res) => {
  */
 router.post('/courses/:courseId/weeks', (req, res) => {
   try {
-    const courseId = Number(req.params.courseId);
+    const courseId = parseRequiredPositiveInt(req.params.courseId, 'courseId');
     const week = courseWeekService.createWeek(courseId, req.user, req.body);
     auditService.log({
       actorUserId: req.user.id,
@@ -161,7 +176,7 @@ router.post('/courses/:courseId/weeks', (req, res) => {
  */
 router.put('/weeks/:id', (req, res) => {
   try {
-    const weekId = Number(req.params.id);
+    const weekId = parseRequiredPositiveInt(req.params.id, 'weekId');
     res.json(courseWeekService.updateWeek(weekId, req.user, req.body));
   } catch (err) {
     sendError(res, err, 400);
@@ -196,7 +211,7 @@ router.put('/weeks/:id', (req, res) => {
  */
 router.delete('/weeks/:id', (req, res) => {
   try {
-    const weekId = Number(req.params.id);
+    const weekId = parseRequiredPositiveInt(req.params.id, 'weekId');
     courseWeekService.deleteWeek(weekId, req.user);
     res.json({ message: 'Week deleted successfully.' });
   } catch (err) {
@@ -245,7 +260,7 @@ router.delete('/weeks/:id', (req, res) => {
  */
 router.get('/weeks/:id/resources', (req, res) => {
   try {
-    const weekId = Number(req.params.id);
+    const weekId = parseRequiredPositiveInt(req.params.id, 'weekId');
     res.json(courseWeekService.listWeekResources(weekId, req.user, {
       page: req.query.page,
       limit: req.query.limit
@@ -289,7 +304,7 @@ router.get('/weeks/:id/resources', (req, res) => {
  */
 router.post('/weeks/:id/resources', uploadResourceFile, (req, res) => {
   try {
-    const weekId = Number(req.params.id);
+    const weekId = parseRequiredPositiveInt(req.params.id, 'weekId');
     const resource = courseWeekService.createWeekResource(weekId, req.user, resourcePayload(req));
     res.status(201).json(resource);
   } catch (err) {
@@ -326,9 +341,19 @@ router.post('/weeks/:id/resources', uploadResourceFile, (req, res) => {
  */
 router.delete('/week-resources/:id', (req, res) => {
   try {
-    const resourceId = Number(req.params.id);
+    const resourceId = parseRequiredPositiveInt(req.params.id, 'resourceId');
     courseWeekService.deleteWeekResource(resourceId, req.user);
     res.json({ message: 'Week resource deleted successfully.' });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.get('/week-resources/:id/download', (req, res) => {
+  try {
+    const resourceId = parseRequiredPositiveInt(req.params.id, 'resourceId');
+    const fileInfo = courseWeekService.getWeekResourceDownload(resourceId, req.user);
+    return sendProtectedDownload(res, fileInfo);
   } catch (err) {
     sendError(res, err, 400);
   }

@@ -6,10 +6,18 @@ export const AttendancePage = {
     this.setApp(this.loading('Loading attendance'));
     try {
       if (this.user.role === 'student') {
-        const records = await API.getMyAttendance();
+        const [records, sessions] = await Promise.all([
+          API.getMyAttendance(),
+          API.getAttendanceSessions().catch(() => [])
+        ]);
         this.setApp(`
           <header class="page-header"><div><h1>Attendance</h1><p>${records.length} record${records.length === 1 ? '' : 's'}</p></div></header>
           <section class="panel">
+            <div class="panel-header"><h2>Active Sessions</h2></div>
+            <div class="list">${sessions.map(session => this.studentSessionRow(session)).join('') || this.emptyLine('No active attendance session is available.')}</div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>My Records</h2></div>
             <div class="list">${records.map(record => this.studentAttendanceRow(record)).join('') || this.emptyLine('No attendance records yet.')}</div>
           </section>
         `);
@@ -55,8 +63,27 @@ export const AttendancePage = {
         </div>
         <div class="row-actions">
           <button class="btn btn-ghost btn-sm" onclick="App.showAttendanceSummary(${session.courseOfferingId})">Summary</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.showAttendanceRecords(${session.id})">Attendees</button>
           <button class="btn btn-primary btn-sm" onclick="App.showMarkAttendanceForm(${session.id}, ${session.courseOfferingId})">Mark</button>
+          ${session.status === 'open' ? `<button class="btn btn-ghost btn-sm" onclick="App.closeAttendanceSession(${session.id})">Close</button>` : ''}
         </div>
+      </div>
+    `;
+  },
+
+  studentSessionRow(session) {
+    const marked = session.ownAttendanceStatus && session.ownAttendanceStatus !== 'removed';
+    return `
+      <div class="list-row">
+        <div>
+          <strong>${this.esc(session.courseCode)} - ${this.esc(session.courseTitle)}</strong>
+          <small>${this.esc(this.formatDate(session.sessionDate))}${session.topic ? ` - ${this.esc(session.topic)}` : ''} - ${this.esc(session.status || 'open')}</small>
+        </div>
+        ${marked
+          ? `<span class="status present">Attendance marked</span>`
+          : session.status === 'open'
+            ? `<button class="btn btn-primary btn-sm" onclick="App.markSelfAttendance(${session.id})">Mark Attendance</button>`
+            : `<span class="status closed">Session closed</span>`}
       </div>
     `;
   },
@@ -141,6 +168,62 @@ export const AttendancePage = {
           this.toast('Attendance saved.', 'success');
         } catch (err) { this.toast(err.message, 'error'); }
       });
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  async showAttendanceRecords(sessionId) {
+    try {
+      const records = await API.getAttendanceRecords(sessionId);
+      this.openModal('Attendees', `
+        <div class="stack">
+          <div class="list">
+            ${records.map(record => `
+              <div class="list-row">
+                <div>
+                  <strong>${this.esc(record.studentName)}</strong>
+                  <small>${this.esc(record.studentNumber || record.studentEmail)} - ${this.esc(record.status)}</small>
+                  ${record.removalNote ? `<small>Removed: ${this.esc(record.removalNote)}</small>` : ''}
+                </div>
+                ${record.status !== 'removed' ? `<button class="btn btn-danger btn-sm" onclick="App.showRemoveAttendanceForm(${record.id}, ${sessionId})">Remove</button>` : ''}
+              </div>
+            `).join('') || this.emptyLine('No attendees yet.')}
+          </div>
+          <div class="modal-actions"><button type="button" class="btn btn-primary" onclick="App.closeModal()">Done</button></div>
+        </div>
+      `);
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  showRemoveAttendanceForm(recordId, sessionId) {
+    this.openModal('Remove attendance', `
+      <form id="remove-attendance-form" class="stack">
+        ${this.textarea('attendance-removal-note', 'Reason / note')}
+        <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.showAttendanceRecords(${sessionId})">Back</button><button class="btn btn-danger">Remove</button></div>
+      </form>
+    `);
+    document.getElementById('remove-attendance-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      try {
+        await API.removeAttendanceRecord(recordId, value('attendance-removal-note'));
+        this.toast('Attendance removed.', 'success');
+        this.showAttendanceRecords(sessionId);
+      } catch (err) { this.toast(err.message, 'error'); }
+    });
+  },
+
+  async markSelfAttendance(sessionId) {
+    try {
+      await API.markSelfAttendance(sessionId);
+      this.toast('Attendance marked.', 'success');
+      this.renderAttendance();
+    } catch (err) { this.toast(err.message, 'error'); }
+  },
+
+  async closeAttendanceSession(sessionId) {
+    try {
+      await API.closeAttendanceSession(sessionId);
+      this.toast('Attendance session closed.', 'success');
+      this.renderAttendance();
     } catch (err) { this.toast(err.message, 'error'); }
   },
 

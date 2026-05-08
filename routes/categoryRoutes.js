@@ -3,6 +3,7 @@ const router = express.Router();
 const categoryService = require('../services/categoryService');
 const { validateId, requireFields, sanitizeStrings } = require('../middleware/validation');
 const { requireAuth, requireRole, canAccessCourse, canManageCourse } = require('../middleware/auth');
+const { parseOptionalPositiveInt, parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 
@@ -91,12 +92,12 @@ function ensureCategoryManager(req, res, category) {
 router.get('/', (req, res) => {
   try {
     const categories = categoryService.getAll({
-      courseId: req.query.courseId ? Number(req.query.courseId) : undefined,
+      courseId: parseOptionalPositiveInt(req.query.courseId, 'courseId') || undefined,
       user: req.user
     });
     res.json(categories);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 
@@ -159,9 +160,14 @@ router.get('/:id', validateId, (req, res) => {
  */
 router.post('/', requireRole(['admin', 'teacher']), requireFields(['name']), sanitizeStrings(['name', 'description']), (req, res) => {
   try {
-    if (req.user.role === 'teacher' && !canManageCourse(req.user, Number(req.body.courseId))) {
+    const courseId = parseOptionalPositiveInt(req.body.courseId, 'courseId');
+    if (req.user.role === 'teacher' && !courseId) {
+      return res.status(403).json({ error: 'Teacher course category required.' });
+    }
+    if (req.user.role === 'teacher' && !canManageCourse(req.user, courseId)) {
       return res.status(403).json({ error: 'Teacher course access required.' });
     }
+    req.body.courseId = courseId;
     const category = categoryService.create(req.body);
     res.status(201).json(category);
   } catch (err) {
@@ -205,8 +211,11 @@ router.put('/:id', validateId, sanitizeStrings(['name', 'description']), (req, r
   try {
     const existing = categoryService.getById(req.params.id);
     if (!ensureCategoryManager(req, res, existing)) return;
-    if (req.body.courseId && !canManageCourse(req.user, Number(req.body.courseId))) {
-      return res.status(403).json({ error: 'Teacher or admin course access required.' });
+    if (req.body.courseId !== undefined) {
+      req.body.courseId = parseOptionalPositiveInt(req.body.courseId, 'courseId');
+      if (req.body.courseId && !canManageCourse(req.user, req.body.courseId)) {
+        return res.status(403).json({ error: 'Teacher or admin course access required.' });
+      }
     }
     const category = categoryService.update(req.params.id, req.body);
     res.json(category);
