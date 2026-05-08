@@ -6,9 +6,14 @@ const LIMITS = Object.freeze({
   }),
   rateLimits: Object.freeze({
     loginWindowMs: 15 * 60 * 1000,
-    loginMax: 20,
+    loginMax: 5,
+    loginGlobalIpWindowMs: 15 * 60 * 1000,
+    loginGlobalIpMax: 30,
     passwordResetWindowMs: 15 * 60 * 1000,
-    passwordResetMax: 10,
+    passwordResetMax: 5,
+    lockoutThreshold: 5,
+    lockoutBaseDurationMs: 30 * 1000,
+    lockoutMaxDurationMs: 30 * 60 * 1000,
     maxBuckets: 5000
   }),
   users: Object.freeze({

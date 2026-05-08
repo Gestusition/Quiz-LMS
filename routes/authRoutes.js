@@ -2,16 +2,34 @@ const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
 const { requireAuth, getSessionToken, SESSION_COOKIE_NAME } = require('../middleware/auth');
-const { createRateLimiter, extractLoginIdentifier, identifierKey } = require('../middleware/rateLimit');
+const {
+  createRateLimiter,
+  extractLoginIdentifier,
+  identifierKey,
+  accountLockoutGuard,
+  recordLoginFailure,
+  recordLoginSuccess
+} = require('../middleware/rateLimit');
 const { sendError } = require('../utils/appError');
 const { LIMITS } = require('../constants/limits');
 
+// Layer 1 — Global IP rate limiter: stops credential-spray attacks
+// (one IP hammering many different accounts).
+const loginIpLimiter = createRateLimiter({
+  windowMs: LIMITS.rateLimits.loginGlobalIpWindowMs,
+  max: LIMITS.rateLimits.loginGlobalIpMax,
+  message: 'Too many login attempts from this address. Please try again later.'
+});
+
+// Layer 2 — Per-IP+identifier rate limiter: stops password-guessing
+// against a single account from a single IP.
 const loginLimiter = createRateLimiter({
   windowMs: LIMITS.rateLimits.loginWindowMs,
   max: LIMITS.rateLimits.loginMax,
   key: identifierKey,
   message: 'Too many login attempts. Please try again later.'
 });
+
 const resetLimiter = createRateLimiter({
   windowMs: LIMITS.rateLimits.passwordResetWindowMs,
   max: LIMITS.rateLimits.passwordResetMax,
@@ -68,16 +86,35 @@ function sendSession(res, session) {
  *               $ref: '#/components/schemas/AuthSession'
  *       401:
  *         $ref: '#/components/responses/401Unauthorized'
+ *       429:
+ *         description: Too many login attempts (rate-limited or account locked)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 retryAfterSeconds:
+ *                   type: integer
  */
-router.post('/login', loginLimiter, (req, res) => {
-  try {
-    const identifier = extractLoginIdentifier(req.body);
-    const session = authService.login(identifier, req.body.password);
-    sendSession(res, session);
-  } catch (err) {
-    sendError(res, err, 401);
+router.post('/login',
+  loginIpLimiter,         // Layer 1: global IP rate limit
+  accountLockoutGuard,    // Layer 3: per-account progressive lockout
+  loginLimiter,           // Layer 2: per-IP+identifier rate limit
+  (req, res) => {
+    try {
+      const identifier = extractLoginIdentifier(req.body);
+      const session = authService.login(identifier, req.body.password);
+      recordLoginSuccess(identifier);
+      sendSession(res, session);
+    } catch (err) {
+      const identifier = extractLoginIdentifier(req.body);
+      recordLoginFailure(identifier);
+      sendError(res, err, 401);
+    }
   }
-});
+);
 
 /**
  * @swagger
