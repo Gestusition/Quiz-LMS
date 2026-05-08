@@ -1064,6 +1064,310 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   white-space: nowrap;
 }
 
+/* ── Question Bank Filter Bar ── */
+.qb-filter-bar {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px 14px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+}
+
+.qb-filter-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.qb-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 180px;
+}
+
+.qb-filter-group .form-select {
+  width: 100%;
+}
+
+.qb-search-group {
+  flex: 1 1 220px;
+}
+
+.qb-filter-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.qb-search-wrap {
+  position: relative;
+}
+
+.qb-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.qb-search-input {
+  padding-left: 34px !important;
+}
+
+/* ── Active Filter Chips ── */
+.qb-active-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.qb-active-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.qb-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid transparent;
+}
+
+.qb-filter-chip:hover {
+  border-color: var(--primary);
+  background: #c7d2fe;
+}
+
+.qb-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.diff-dot-easy { background: #16a34a; }
+.diff-dot-medium { background: #d97706; }
+.diff-dot-hard { background: #dc2626; }
+
+.qb-chip-x {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 800;
+  padding: 0;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+.qb-clear-all {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 2px 4px;
+  transition: var(--transition);
+}
+
+.qb-clear-all:hover {
+  color: var(--danger);
+}
+
+/* ── Question Bank Layout ── */
+.qb-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.qb-sidebar {
+  position: sticky;
+  top: 80px;
+}
+
+.qb-cat-list {
+  max-height: 480px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.qb-cat-row {
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.qb-cat-row:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.qb-cat-active {
+  border-color: var(--primary) !important;
+  background: var(--primary-soft) !important;
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.qb-cat-info {
+  min-width: 0;
+}
+
+.qb-cat-info strong {
+  display: block;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qb-cat-del {
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.qb-cat-row:hover .qb-cat-del {
+  opacity: 1;
+}
+
+.qb-cat-count {
+  background: var(--surface-strong);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.qb-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.qb-results-count {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* ── Question Cards ── */
+.qb-question-list {
+  display: grid;
+  gap: 10px;
+}
+
+.qb-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+  transition: var(--transition);
+  box-shadow: var(--shadow);
+}
+
+.qb-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: var(--shadow-lg);
+}
+
+.qb-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.qb-card-pts {
+  margin-left: auto;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--muted);
+  background: var(--surface-strong);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.qb-card-body {
+  display: grid;
+  gap: 6px;
+}
+
+.qb-card-text {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.qb-card-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.qb-card-category {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.qb-card-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.qb-action-edit {
+  color: var(--primary) !important;
+}
+
+.qb-action-delete {
+  margin-left: auto;
+  color: var(--danger) !important;
+}
+
+.qb-action-delete:hover {
+  background: var(--danger-soft) !important;
+}
+
+.qb-card-actions .btn svg {
+  flex-shrink: 0;
+}
+
 /* ── Math Table Builder ── */
 .table-builder .table-col-item {
   display: flex;
@@ -1819,6 +2123,8 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .attempt-sidebar { position: static; }
   .quiz-grid { grid-template-columns: 1fr; }
   .question-form-advanced .form-grid { grid-template-columns: repeat(2, 1fr); }
+  .qb-layout { grid-template-columns: 1fr; }
+  .qb-sidebar { position: static; }
 }
 
 @media (max-width: 640px) {
@@ -1832,4 +2138,6 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .list-row, .result-panel { align-items: flex-start; flex-direction: column; }
   .question-form-advanced .form-grid { grid-template-columns: 1fr; }
   .part-editor-fields { flex-direction: column; }
+  .qb-filter-group { flex: 1 1 100%; }
+  .qb-card-actions { flex-wrap: wrap; }
 }

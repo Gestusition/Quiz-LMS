@@ -17,6 +17,9 @@ export const QuestionsPage = {
     if (!this.canManageLearning()) return this.setApp(this.emptyBlock('Question bank access is restricted.'));
     this.setApp(this.loading('Loading question bank'));
 
+    // Preserve filter state across renders
+    if (!this._qbFilters) this._qbFilters = { type: '', difficulty: '', categoryId: '', search: '' };
+
     try {
       const courses = await API.getCourses();
       const selectedCourseId = this.activeCourseId || (courses[0] ? String(courses[0].id) : '');
@@ -25,65 +28,188 @@ export const QuestionsPage = {
         ? await Promise.all([API.getCategories({ courseId: selectedCourseId }), API.getQuestions({ courseId: selectedCourseId })])
         : [[], []];
 
+      // Count questions by type for filter badges
+      const typeCounts = {};
+      const diffCounts = {};
+      questions.forEach(q => {
+        typeCounts[q.type] = (typeCounts[q.type] || 0) + 1;
+        diffCounts[q.difficulty] = (diffCounts[q.difficulty] || 0) + 1;
+      });
+
+      // Build active filters chips HTML
+      const buildActiveFilters = () => {
+        const f = this._qbFilters;
+        const chips = [];
+        if (f.type) chips.push(`<span class="qb-filter-chip" data-clear="type"><span class="qb-chip-dot" style="background:${TYPE_COLORS[f.type] || '#64748b'}"></span>${TYPE_LABELS[f.type] || f.type}<button class="qb-chip-x">&times;</button></span>`);
+        if (f.difficulty) chips.push(`<span class="qb-filter-chip" data-clear="difficulty"><span class="qb-chip-dot diff-dot-${f.difficulty.toLowerCase()}"></span>${f.difficulty}<button class="qb-chip-x">&times;</button></span>`);
+        if (f.categoryId) {
+          const cat = categories.find(c => String(c.id) === String(f.categoryId));
+          chips.push(`<span class="qb-filter-chip" data-clear="categoryId">📂 ${this.esc(cat ? cat.name : 'Category')}<button class="qb-chip-x">&times;</button></span>`);
+        }
+        if (f.search) chips.push(`<span class="qb-filter-chip" data-clear="search">🔍 "${this.esc(f.search)}"<button class="qb-chip-x">&times;</button></span>`);
+        if (chips.length === 0) return '';
+        return `<div class="qb-active-filters">
+          <span class="qb-active-label">Active filters:</span>
+          ${chips.join('')}
+          <button class="qb-clear-all" id="qb-clear-all">Clear all</button>
+        </div>`;
+      };
+
       this.setApp(`
         <header class="page-header">
-          <div><h1>Question Bank</h1><p>${questions.length} question${questions.length === 1 ? '' : 's'} across ${categories.length} categories</p></div>
+          <div><h1>Question Bank</h1><p>${questions.length} question${questions.length === 1 ? '' : 's'} across ${categories.length} categor${categories.length === 1 ? 'y' : 'ies'}</p></div>
           <div class="header-actions">
             <button class="btn btn-ghost" id="btn-new-category">New Category</button>
             <button class="btn btn-primary" id="btn-new-question">New Question</button>
           </div>
         </header>
-        <div class="toolbar">
-          <select class="form-select" id="question-course-filter">
-            ${courses.map(course => `<option value="${course.id}" ${String(course.id) === selectedCourseId ? 'selected' : ''}>${this.esc(course.code)} - ${this.esc(course.title)}</option>`).join('')}
-          </select>
-          <select class="form-select" id="question-type-filter">
-            <option value="">All types</option>
-            ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
-          </select>
-          <input class="form-input" id="question-search" placeholder="Search questions...">
-        </div>
-        <section class="content-grid">
-          <div class="panel">
-            <div class="panel-header"><h2>Categories</h2><span>${categories.length}</span></div>
-            <div class="list">${categories.map(category => `
-              <div class="list-row">
-                <div><strong>${this.esc(category.name)}</strong><small>${category.questionCount} questions</small></div>
-                <button class="btn btn-ghost btn-sm" onclick="App.deleteCategory(${category.id})">Delete</button>
+
+        <div class="qb-filter-bar">
+          <div class="qb-filter-row">
+            <div class="qb-filter-group">
+              <label class="qb-filter-label">Course</label>
+              <select class="form-select" id="question-course-filter">
+                ${courses.map(course => `<option value="${course.id}" ${String(course.id) === selectedCourseId ? 'selected' : ''}>${this.esc(course.code)} - ${this.esc(course.title)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="qb-filter-group">
+              <label class="qb-filter-label">Type</label>
+              <select class="form-select" id="question-type-filter">
+                <option value="">All types</option>
+                ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${this._qbFilters.type === k ? 'selected' : ''}>${v} (${typeCounts[k] || 0})</option>`).join('')}
+              </select>
+            </div>
+            <div class="qb-filter-group">
+              <label class="qb-filter-label">Difficulty</label>
+              <select class="form-select" id="question-diff-filter">
+                <option value="">All levels</option>
+                ${['EASY', 'MEDIUM', 'HARD'].map(d => `<option value="${d}" ${this._qbFilters.difficulty === d ? 'selected' : ''}>${d} (${diffCounts[d] || 0})</option>`).join('')}
+              </select>
+            </div>
+            <div class="qb-filter-group">
+              <label class="qb-filter-label">Category</label>
+              <select class="form-select" id="question-cat-filter">
+                <option value="">All categories</option>
+                ${categories.map(cat => `<option value="${cat.id}" ${String(this._qbFilters.categoryId) === String(cat.id) ? 'selected' : ''}>${this.esc(cat.name)} (${cat.questionCount})</option>`).join('')}
+              </select>
+            </div>
+            <div class="qb-filter-group qb-search-group">
+              <label class="qb-filter-label">Search</label>
+              <div class="qb-search-wrap">
+                <svg class="qb-search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+                <input class="form-input qb-search-input" id="question-search" placeholder="Search questions..." value="${this.esc(this._qbFilters.search)}">
               </div>
-            `).join('') || this.emptyLine('No categories.')}</div>
-          </div>
-          <div class="panel wide">
-            <div class="table-wrap">
-              <table class="table">
-                <thead><tr><th>Question</th><th>Type</th><th>Category</th><th>Difficulty</th><th>Pts</th><th>Grading</th><th></th></tr></thead>
-                <tbody id="question-rows">${questions.map(question => this.questionTableRow(question)).join('') || '<tr><td colspan="7">No questions.</td></tr>'}</tbody>
-              </table>
             </div>
           </div>
+          <div id="qb-active-filters-area">${buildActiveFilters()}</div>
+        </div>
+
+        <section class="qb-layout">
+          <aside class="qb-sidebar">
+            <div class="panel">
+              <div class="panel-header"><h2>Categories</h2><span class="qb-cat-count">${categories.length}</span></div>
+              <div class="list qb-cat-list">${categories.map(category => `
+                <div class="list-row qb-cat-row ${String(this._qbFilters.categoryId) === String(category.id) ? 'qb-cat-active' : ''}" data-cat-id="${category.id}">
+                  <div class="qb-cat-info">
+                    <strong>${this.esc(category.name)}</strong>
+                    <small>${category.questionCount} question${category.questionCount === 1 ? '' : 's'}</small>
+                  </div>
+                  <button class="btn btn-ghost btn-sm qb-cat-del" onclick="event.stopPropagation(); App.deleteCategory(${category.id})" title="Delete category">🗑</button>
+                </div>
+              `).join('') || this.emptyLine('No categories.')}</div>
+            </div>
+          </aside>
+
+          <main class="qb-main">
+            <div class="qb-results-header">
+              <span class="qb-results-count" id="qb-results-count">${questions.length} question${questions.length === 1 ? '' : 's'}</span>
+            </div>
+            <div class="qb-question-list" id="question-rows">
+              ${questions.map(question => this.questionCard(question)).join('') || this.emptyLine('No questions found.')}
+            </div>
+          </main>
         </section>
       `);
 
+      // Course filter triggers full reload
       document.getElementById('question-course-filter').addEventListener('change', event => {
         this.activeCourseId = event.target.value;
+        this._qbFilters = { type: '', difficulty: '', categoryId: '', search: '' };
         this.renderQuestionBank();
       });
+
+      // Filter logic
       const filterQuestions = async () => {
+        this._qbFilters.type = document.getElementById('question-type-filter').value;
+        this._qbFilters.difficulty = document.getElementById('question-diff-filter').value;
+        this._qbFilters.categoryId = document.getElementById('question-cat-filter').value;
+        this._qbFilters.search = document.getElementById('question-search').value;
+
         const filtered = await API.getQuestions({
           courseId: this.activeCourseId,
-          search: document.getElementById('question-search').value,
-          type: document.getElementById('question-type-filter').value
+          search: this._qbFilters.search || undefined,
+          type: this._qbFilters.type || undefined,
+          difficulty: this._qbFilters.difficulty || undefined,
+          categoryId: this._qbFilters.categoryId || undefined
         });
         document.getElementById('question-rows').innerHTML =
-          filtered.map(question => this.questionTableRow(question)).join('') || '<tr><td colspan="7">No questions.</td></tr>';
+          filtered.map(question => this.questionCard(question)).join('') || this.emptyLine('No questions found.');
+        document.getElementById('qb-results-count').textContent = `${filtered.length} question${filtered.length === 1 ? '' : 's'}`;
+        document.getElementById('qb-active-filters-area').innerHTML = buildActiveFilters();
+        this.bindFilterChips();
       };
+
       document.getElementById('question-search').addEventListener('input', filterQuestions);
       document.getElementById('question-type-filter').addEventListener('change', filterQuestions);
+      document.getElementById('question-diff-filter').addEventListener('change', filterQuestions);
+      document.getElementById('question-cat-filter').addEventListener('change', filterQuestions);
+
+      // Category click to filter
+      document.querySelectorAll('.qb-cat-row[data-cat-id]').forEach(row => {
+        row.addEventListener('click', () => {
+          const catId = row.dataset.catId;
+          const catFilter = document.getElementById('question-cat-filter');
+          catFilter.value = String(this._qbFilters.categoryId) === catId ? '' : catId;
+          // Update active state
+          document.querySelectorAll('.qb-cat-row').forEach(r => r.classList.remove('qb-cat-active'));
+          if (catFilter.value) row.classList.add('qb-cat-active');
+          filterQuestions();
+        });
+      });
+
+      this.bindFilterChips();
+
       document.getElementById('btn-new-category').addEventListener('click', () => this.showCategoryForm(Number(this.activeCourseId)));
       document.getElementById('btn-new-question').addEventListener('click', () => this.showQuestionForm(null, Number(this.activeCourseId)));
     } catch (err) {
       this.renderError(err);
     }
+  },
+
+  bindFilterChips() {
+    document.querySelectorAll('.qb-filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const key = chip.dataset.clear;
+        this._qbFilters[key] = '';
+        const el = document.getElementById({
+          type: 'question-type-filter',
+          difficulty: 'question-diff-filter',
+          categoryId: 'question-cat-filter',
+          search: 'question-search'
+        }[key]);
+        if (el) { el.value = ''; el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input')); }
+      });
+    });
+    document.getElementById('qb-clear-all')?.addEventListener('click', () => {
+      this._qbFilters = { type: '', difficulty: '', categoryId: '', search: '' };
+      ['question-type-filter', 'question-diff-filter', 'question-cat-filter'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+      const searchEl = document.getElementById('question-search'); if (searchEl) searchEl.value = '';
+      document.querySelectorAll('.qb-cat-row').forEach(r => r.classList.remove('qb-cat-active'));
+      // trigger filter
+      document.getElementById('question-type-filter')?.dispatchEvent(new Event('change'));
+    });
   },
 
   async showCategoryForm(courseId) {
@@ -552,6 +678,50 @@ export const QuestionsPage = {
     }
   },
 
+  questionCard(question) {
+    const typeColor = TYPE_COLORS[question.type] || '#64748b';
+    const typeLabel = TYPE_LABELS[question.type] || question.type;
+    const gradingBadge = question.gradingType === 'negative'
+      ? '<span class="grading-badge grading-negative" title="Negative marking">➖ Negative</span>'
+      : question.gradingType === 'manual'
+        ? '<span class="grading-badge grading-manual" title="Manual grading">📝 Manual</span>'
+        : '';
+    const truncText = question.text.length > 120 ? question.text.slice(0, 120) + '…' : question.text;
+    return `
+      <div class="qb-card">
+        <div class="qb-card-top">
+          <span class="type-badge" style="--type-color: ${typeColor}" title="${this.esc(typeLabel)}">${question.type}</span>
+          <span class="diff-badge diff-${question.difficulty.toLowerCase()}">${this.esc(question.difficulty)}</span>
+          ${gradingBadge}
+          <span class="qb-card-pts" title="Points">${question.points} pt${question.points === 1 ? '' : 's'}</span>
+        </div>
+        <div class="qb-card-body">
+          <p class="qb-card-text">${this.esc(truncText)}</p>
+          <div class="qb-card-meta">
+            <span class="qb-card-category">📂 ${this.esc(question.categoryName || 'Uncategorized')}</span>
+            ${question.mediaUrl ? '<span class="badge badge-tiny">📷 Image</span>' : ''}
+            ${question.hintText ? '<span class="badge badge-tiny">💡 Hint</span>' : ''}
+          </div>
+        </div>
+        <div class="qb-card-actions">
+          <button class="btn btn-ghost btn-sm qb-action-edit" onclick="App.showQuestionForm(${question.id}, ${question.courseId})">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="App.duplicateQuestion(${question.id})" title="Duplicate">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+          <button class="btn btn-ghost btn-sm qb-action-delete" onclick="App.deleteQuestion(${question.id})" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Delete
+          </button>
+        </div>
+      </div>
+    `;
+  },
+
+  // Keep legacy method for any other page that might use it
   questionTableRow(question) {
     const typeColor = TYPE_COLORS[question.type] || '#64748b';
     const gradingBadge = question.gradingType === 'negative'
