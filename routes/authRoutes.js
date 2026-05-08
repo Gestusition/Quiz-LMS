@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
-const { requireAuth, getSessionToken, SESSION_COOKIE_NAME } = require('../middleware/auth');
+const { authenticate, extractToken } = require('../middleware/auth');
 const {
   createRateLimiter,
   extractLoginIdentifier,
@@ -13,16 +13,14 @@ const {
 const { sendError } = require('../utils/appError');
 const { LIMITS } = require('../constants/limits');
 
-// Layer 1 — Global IP rate limiter: stops credential-spray attacks
-// (one IP hammering many different accounts).
+// ── Rate Limiters (unchanged) ────────────────────────────────
+
 const loginIpLimiter = createRateLimiter({
   windowMs: LIMITS.rateLimits.loginGlobalIpWindowMs,
   max: LIMITS.rateLimits.loginGlobalIpMax,
   message: 'Too many login attempts from this address. Please try again later.'
 });
 
-// Layer 2 — Per-IP+identifier rate limiter: stops password-guessing
-// against a single account from a single IP.
 const loginLimiter = createRateLimiter({
   windowMs: LIMITS.rateLimits.loginWindowMs,
   max: LIMITS.rateLimits.loginMax,
@@ -36,6 +34,10 @@ const resetLimiter = createRateLimiter({
   key: identifierKey,
   message: 'Too many password reset attempts. Please try again later.'
 });
+
+// ── Session cookie helpers ───────────────────────────────────
+
+const SESSION_COOKIE_NAME = 'auth_token';
 
 function sessionCookieOptions(expiresAt) {
   return {
@@ -63,6 +65,8 @@ function sendSession(res, session) {
     user: session.user
   });
 }
+
+// ── Routes ───────────────────────────────────────────────────
 
 /**
  * @swagger
@@ -99,9 +103,9 @@ function sendSession(res, session) {
  *                   type: integer
  */
 router.post('/login',
-  loginIpLimiter,         // Layer 1: global IP rate limit
-  accountLockoutGuard,    // Layer 3: per-account progressive lockout
-  loginLimiter,           // Layer 2: per-IP+identifier rate limit
+  loginIpLimiter,
+  accountLockoutGuard,
+  loginLimiter,
   (req, res) => {
     try {
       const identifier = extractLoginIdentifier(req.body);
@@ -203,9 +207,9 @@ router.post('/password-reset/complete', resetLimiter, (req, res) => {
  *       401:
  *         $ref: '#/components/responses/401Unauthorized'
  */
-router.post('/change-credentials', requireAuth, (req, res) => {
+router.post('/change-credentials', authenticate, (req, res) => {
   try {
-    const user = authService.changeOwnCredentials(req.user.id, req.authToken, req.body);
+    const user = authService.changeOwnCredentials(req.userId, req.token, req.body);
     res.json(user);
   } catch (err) {
     sendError(res, err, 400);
@@ -229,7 +233,8 @@ router.post('/change-credentials', requireAuth, (req, res) => {
  *         $ref: '#/components/responses/401Unauthorized'
  */
 router.post('/logout', (req, res) => {
-  authService.logout(getSessionToken(req));
+  const token = extractToken(req);
+  authService.logout(token);
   clearSessionCookie(res);
   res.json({ message: 'Logged out successfully.' });
 });
@@ -250,7 +255,7 @@ router.post('/logout', (req, res) => {
  *       401:
  *         $ref: '#/components/responses/401Unauthorized'
  */
-router.get('/me', requireAuth, (req, res) => {
+router.get('/me', authenticate, (req, res) => {
   res.json(req.user);
 });
 

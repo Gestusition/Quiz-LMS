@@ -1,7 +1,9 @@
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 
 const PASSWORD_KEY_LENGTH = 64;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
+const JWT_ALGORITHM = 'HS256';
 
 function getPasswordSpice() {
   if (process.env.NODE_ENV === 'production' && !process.env.PASSWORD_SPICE) {
@@ -9,6 +11,14 @@ function getPasswordSpice() {
   }
 
   return process.env.PASSWORD_SPICE || 'quiz-web-local-development-spice';
+}
+
+function getJwtSecret() {
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is required in production.');
+  }
+
+  return process.env.JWT_SECRET || 'quiz-web-local-jwt-secret';
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
@@ -81,6 +91,45 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+// ── JWT functions ──────────────────────────────────────────────
+
+/**
+ * Sign a JWT for the authenticated user session.
+ * @param {object} payload - { userId, role }
+ * @param {number|string} sessionId - the sessions table row id
+ * @returns {string} signed JWT
+ */
+function signJwt(payload, sessionId) {
+  return jwt.sign(
+    {
+      sub: payload.userId,
+      role: payload.role,
+      jti: String(sessionId)
+    },
+    getJwtSecret(),
+    {
+      algorithm: JWT_ALGORITHM,
+      expiresIn: Math.floor(SESSION_TTL_MS / 1000) // seconds
+    }
+  );
+}
+
+/**
+ * Verify a JWT and return the decoded payload.
+ * @param {string} token
+ * @returns {{ sub: number, role: string, jti: string, iat: number, exp: number } | null}
+ */
+function verifyJwt(token) {
+  try {
+    return jwt.verify(token, getJwtSecret(), {
+      algorithms: [JWT_ALGORITHM],
+      maxAge: Math.floor(SESSION_TTL_MS / 1000)
+    });
+  } catch (err) {
+    return null;
+  }
+}
+
 module.exports = {
   createOneTimeCode,
   createSessionToken,
@@ -89,6 +138,8 @@ module.exports = {
   hashSessionToken,
   nowIso,
   sessionExpiryDate,
+  signJwt,
+  verifyJwt,
   verifyOneTimeCode,
   verifyPassword
 };

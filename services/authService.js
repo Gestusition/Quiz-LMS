@@ -11,6 +11,8 @@ const {
   hashSessionToken,
   nowIso,
   sessionExpiryDate,
+  signJwt,
+  verifyJwt,
   verifyOneTimeCode,
   verifyPassword
 } = require('../utils/security');
@@ -61,11 +63,20 @@ class AuthService {
       safeMessage: 'Your account access is restricted. Please contact your instructor or administrator.'
     });
 
-    const token = createSessionToken();
-    const tokenHash = hashSessionToken(token);
     const expiresAt = sessionExpiryDate();
 
-    sessionRepository.create(user.id, tokenHash, expiresAt);
+    // Create a session row (for revocation capability) with a temporary unique tokenHash
+    const tempId = createSessionToken();
+    const tempHash = hashSessionToken(tempId);
+    const sessionResult = sessionRepository.create(user.id, tempHash, expiresAt);
+
+    // Sign a JWT bound to the session row id (jti claim)
+    const jwtPayload = { userId: user.id, role: user.role };
+    const token = signJwt(jwtPayload, sessionResult.lastInsertRowid);
+
+    // Store the hash of the JWT in the session row for revocation lookups
+    const tokenHash = hashSessionToken(token);
+    sessionRepository.updateTokenHash(sessionResult.lastInsertRowid, tokenHash);
 
     return {
       token,
@@ -76,6 +87,15 @@ class AuthService {
 
   logout(token) {
     if (!token) return true;
+
+    // Try JWT verification first to extract jti
+    const decoded = verifyJwt(token);
+    if (decoded && decoded.jti) {
+      sessionRepository.deleteById(Number(decoded.jti));
+      return true;
+    }
+
+    // Fallback: hash-based lookup for backwards compatibility
     sessionRepository.deleteByTokenHash(hashSessionToken(token));
     return true;
   }
@@ -83,16 +103,49 @@ class AuthService {
   getUserByToken(token) {
     if (!token) return null;
 
-    const row = sessionRepository.findUserByTokenHash(hashSessionToken(token));
-    if (!row) return null;
+    // Try JWT verification first
+    const decoded = verifyJwt(token);
+    if (decoded && decoded.sub && decoded.jti) {
+      // Check that the session still exists in the DB (revocation check)
+      const session = sessionRepository.findById(Number(decoded.jti));
+      if (!session) return null;
 
-    if (new Date(row.expiresAt).getTime() <= Date.now() || row.status !== 'active') {
-      sessionRepository.deleteById(row.sessionId);
+      // Check session expiry from DB as a secondary expiry gate
+      if (new Date(session.expiresAt).getTime() <= Date.now()) {
+        sessionRepository.deleteById(Number(decoded.jti));
+        return null;
+      }
+
+      // Fetch user with full profile joins
+      const user = userRepository.findPublicById(decoded.sub);
+      if (!user || user.status !== 'active') {
+        sessionRepository.deleteById(Number(decoded.jti));
+        return null;
+      }
+
+      sessionRepository.updateLastSeen(Number(decoded.jti), nowIso());
+
+      return serializeCurrentUser(user);
+    }
+
+    // Fallback: legacy hash-based lookup
+    const tokenHash = hashSessionToken(token);
+    const userFromHash = sessionRepository.findUserByTokenHash(tokenHash);
+    if (!userFromHash) return null;
+
+    if (new Date(userFromHash.expiresAt).getTime() <= Date.now()) {
+      sessionRepository.deleteById(userFromHash.sessionId);
       return null;
     }
 
-    sessionRepository.updateLastSeen(row.sessionId, nowIso());
-    return serializeCurrentUser(row);
+    if (userFromHash.status !== 'active') {
+      sessionRepository.deleteById(userFromHash.sessionId);
+      return null;
+    }
+
+    sessionRepository.updateLastSeen(userFromHash.sessionId, nowIso());
+
+    return serializeCurrentUser(userFromHash);
   }
 
   requestPasswordReset(identifier) {
@@ -224,7 +277,11 @@ class AuthService {
     const hashed = hashPassword(newPassword);
     userRepository.withTransaction(() => {
       userRepository.updateOwnCredentials(userId, username, hashed, nowIso());
-      sessionRepository.deleteOtherUserSessions(userId, hashSessionToken(token));
+
+      // Invalidate all other sessions for this user except the current one
+      const tokenHash = hashSessionToken(token);
+      sessionRepository.deleteOtherUserSessions(userId, tokenHash);
+
       profileRepository.touchAdminCredentialRotation(userId, nowIso());
     });
 

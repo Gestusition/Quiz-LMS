@@ -1,133 +1,280 @@
-const authService = require('../services/authService');
+const userRepository = require('../repositories/userRepository');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
-const restrictionService = require('../services/restrictionService');
-const { parseOptionalPositiveInt } = require('../utils/validation');
+const { verifyJwt } = require('../utils/security');
+const sessionRepository = require('../repositories/sessionRepository');
+const { serializeCurrentUser } = require('../serializers/userSerializer');
 
-const SESSION_COOKIE_NAME = 'auth_token';
-
-function parseCookies(cookieHeader = '') {
-  return cookieHeader
-    .split(';')
-    .map(part => part.trim())
-    .filter(Boolean)
-    .reduce((cookies, part) => {
-      const separator = part.indexOf('=');
-      if (separator === -1) return cookies;
-
-      const name = part.slice(0, separator);
-      const rawValue = part.slice(separator + 1);
-      try {
-        cookies[name] = decodeURIComponent(rawValue);
-      } catch (err) {
-        cookies[name] = rawValue;
+function extractToken(req) {
+  const cookieHeader = req.headers && req.headers.cookie;
+  if (typeof cookieHeader === 'string') {
+    const cookies = cookieHeader.split(';').map(c => c.trim());
+    for (const cookie of cookies) {
+      if (cookie.startsWith('auth_token=')) {
+        return cookie.substring('auth_token='.length);
       }
-      return cookies;
-    }, {});
-}
-
-function getSessionToken(req) {
-  if (req.headers.cookie) {
-    return parseCookies(req.headers.cookie)[SESSION_COOKIE_NAME] || '';
+    }
   }
-
   return '';
 }
 
-function requireAuth(req, res, next) {
-  const token = getSessionToken(req);
-  const user = authService.getUserByToken(token);
+/**
+ * Resolve user data from a decoded JWT without re-verifying the token.
+ * @param {object} decoded - Decoded JWT payload (must have sub and jti)
+ * @returns {object|null} Serialized user or null if invalid
+ */
+function resolveUserFromDecoded(decoded) {
+  const session = sessionRepository.findById(Number(decoded.jti));
+  if (!session) return null;
 
-  if (!user) {
-    return res.status(401).json({ error: 'Authentication required.' });
+  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+    sessionRepository.deleteById(Number(decoded.jti));
+    return null;
   }
 
-  req.authToken = token;
-  req.user = user;
+  const user = userRepository.findPublicById(decoded.sub);
+  if (!user || user.status !== 'active') {
+    sessionRepository.deleteById(Number(decoded.jti));
+    return null;
+  }
 
+  sessionRepository.updateLastSeen(Number(decoded.jti), new Date().toISOString());
+  return serializeCurrentUser(user);
+}
+
+/**
+ * Resolve user data from a legacy hash-based token (backwards compatibility).
+ * @param {string} token - Raw token string
+ * @returns {object|null} Serialized user or null if invalid
+ */
+function resolveUserFromLegacyToken(token) {
+  const { hashSessionToken } = require('../utils/security');
+  const tokenHash = hashSessionToken(token);
+  const userFromHash = sessionRepository.findUserByTokenHash(tokenHash);
+  if (!userFromHash) return null;
+
+  if (new Date(userFromHash.expiresAt).getTime() <= Date.now()) {
+    sessionRepository.deleteById(userFromHash.sessionId);
+    return null;
+  }
+
+  if (userFromHash.status !== 'active') {
+    sessionRepository.deleteById(userFromHash.sessionId);
+    return null;
+  }
+
+  sessionRepository.updateLastSeen(userFromHash.sessionId, new Date().toISOString());
+  return serializeCurrentUser(userFromHash);
+}
+
+/**
+ * Attach user data and token to the request object.
+ */
+function attachUserToRequest(req, user, decoded, token) {
+  req.user = user;
+  req.userId = user.id;
+  req.userRole = decoded ? (decoded.role || user.role) : user.role;
+  req.token = token;
+  req.ctx = {
+    user,
+    userId: user.id,
+    userRole: decoded ? (decoded.role || user.role) : user.role,
+    ...(decoded && decoded.jti ? { sessionId: Number(decoded.jti) } : {})
+  };
+}
+
+function checkCredentialsChange(req, user) {
+  if (user.mustChangeCredentials) {
+    const isAuthRoute = req.path.startsWith('/api/auth') || req.path.startsWith('/api/users/me/credentials');
+    if (!isAuthRoute) {
+      return {
+        status: 403,
+        json: {
+          status: 'error',
+          code: 'CREDENTIAL_CHANGE_REQUIRED',
+          message: 'You must change your username and password before proceeding.'
+        }
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * JWT Authentication Middleware
+ */
+function authenticate(req, res, next) {
   try {
-    restrictionService.assertAccessAllowed({
-      user,
-      restrictionType: 'account_suspended',
-      scopeType: 'global',
-      safeMessage: 'Your account is currently restricted. Please contact your instructor or administrator.'
+    const token = extractToken(req);
+    if (!token) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Authentication token is missing. Please sign in.'
+      });
+    }
+
+    const decoded = verifyJwt(token);
+    if (decoded && decoded.sub && decoded.jti) {
+      const user = resolveUserFromDecoded(decoded);
+      if (user) {
+        const restriction = checkCredentialsChange(req, user);
+        if (restriction) return res.status(restriction.status).json(restriction.json);
+
+        attachUserToRequest(req, user, decoded, token);
+        return next();
+      }
+      return res.status(401).json({
+        status: 'error',
+        message: 'Session has been revoked or user not found. Please sign in again.'
+      });
+    }
+
+    const user = resolveUserFromLegacyToken(token);
+    if (user) {
+      const restriction = checkCredentialsChange(req, user);
+      if (restriction) return res.status(restriction.status).json(restriction.json);
+
+      attachUserToRequest(req, user, null, token);
+      return next();
+    }
+
+    return res.status(401).json({
+      status: 'error',
+      message: 'Session expired or invalid. Please sign in again.'
     });
   } catch (err) {
-    return res.status(403).json({
-      error: 'Access restricted',
-      restriction_type: 'account_suspended',
-      message: 'Your account is currently restricted. Please contact your instructor or administrator.'
+    return res.status(500).json({
+      status: 'error',
+      message: 'Authentication failed due to an internal error.'
     });
   }
-
-  if (user.mustChangeCredentials && !isCredentialRotationRoute(req)) {
-    return res.status(403).json({
-      code: 'CREDENTIAL_CHANGE_REQUIRED',
-      error: 'You must change the default username and password before continuing.'
-    });
-  }
-  next();
 }
 
-function isCredentialRotationRoute(req) {
-  if (req.baseUrl !== '/api/auth') return false;
-  return ['/me', '/logout', '/change-credentials'].includes(req.path);
-}
-
-function requireRole(roles) {
-  const allowed = Array.isArray(roles) ? roles : [roles];
-  return (req, res, next) => {
-    if (!req.user || !allowed.includes(req.user.role)) {
-      return res.status(403).json({ error: 'You do not have permission to perform this action.' });
+/**
+ * Optional authentication.
+ * Attaches req.user if a valid token is present, otherwise continues without error.
+ */
+function optionallyAuthenticate(req, res, next) {
+  try {
+    const token = extractToken(req);
+    if (!token) {
+      return next();
     }
+
+    const decoded = verifyJwt(token);
+    if (decoded && decoded.sub && decoded.jti) {
+      const user = resolveUserFromDecoded(decoded);
+      if (user) {
+        attachUserToRequest(req, user, decoded, token);
+      }
+      return next();
+    }
+
+    // Fallback: try legacy hash-based lookup
+    const user = resolveUserFromLegacyToken(token);
+    if (user) {
+      attachUserToRequest(req, user, null, token);
+    }
+
+    next();
+  } catch (err) {
+    next();
+  }
+}
+
+/**
+ * Session validation middleware.
+ * This is used by routes that need to confirm the session is still valid
+ * and re-attach user data. It works with both JWT and legacy tokens.
+ */
+function validateSession(req, res, next) {
+  try {
+    const token = extractToken(req);
+    if (!token) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Session token is missing.'
+      });
+    }
+
+    // Try JWT first
+    const decoded = verifyJwt(token);
+    if (decoded && decoded.sub && decoded.jti) {
+      const user = resolveUserFromDecoded(decoded);
+      if (user) {
+        attachUserToRequest(req, user, decoded, token);
+        return next();
+      }
+      return res.status(401).json({
+        status: 'error',
+        message: 'Session expired or invalid.'
+      });
+    }
+
+    // Fallback: legacy hash-based lookup
+    const user = resolveUserFromLegacyToken(token);
+    if (!user) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Session expired or invalid.'
+      });
+    }
+
+    attachUserToRequest(req, user, null, token);
+    next();
+  } catch (err) {
+    return res.status(500).json({
+      status: 'error',
+      message: 'Session validation failed.'
+    });
+  }
+}
+
+/**
+ * Role-based access middleware.
+ */
+function requireRole(...allowedRoles) {
+  const roles = Array.isArray(allowedRoles[0]) ? allowedRoles[0] : allowedRoles;
+  return (req, res, next) => {
+    if (!req.userRole) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Access denied. No role assigned.'
+      });
+    }
+
+    if (!roles.includes(req.userRole)) {
+      return res.status(403).json({
+        status: 'error',
+        message: `Access denied. Required role: ${roles.join(' or ')}.`
+      });
+    }
+
     next();
   };
 }
 
-function canManageCourse(user, courseId) {
-  return enrollmentRepository.canManageCourse(user, courseId);
-}
-
+/**
+ * Check whether a user can access a given course (student, teacher, or admin).
+ */
 function canAccessCourse(user, courseId) {
   return enrollmentRepository.canAccessCourse(user, courseId);
 }
 
-function requireCourseAccess(paramName = 'courseId') {
-  return (req, res, next) => {
-    let courseId;
-    try {
-      courseId = parseOptionalPositiveInt(req.params[paramName] || req.body.courseId || req.query.courseId, 'courseId');
-    } catch (err) {
-      return res.status(400).json({ error: 'Invalid course ID.' });
-    }
-    if (!courseId || !canAccessCourse(req.user, courseId)) {
-      return res.status(403).json({ error: 'Course access required.' });
-    }
-    next();
-  };
-}
-
-function requireCourseManager(paramName = 'courseId') {
-  return (req, res, next) => {
-    let courseId;
-    try {
-      courseId = parseOptionalPositiveInt(req.params[paramName] || req.body.courseId || req.query.courseId, 'courseId');
-    } catch (err) {
-      return res.status(400).json({ error: 'Invalid course ID.' });
-    }
-    if (!courseId || !canManageCourse(req.user, courseId)) {
-      return res.status(403).json({ error: 'Teacher or admin course access required.' });
-    }
-    next();
-  };
+/**
+ * Check whether a user can manage a given course (teacher or admin).
+ */
+function canManageCourse(user, courseId) {
+  return enrollmentRepository.canManageCourse(user, courseId);
 }
 
 module.exports = {
+  authenticate,
+  optionallyAuthenticate,
+  validateSession,
+  requireRole,
+  extractToken,
   canAccessCourse,
   canManageCourse,
-  getSessionToken,
-  SESSION_COOKIE_NAME,
-  requireAuth,
-  requireCourseAccess,
-  requireCourseManager,
-  requireRole
+  // Backwards-compatible alias
+  requireAuth: authenticate
 };
