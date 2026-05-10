@@ -850,11 +850,18 @@ export const QuestionsPage = {
   // Bind change/blur events on inline point inputs in Question Bank cards
   bindPointsInputs() {
     document.querySelectorAll('.qb-card-pts-input').forEach(inp => {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+          e.preventDefault();
+        }
+      });
+
       // Mark as edited when user manually changes the value
       inp.addEventListener('input', () => {
         inp.dataset.edited = 'true';
-        // Clamp to max 100
-        if (Number(inp.value) > 100) inp.value = 100;
+        let val = Number(inp.value);
+        if (val > 100) inp.value = 100;
+        if (val < 0 && inp.value !== '') inp.value = Math.abs(val);
         if (this._qbUpdateTotal) this._qbUpdateTotal();
       });
 
@@ -862,7 +869,7 @@ export const QuestionsPage = {
       inp.addEventListener('change', async () => {
         let pts = Number(inp.value) || 0;
         if (pts > 100) { pts = 100; inp.value = 100; }
-        if (pts < 0) { pts = 0; inp.value = 0; }
+        if (pts < 0.1) { pts = 0.1; inp.value = 0.1; }
         const qId = Number(inp.dataset.qid);
         const original = Number(inp.dataset.original);
         if (pts === original) return;

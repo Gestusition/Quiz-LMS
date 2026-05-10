@@ -451,9 +451,29 @@ export const QuizzesPage = {
     };
     this._updateAssignTotal = updateAssignTotal;
 
+    document.getElementById('assigned-list')?.addEventListener('keydown', (e) => {
+      if (e.target.classList.contains('assign-pts-input')) {
+        if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+          e.preventDefault();
+        }
+      }
+    });
+
     document.getElementById('assigned-list')?.addEventListener('input', (e) => {
       if (e.target.classList.contains('assign-pts-input')) {
         e.target.dataset.edited = 'true';
+        let val = Number(e.target.value);
+        if (val > 100) e.target.value = 100;
+        if (val < 0 && e.target.value !== '') e.target.value = Math.abs(val);
+        updateAssignTotal();
+      }
+    });
+
+    document.getElementById('assigned-list')?.addEventListener('change', (e) => {
+      if (e.target.classList.contains('assign-pts-input')) {
+        let val = Number(e.target.value) || 0;
+        if (val < 0.1) e.target.value = 0.1;
+        if (val > 100) e.target.value = 100;
         updateAssignTotal();
       }
     });
