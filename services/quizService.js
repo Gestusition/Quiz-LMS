@@ -2,6 +2,7 @@ const courseRepository = require('../repositories/courseRepository');
 const enrollmentRepository = require('../repositories/enrollmentRepository');
 const questionRepository = require('../repositories/questionRepository');
 const quizRepository = require('../repositories/quizRepository');
+const resourceAccessRepository = require('../repositories/resourceAccessRepository');
 const { quizStatusValues } = require('../constants/enums');
 const { validateQuiz } = require('../validators/quizValidators');
 const {
@@ -13,6 +14,7 @@ const { nowIso } = require('../utils/security');
 const restrictionService = require('./restrictionService');
 const validationIssueService = require('./validationIssueService');
 const auditService = require('./auditService');
+const resourceAccessService = require('./resourceAccessService');
 const gradeSchemeService = require('./gradeSchemeService');
 const questionService = require('./questionService');
 const { forbiddenError, notFoundError, validationError } = require('../utils/appError');
@@ -33,7 +35,7 @@ class QuizService {
   }
 
   getById(id, options = {}) {
-    const quiz = serializeQuiz(quizRepository.getById(id));
+    const quiz = serializeQuiz(quizRepository.getById(id, options.user || null));
     if (!quiz) return null;
 
     if (options.includeQuestions) {
@@ -57,7 +59,7 @@ class QuizService {
     }
 
     const result = quizRepository.insert(payload, user.id);
-    const quiz = this.getById(result.lastInsertRowid, { includeQuestions: true, includeCorrect: true });
+    const quiz = this.getById(result.lastInsertRowid, { includeQuestions: true, includeCorrect: true, user });
     auditService.log({
       actorUserId: user.id,
       action: 'QUIZ_CREATED',
@@ -101,8 +103,8 @@ class QuizService {
       this.assertQuizPublishable(this.buildPublishableCandidate(id, payload));
     }
 
-    quizRepository.update(id, payload, nowIso());
-    const quiz = this.getById(id, { includeQuestions: true, includeCorrect: true });
+    quizRepository.update(id, payload, nowIso(), user ? user.id : null);
+    const quiz = this.getById(id, { includeQuestions: true, includeCorrect: true, user });
 
     if (quiz.status === 'published') {
       auditService.log({
@@ -117,17 +119,23 @@ class QuizService {
     return quiz;
   }
 
-  delete(id) {
+  delete(id, user = null) {
     const existing = quizRepository.findById(id);
     if (!existing) {
       throw notFoundError('Quiz not found.');
     }
+    if (user && user.role !== 'admin' && Number(existing.createdBy) !== Number(user.id)) {
+      throw forbiddenError('Only the quiz owner or an admin can delete this quiz.');
+    }
 
+    resourceAccessRepository.deleteForResource('quiz', id);
     quizRepository.deleteById(id);
     return true;
   }
 
-  setQuestions(quizId, questionIds, actorUserId = null) {
+  setQuestions(quizId, questionIds, actor = null) {
+    const actorUser = actor && typeof actor === 'object' ? actor : null;
+    const actorUserId = actorUser ? actorUser.id : actor;
     if (!Array.isArray(questionIds)) {
       throw validationError('question_ids', 'questionIds must be an array.');
     }
@@ -172,7 +180,7 @@ class QuizService {
       throw notFoundError('Quiz not found.');
     }
 
-    const questions = questionRepository.findByIdsWithCourse(uniqueIds);
+    const questions = questionRepository.findByIdsWithCourse(uniqueIds, actorUser);
     if (questions.length !== uniqueIds.length) {
       throw validationError('question_ids', 'One or more questions were not found.');
     }
@@ -472,6 +480,46 @@ class QuizService {
       details: { showResultPolicy: quiz.showResultPolicy }
     });
     return this.getById(quizId, { includeQuestions: true, includeCorrect: true });
+  }
+
+  share(id, data, actor) {
+    const quiz = quizRepository.findById(id);
+    if (!quiz) throw notFoundError('Quiz not found.');
+    this.assertCanWriteQuiz(quiz, actor);
+    return resourceAccessService.share('quiz', id, data, actor);
+  }
+
+  accessSummary(id, actor) {
+    const quiz = quizRepository.findById(id);
+    if (!quiz) throw notFoundError('Quiz not found.');
+    this.assertCanWriteQuiz(quiz, actor);
+    return resourceAccessService.summary('quiz', id);
+  }
+
+  removeAccess(id, teacherUserId, actor) {
+    const quiz = quizRepository.findById(id);
+    if (!quiz) throw notFoundError('Quiz not found.');
+    this.assertCanWriteQuiz(quiz, actor);
+    resourceAccessService.remove('quiz', id, teacherUserId, actor);
+    return this.accessSummary(id, actor);
+  }
+
+  assertCanReadQuiz(quiz, user) {
+    if (!user || user.role === 'admin') return;
+    if (user.role === 'student') return;
+    if (user.role !== 'teacher') throw forbiddenError('Teacher or admin access required.');
+    if (Number(quiz.createdBy) === Number(user.id)) return;
+    if (resourceAccessRepository.findGrant('quiz', quiz.id, user.id)) return;
+    throw forbiddenError('Quiz access required.');
+  }
+
+  assertCanWriteQuiz(quiz, user) {
+    if (!user || user.role === 'admin') return;
+    if (user.role !== 'teacher') throw forbiddenError('Teacher or admin access required.');
+    if (Number(quiz.createdBy) === Number(user.id)) return;
+    const grant = resourceAccessRepository.findGrant('quiz', quiz.id, user.id);
+    if (grant && grant.accessLevel === 'write') return;
+    throw forbiddenError('Full quiz access is required.');
   }
 
   getGradebook(courseId) {

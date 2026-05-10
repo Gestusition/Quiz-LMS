@@ -6,16 +6,35 @@ function list(user, filters = {}, validStatuses = []) {
     SELECT q.*,
       c.title as courseTitle,
       c.code as courseCode,
+      creator.name as createdByName,
+      updater.name as updatedByName,
+      ${user.role === 'teacher' ? `(SELECT qg.accessLevel FROM users.resource_access_grants qg
+        WHERE qg.resourceType = 'quiz' AND qg.resourceId = q.id AND qg.teacherUserId = ?
+        LIMIT 1)` : 'NULL'} as accessLevel,
       COUNT(DISTINCT qq.questionId) as questionCount,
       COALESCE(SUM(qq.points), 0) as maxScore
     FROM quizzes q
     JOIN courses c ON c.id = q.courseId
     LEFT JOIN quiz_questions qq ON qq.quizId = q.id
+    LEFT JOIN users creator ON creator.id = q.createdBy
+    LEFT JOIN users updater ON updater.id = q.updatedBy
     WHERE 1=1
   `;
   const params = [];
+  if (user.role === 'teacher') params.push(user.id);
 
-  if (user.role !== 'admin') {
+  if (user.role === 'teacher') {
+    query += ` AND (
+      q.createdBy = ?
+      OR EXISTS (
+        SELECT 1 FROM users.resource_access_grants qg
+        WHERE qg.resourceType = 'quiz'
+          AND qg.resourceId = q.id
+          AND qg.teacherUserId = ?
+      )
+    )`;
+    params.push(user.id, user.id);
+  } else if (user.role !== 'admin') {
     query += ` AND q.courseId IN (
       SELECT courseId FROM enrollments WHERE userId = ? AND status = 'active'
     )`;
@@ -45,13 +64,22 @@ function findById(id) {
   return getDatabase().prepare('SELECT * FROM quizzes WHERE id = ?').get(id) || null;
 }
 
-function getById(id) {
+function getById(id, user = null) {
+  const isTeacher = user && user.role === 'teacher';
+  const params = isTeacher ? [user.id, id] : [id];
   return getDatabase().prepare(`
-    SELECT q.*, c.title as courseTitle, c.code as courseCode
+    SELECT q.*, c.title as courseTitle, c.code as courseCode,
+      creator.name as createdByName,
+      updater.name as updatedByName,
+      ${isTeacher ? `(SELECT qg.accessLevel FROM users.resource_access_grants qg
+        WHERE qg.resourceType = 'quiz' AND qg.resourceId = q.id AND qg.teacherUserId = ?
+        LIMIT 1)` : 'NULL'} as accessLevel
     FROM quizzes q
     JOIN courses c ON c.id = q.courseId
+    LEFT JOIN users creator ON creator.id = q.createdBy
+    LEFT JOIN users updater ON updater.id = q.updatedBy
     WHERE q.id = ?
-  `).get(id) || null;
+  `).get(...params) || null;
 }
 
 function insert(payload, userId) {
@@ -93,14 +121,14 @@ function insert(payload, userId) {
   );
 }
 
-function update(id, payload, updatedAt) {
+function update(id, payload, updatedAt, actorUserId = null) {
   return getDatabase().prepare(`
     UPDATE quizzes
     SET courseId = ?, title = ?, description = ?, status = ?, openAt = ?, closeAt = ?,
       timeLimitMinutes = ?, attemptsAllowed = ?, shuffleQuestions = ?, showCorrectAnswers = ?,
       startAt = ?, endAt = ?, durationMinutes = ?, maxAttempts = ?, shuffleOptions = ?, showResultPolicy = ?,
       gradingMode = ?, penaltyEnabled = ?, penaltyPerWrong = ?, penaltyRatio = ?, requiresSeb = ?,
-      sebConfigName = ?, sebConfigUrl = ?, templateName = ?,
+      sebConfigName = ?, sebConfigUrl = ?, templateName = ?, updatedBy = ?,
       updatedAt = ?
     WHERE id = ?
   `).run(
@@ -128,6 +156,7 @@ function update(id, payload, updatedAt) {
     payload.sebConfigName || '',
     payload.sebConfigUrl || '',
     payload.templateName || '',
+    actorUserId,
     updatedAt,
     id
   );

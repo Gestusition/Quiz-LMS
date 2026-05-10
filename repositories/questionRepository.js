@@ -2,14 +2,33 @@ const { getDatabase } = require('../database/db');
 
 function list(filters = {}, validTypes = [], validDifficulties = []) {
   const db = getDatabase();
+  const viewerId = filters.user && filters.user.role === 'teacher' ? Number(filters.user.id) : null;
   let query = `
-    SELECT q.*, c.name as categoryName, c.courseId, courses.title as courseTitle
+    SELECT q.*, c.name as categoryName, c.courseId, c.createdBy as categoryCreatedBy, courses.title as courseTitle,
+      creator.name as createdByName,
+      updater.name as updatedByName,
+      ${viewerId ? 'qs.points' : 'NULL'} as viewerPoints,
+      ${viewerId ? 'qs.gradingType' : 'NULL'} as viewerGradingType,
+      ${viewerId ? `
+        COALESCE(
+          (SELECT qg.accessLevel FROM users.resource_access_grants qg
+            WHERE qg.resourceType = 'question' AND qg.resourceId = q.id AND qg.teacherUserId = ?
+            LIMIT 1),
+          (SELECT cg.accessLevel FROM users.resource_access_grants cg
+            WHERE cg.resourceType = 'category' AND cg.resourceId = c.id AND cg.teacherUserId = ?
+            LIMIT 1)
+        )
+      ` : 'NULL'} as accessLevel
     FROM questions q
     LEFT JOIN categories c ON c.id = q.categoryId
     LEFT JOIN courses ON courses.id = c.courseId
+    LEFT JOIN users creator ON creator.id = q.createdBy
+    LEFT JOIN users updater ON updater.id = q.updatedBy
+    ${viewerId ? 'LEFT JOIN question_user_settings qs ON qs.questionId = q.id AND qs.userId = ?' : ''}
     WHERE 1=1
   `;
   const params = [];
+  if (viewerId) params.push(viewerId, viewerId, viewerId);
 
   if (filters.categoryId) {
     query += ' AND q.categoryId = ?';
@@ -19,7 +38,25 @@ function list(filters = {}, validTypes = [], validDifficulties = []) {
     query += ' AND c.courseId = ?';
     params.push(filters.courseId);
   }
-  if (filters.user && filters.user.role !== 'admin') {
+  if (filters.user && filters.user.role === 'teacher') {
+    query += ` AND (
+      q.createdBy = ?
+      OR c.createdBy = ?
+      OR EXISTS (
+        SELECT 1 FROM users.resource_access_grants qg
+        WHERE qg.resourceType = 'question'
+          AND qg.resourceId = q.id
+          AND qg.teacherUserId = ?
+      )
+      OR EXISTS (
+        SELECT 1 FROM users.resource_access_grants cg
+        WHERE cg.resourceType = 'category'
+          AND cg.resourceId = c.id
+          AND cg.teacherUserId = ?
+      )
+    )`;
+    params.push(filters.user.id, filters.user.id, filters.user.id, filters.user.id);
+  } else if (filters.user && filters.user.role === 'student') {
     query += ` AND c.courseId IN (
       SELECT courseId FROM enrollments WHERE userId = ? AND status = 'active'
     )`;
@@ -42,26 +79,56 @@ function list(filters = {}, validTypes = [], validDifficulties = []) {
   return db.prepare(query).all(...params);
 }
 
-function getById(id) {
+function getById(id, user = null) {
+  const viewerId = user && user.role === 'teacher' ? Number(user.id) : null;
+  const params = [];
+  if (viewerId) params.push(viewerId, viewerId, viewerId);
+  params.push(id);
   return getDatabase().prepare(`
-    SELECT q.*, c.name as categoryName, c.courseId, courses.title as courseTitle
+    SELECT q.*, c.name as categoryName, c.courseId, c.createdBy as categoryCreatedBy, courses.title as courseTitle,
+      creator.name as createdByName,
+      updater.name as updatedByName,
+      ${viewerId ? 'qs.points' : 'NULL'} as viewerPoints,
+      ${viewerId ? 'qs.gradingType' : 'NULL'} as viewerGradingType,
+      ${viewerId ? `
+        COALESCE(
+          (SELECT qg.accessLevel FROM users.resource_access_grants qg
+            WHERE qg.resourceType = 'question' AND qg.resourceId = q.id AND qg.teacherUserId = ?
+            LIMIT 1),
+          (SELECT cg.accessLevel FROM users.resource_access_grants cg
+            WHERE cg.resourceType = 'category' AND cg.resourceId = c.id AND cg.teacherUserId = ?
+            LIMIT 1)
+        )
+      ` : 'NULL'} as accessLevel
     FROM questions q
     LEFT JOIN categories c ON c.id = q.categoryId
     LEFT JOIN courses ON courses.id = c.courseId
+    LEFT JOIN users creator ON creator.id = q.createdBy
+    LEFT JOIN users updater ON updater.id = q.updatedBy
+    ${viewerId ? 'LEFT JOIN question_user_settings qs ON qs.questionId = q.id AND qs.userId = ?' : ''}
     WHERE q.id = ?
-  `).get(id) || null;
+  `).get(...params) || null;
 }
 
 function getRandom(opts = {}, validDifficulties = []) {
   const db = getDatabase();
+  const viewerId = opts.user && opts.user.role === 'teacher' ? Number(opts.user.id) : null;
   let query = `
-    SELECT q.*, c.name as categoryName, c.courseId, courses.title as courseTitle
+    SELECT q.*, c.name as categoryName, c.courseId, c.createdBy as categoryCreatedBy, courses.title as courseTitle,
+      creator.name as createdByName,
+      updater.name as updatedByName,
+      ${viewerId ? 'qs.points' : 'NULL'} as viewerPoints,
+      ${viewerId ? 'qs.gradingType' : 'NULL'} as viewerGradingType
     FROM questions q
     LEFT JOIN categories c ON c.id = q.categoryId
     LEFT JOIN courses ON courses.id = c.courseId
+    LEFT JOIN users creator ON creator.id = q.createdBy
+    LEFT JOIN users updater ON updater.id = q.updatedBy
+    ${viewerId ? 'LEFT JOIN question_user_settings qs ON qs.questionId = q.id AND qs.userId = ?' : ''}
     WHERE 1=1
   `;
   const params = [];
+  if (viewerId) params.push(viewerId);
 
   if (opts.categoryId) {
     query += ' AND q.categoryId = ?';
@@ -71,7 +138,25 @@ function getRandom(opts = {}, validDifficulties = []) {
     query += ' AND c.courseId = ?';
     params.push(opts.courseId);
   }
-  if (opts.user && opts.user.role !== 'admin') {
+  if (opts.user && opts.user.role === 'teacher') {
+    query += ` AND (
+      q.createdBy = ?
+      OR c.createdBy = ?
+      OR EXISTS (
+        SELECT 1 FROM users.resource_access_grants qg
+        WHERE qg.resourceType = 'question'
+          AND qg.resourceId = q.id
+          AND qg.teacherUserId = ?
+      )
+      OR EXISTS (
+        SELECT 1 FROM users.resource_access_grants cg
+        WHERE cg.resourceType = 'category'
+          AND cg.resourceId = c.id
+          AND cg.teacherUserId = ?
+      )
+    )`;
+    params.push(opts.user.id, opts.user.id, opts.user.id, opts.user.id);
+  } else if (opts.user && opts.user.role === 'student') {
     query += ` AND c.courseId IN (
       SELECT courseId FROM enrollments WHERE userId = ? AND status = 'active'
     )`;
@@ -114,12 +199,12 @@ function insert(payload, userId) {
   );
 }
 
-function update(id, payload) {
+function update(id, payload, actorUserId = null) {
   return getDatabase().prepare(
     `UPDATE questions
     SET categoryId = ?, text = ?, type = ?, options = ?, correctAnswer = ?, difficulty = ?, points = ?,
       acceptedAnswers = ?, caseSensitive = ?, richText = ?, explanationText = ?, hintText = ?, mediaUrl = ?,
-      gradingType = ?, status = 'valid', validationMessage = ''
+      gradingType = ?, status = 'valid', validationMessage = '', updatedBy = ?, updatedAt = datetime('now')
     WHERE id = ?`
   ).run(
     payload.categoryId,
@@ -136,7 +221,28 @@ function update(id, payload) {
     payload.hintText || '',
     payload.mediaUrl || '',
     payload.gradingType || 'standard',
+    actorUserId,
     id
+  );
+}
+
+function upsertUserSettings(questionId, userId, settings) {
+  return getDatabase().prepare(`
+    INSERT INTO question_user_settings (questionId, userId, points, gradingType, updatedAt)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(questionId, userId)
+    DO UPDATE SET
+      points = COALESCE(excluded.points, question_user_settings.points),
+      gradingType = CASE
+        WHEN excluded.gradingType IS NULL OR excluded.gradingType = '' THEN question_user_settings.gradingType
+        ELSE excluded.gradingType
+      END,
+      updatedAt = datetime('now')
+  `).run(
+    questionId,
+    userId,
+    settings.points !== undefined ? settings.points : null,
+    settings.gradingType || ''
   );
 }
 
@@ -224,15 +330,40 @@ function deleteByCategoryIds(categoryIds) {
   getDatabase().prepare(`DELETE FROM questions WHERE categoryId IN (${placeholders})`).run(...categoryIds);
 }
 
-function findByIdsWithCourse(questionIds) {
+function findByIdsWithCourse(questionIds, user = null) {
   if (!questionIds.length) return [];
   const placeholders = questionIds.map(() => '?').join(',');
+  const viewerId = user && user.role === 'teacher' ? Number(user.id) : null;
+  const params = viewerId ? [viewerId, ...questionIds] : [...questionIds];
+  const accessClause = user && user.role === 'teacher'
+    ? ` AND (
+      q.createdBy = ?
+      OR c.createdBy = ?
+      OR EXISTS (
+        SELECT 1 FROM users.resource_access_grants qg
+        WHERE qg.resourceType = 'question'
+          AND qg.resourceId = q.id
+          AND qg.teacherUserId = ?
+      )
+      OR EXISTS (
+        SELECT 1 FROM users.resource_access_grants cg
+        WHERE cg.resourceType = 'category'
+          AND cg.resourceId = c.id
+          AND cg.teacherUserId = ?
+      )
+    )`
+    : '';
+  if (user && user.role === 'teacher') {
+    params.push(user.id, user.id, user.id, user.id);
+  }
   return getDatabase().prepare(`
-    SELECT q.id, q.points, c.courseId
+    SELECT q.id, ${viewerId ? 'COALESCE(qs.points, q.points)' : 'q.points'} as points, c.courseId, q.createdBy, c.createdBy as categoryCreatedBy
     FROM questions q
     JOIN categories c ON c.id = q.categoryId
+    ${viewerId ? 'LEFT JOIN question_user_settings qs ON qs.questionId = q.id AND qs.userId = ?' : ''}
     WHERE q.id IN (${placeholders})
-  `).all(...questionIds);
+    ${accessClause}
+  `).all(...params);
 }
 
 function clearCreatedBy(userId) {
@@ -256,5 +387,6 @@ module.exports = {
   insertTableConfig,
   list,
   setValidationStatus,
+  upsertUserSettings,
   update
 };

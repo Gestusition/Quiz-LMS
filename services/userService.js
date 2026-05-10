@@ -14,6 +14,7 @@ const quizRepository = require('../repositories/quizRepository');
 const contentRepository = require('../repositories/contentRepository');
 const restrictionRepository = require('../repositories/restrictionRepository');
 const validationIssueRepository = require('../repositories/validationIssueRepository');
+const resourceAccessRepository = require('../repositories/resourceAccessRepository');
 const { roleValues } = require('../constants/enums');
 const {
   validatePassword,
@@ -227,6 +228,7 @@ class UserService {
       restrictionRepository.deleteByUserId(id);
       restrictionRepository.clearCreatedBy(id);
       validationIssueRepository.clearUserReferences(id);
+      resourceAccessRepository.clearUserReferences(id);
       passwordResetRepository.deleteByUserId(id);
       sessionRepository.deleteByUserId(id);
       profileRepository.deleteForUser(id);

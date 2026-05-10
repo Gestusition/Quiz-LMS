@@ -67,6 +67,13 @@ export const QuizzesPage = {
     const statusMap = { draft: 'status-draft', published: 'status-published', closed: 'status-closed' };
     const statusClass = statusMap[quiz.status] || '';
     const isManager = this.canManageLearning();
+    const readOnly = quiz.accessLevel === 'read';
+    const canDelete = this.user.role === 'admin' || Number(quiz.createdBy) === Number(this.user.id);
+    const attribution = [
+      quiz.createdByName ? `Created by ${this.esc(quiz.createdByName)}` : '',
+      quiz.updatedByName ? `Edited by ${this.esc(quiz.updatedByName)}` : '',
+      quiz.accessLevel ? `${quiz.accessLevel === 'write' ? 'Full access' : 'Read only'}` : ''
+    ].filter(Boolean).join(' - ');
 
     return `
       <div class="quiz-card">
@@ -76,6 +83,7 @@ export const QuizzesPage = {
         </div>
         <h3 class="quiz-card-title">${this.esc(quiz.title)}</h3>
         <p class="quiz-card-desc">${this.esc((quiz.description || '').slice(0, 120))}</p>
+        ${attribution ? `<small class="muted">${attribution}</small>` : ''}
         <div class="quiz-card-meta">
           <span title="Questions">📋 ${quiz.questionCount || 0}</span>
           <span title="Duration">⏱ ${quiz.durationMinutes || quiz.timeLimitMinutes || 0}m</span>
@@ -84,12 +92,13 @@ export const QuizzesPage = {
         </div>
         <div class="quiz-card-actions">
           ${isManager ? `
-            <button class="btn btn-ghost btn-sm" onclick="App.showQuizForm(${quiz.id})">Edit</button>
+            ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" onclick="App.showQuizForm(${quiz.id})">Edit</button>
             <button class="btn btn-ghost btn-sm" onclick="App.showAssignQuestions(${quiz.id})">Questions</button>
-            <button class="btn btn-ghost btn-sm" onclick="App.showQuizAttempts(${quiz.id})">Attempts</button>
+            <button class="btn btn-ghost btn-sm" onclick="App.showShareQuizForm(${quiz.id})">Shared Access</button>`}
+            ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" onclick="App.showQuizAttempts(${quiz.id})">Attempts</button>`}
             ${quiz.showResultPolicy === 'after_manual_release' ? `<button class="btn btn-ghost btn-sm" onclick="App.releaseQuizResults(${quiz.id})">${quiz.manualResultReleasedAt ? 'Results released' : 'Release results'}</button>` : ''}
-            <button class="btn btn-ghost btn-sm" onclick="App.saveAsTemplate(${quiz.id})">Save as Template</button>
-            <button class="btn btn-danger btn-sm" onclick="App.deleteQuiz(${quiz.id})">Delete</button>
+            ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" onclick="App.saveAsTemplate(${quiz.id})">Save as Template</button>`}
+            ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="App.deleteQuiz(${quiz.id})">Delete</button>` : ''}
           ` : `
             ${quiz.isOpen ? `<button class="btn btn-primary btn-sm" onclick="App.startQuizAttempt(${quiz.id})">Start</button>` : ''}
             <button class="btn btn-ghost btn-sm" onclick="App.showQuizAttempts(${quiz.id})">My Attempts</button>
@@ -660,6 +669,10 @@ export const QuizzesPage = {
     } catch (err) {
       this.toast(err.message, 'error');
     }
+  },
+
+  showShareQuizForm(id) {
+    this.openAccessManager('quiz', id, 'Quiz shared access');
   },
 
   async saveAsTemplate(quizId) {

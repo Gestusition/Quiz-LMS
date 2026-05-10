@@ -43,7 +43,7 @@ Login identifiers are intentionally strict:
 
 Student email login, teacher employee-number login, and teacher username login are rejected even when the password is correct. If an identifier is ambiguous across academic identifiers, login is rejected with a safe message.
 
-Browser sessions use server-set `HttpOnly`, `Secure`, `SameSite=Strict` cookies. The frontend does not store session tokens in `localStorage`, does not write readable auth cookies, and the backend does not accept session tokens through query parameters.
+Browser sessions use signed JWTs in server-set `HttpOnly`, `Secure`, `SameSite=Strict` cookies. The frontend does not store session tokens in `localStorage`, does not write readable auth cookies, and the backend does not accept session tokens through query parameters.
 
 Production requires `PASSWORD_SPICE`; startup/auth crypto fails fast if `NODE_ENV=production` is set without it.
 

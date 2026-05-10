@@ -1,6 +1,6 @@
 function serializeQuestion(question) {
   if (!question) return null;
-  return {
+  const serialized = {
     ...question,
     options: JSON.parse(question.options || '[]'),
     acceptedAnswers: JSON.parse(question.acceptedAnswers || '[]'),
@@ -11,8 +11,16 @@ function serializeQuestion(question) {
     explanationText: question.explanationText || '',
     hintText: question.hintText || '',
     mediaUrl: question.mediaUrl || '',
-    gradingType: question.gradingType || 'standard'
+    points: question.viewerPoints !== null && question.viewerPoints !== undefined
+      ? Number(question.viewerPoints)
+      : Number(question.points || 1),
+    gradingType: question.viewerGradingType || question.gradingType || 'standard',
+    createdByName: question.createdByName || '',
+    updatedByName: question.updatedByName || ''
   };
+  delete serialized.viewerPoints;
+  delete serialized.viewerGradingType;
+  return serialized;
 }
 
 module.exports = { serializeQuestion };

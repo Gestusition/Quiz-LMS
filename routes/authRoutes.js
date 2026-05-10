@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
+const auditService = require('../services/auditService');
 const { authenticate, extractToken } = require('../middleware/auth');
 const {
   createRateLimiter,
@@ -13,7 +14,7 @@ const {
 const { sendError } = require('../utils/appError');
 const { LIMITS } = require('../constants/limits');
 
-// ── Rate Limiters (unchanged) ────────────────────────────────
+// ── Rate Limiters ────────────────────────────────────────────
 
 const loginIpLimiter = createRateLimiter({
   windowMs: LIMITS.rateLimits.loginGlobalIpWindowMs,
@@ -66,6 +67,32 @@ function sendSession(res, session) {
   });
 }
 
+function auditFailedLogin(req, identifier, err) {
+  const subject = authService.findAuditSubjectForIdentifier(identifier);
+  if (!subject) return;
+
+  auditService.log({
+    actorUserId: subject.id,
+    action: 'LOGIN_FAILED',
+    entityType: 'user',
+    entityId: subject.id,
+    details: {
+      identifierType: subject.matchType,
+      identifier: String(identifier || '').trim(),
+      reason: loginFailureReason(err),
+      ip: req.ip || req.socket?.remoteAddress || '',
+      userAgent: String(req.get('user-agent') || '').slice(0, 200)
+    }
+  });
+}
+
+function loginFailureReason(err) {
+  if (err && err.status === 403) return 'access_restricted';
+  if (err && err.status === 409) return 'ambiguous_identifier';
+  if (err && err.status === 400) return 'invalid_request';
+  return 'invalid_credentials';
+}
+
 // ── Routes ───────────────────────────────────────────────────
 
 /**
@@ -115,6 +142,7 @@ router.post('/login',
     } catch (err) {
       const identifier = extractLoginIdentifier(req.body);
       recordLoginFailure(identifier);
+      auditFailedLogin(req, identifier, err);
       sendError(res, err, 401);
     }
   }

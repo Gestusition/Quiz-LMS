@@ -205,12 +205,71 @@ function findLoginCandidates(identifier) {
   `).all(value, value, value, value);
 }
 
+function findAuditIdentityCandidate(identifier) {
+  const value = String(identifier || '').trim();
+  if (!value) return null;
+
+  const matches = getDatabase().prepare(`
+    SELECT * FROM (
+      SELECT u.id, u.name, u.username, u.email, u.role, u.status, 'email' as matchType
+      FROM users u
+      WHERE LOWER(u.email) = LOWER(?)
+
+      UNION ALL
+
+      SELECT u.id, u.name, u.username, u.email, u.role, u.status, 'username' as matchType
+      FROM users u
+      WHERE LOWER(u.username) = LOWER(?)
+
+      UNION ALL
+
+      SELECT u.id, u.name, u.username, u.email, u.role, u.status, 'student_number' as matchType
+      FROM users u
+      JOIN student_profiles sp ON sp.userId = u.id
+      WHERE LOWER(sp.studentNumber) = LOWER(?)
+
+      UNION ALL
+
+      SELECT u.id, u.name, u.username, u.email, u.role, u.status, 'employee_number' as matchType
+      FROM users u
+      JOIN teacher_profiles tp ON tp.userId = u.id
+      WHERE LOWER(tp.staffNumber) = LOWER(?)
+
+      UNION ALL
+
+      SELECT u.id, u.name, u.username, u.email, u.role, u.status, 'name' as matchType
+      FROM users u
+      WHERE LOWER(u.name) = LOWER(?)
+    ) matches
+    ORDER BY CASE matchType
+      WHEN 'email' THEN 1
+      WHEN 'username' THEN 2
+      WHEN 'student_number' THEN 3
+      WHEN 'employee_number' THEN 4
+      WHEN 'name' THEN 5
+      ELSE 10 END
+  `).all(value, value, value, value, value);
+
+  const uniqueUsers = [...new Map(matches.map(item => [item.id, item])).values()];
+  return uniqueUsers.length === 1 ? uniqueUsers[0] : null;
+}
+
 function findByUsername(username) {
   return getDatabase().prepare(`
     SELECT *
     FROM users
     WHERE LOWER(username) = LOWER(?)
   `).get(String(username || '').trim()) || null;
+}
+
+function findActiveTeacherByEmail(email) {
+  return getDatabase().prepare(`
+    SELECT id, name, username, email, role, status
+    FROM users
+    WHERE role = 'teacher'
+      AND status = 'active'
+      AND LOWER(email) = LOWER(?)
+  `).get(String(email || '').trim()) || null;
 }
 
 function findResettableByIdentifier(identifier) {
@@ -322,7 +381,9 @@ function withTransaction(work) {
 module.exports = {
   deleteById,
   findById,
+  findAuditIdentityCandidate,
   findByIdentifier,
+  findActiveTeacherByEmail,
   findLoginCandidates,
   findByUsername,
   findDuplicateEmail,

@@ -12,11 +12,17 @@ function ensureCategoryAccess(req, res, category) {
     res.status(404).json({ error: 'Category not found.' });
     return false;
   }
-  if (category.courseId && !canAccessCourse(req.user, category.courseId)) {
-    res.status(403).json({ error: 'Course access required.' });
+  try {
+    if (req.user.role === 'student' && category.courseId && !canAccessCourse(req.user, category.courseId)) {
+      res.status(403).json({ error: 'Course access required.' });
+      return false;
+    }
+    if (req.user.role !== 'student') categoryService.assertCanRead(category, req.user);
+    return true;
+  } catch (err) {
+    res.status(err.status || 403).json({ error: err.message });
     return false;
   }
-  return true;
 }
 
 function ensureCategoryManager(req, res, category) {
@@ -24,15 +30,13 @@ function ensureCategoryManager(req, res, category) {
     res.status(404).json({ error: 'Category not found.' });
     return false;
   }
-  if (!category.courseId && req.user.role !== 'admin') {
-    res.status(403).json({ error: 'Teacher or admin course access required.' });
+  try {
+    categoryService.assertCanWrite(category, req.user);
+    return true;
+  } catch (err) {
+    res.status(err.status || 403).json({ error: err.message });
     return false;
   }
-  if (category.courseId && !canManageCourse(req.user, category.courseId)) {
-    res.status(403).json({ error: 'Teacher or admin course access required.' });
-    return false;
-  }
-  return true;
 }
 
 /**
@@ -168,7 +172,7 @@ router.post('/', requireRole(['admin', 'teacher']), requireFields(['name']), san
       return res.status(403).json({ error: 'Teacher course access required.' });
     }
     req.body.courseId = courseId;
-    const category = categoryService.create(req.body);
+    const category = categoryService.create(req.body, req.user);
     res.status(201).json(category);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -217,7 +221,7 @@ router.put('/:id', validateId, sanitizeStrings(['name', 'description']), (req, r
         return res.status(403).json({ error: 'Teacher or admin course access required.' });
       }
     }
-    const category = categoryService.update(req.params.id, req.body);
+    const category = categoryService.update(req.params.id, req.body, req.user);
     res.json(category);
   } catch (err) {
     if (err.message === 'Category not found.') {
@@ -255,13 +259,38 @@ router.delete('/:id', validateId, (req, res) => {
   try {
     const existing = categoryService.getById(req.params.id);
     if (!ensureCategoryManager(req, res, existing)) return;
-    categoryService.delete(req.params.id);
+    categoryService.delete(req.params.id, req.user);
     res.json({ message: 'Category deleted successfully.' });
   } catch (err) {
     if (err.message === 'Category not found.') {
       return res.status(404).json({ error: err.message });
     }
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/share', requireRole(['admin', 'teacher']), validateId, (req, res) => {
+  try {
+    res.status(201).json(categoryService.share(req.params.id, req.body, req.user));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, field: err.field });
+  }
+});
+
+router.get('/:id/access', requireRole(['admin', 'teacher']), validateId, (req, res) => {
+  try {
+    res.json(categoryService.accessSummary(req.params.id, req.user));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, field: err.field });
+  }
+});
+
+router.delete('/:id/access/:teacherId', requireRole(['admin', 'teacher']), validateId, (req, res) => {
+  try {
+    const teacherId = parseRequiredPositiveInt(req.params.teacherId, 'teacherId');
+    res.json(categoryService.removeAccess(req.params.id, teacherId, req.user));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, field: err.field });
   }
 });
 

@@ -24,7 +24,20 @@ function listRecent(limit = 20) {
   `).all(safeLimit);
 }
 
+function listForEntity(entityType, entityId, limit = 20) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  return getDatabase().prepare(`
+    SELECT l.*, u.name as actorName, u.role as actorRole
+    FROM audit_logs l
+    LEFT JOIN users u ON u.id = l.actorUserId
+    WHERE l.entityType = ? AND l.entityId = ?
+    ORDER BY l.createdAt DESC, l.id DESC
+    LIMIT ?
+  `).all(entityType, Number(entityId), safeLimit);
+}
+
 module.exports = {
   create,
+  listForEntity,
   listRecent
 };

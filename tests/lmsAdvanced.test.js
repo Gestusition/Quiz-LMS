@@ -66,6 +66,338 @@ describe('Advanced LMS controls', () => {
       .expect(403);
   });
 
+  test('teacher question and quiz banks are owner scoped with explicit sharing', async () => {
+    const db = getDatabase();
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const ownerSession = authService.login('teacher@example.com', 'Teacher123!');
+    const ownerQuestion = db.prepare(`
+      SELECT q.id, q.points
+      FROM questions q
+      JOIN categories c ON c.id = q.categoryId
+      WHERE c.courseId = ? AND q.createdBy = ?
+      ORDER BY q.id ASC
+      LIMIT 1
+    `).get(course.id, ownerSession.user.id);
+    const ownerQuiz = db.prepare(`
+      SELECT id, title
+      FROM quizzes
+      WHERE courseId = ? AND createdBy = ?
+      ORDER BY id ASC
+      LIMIT 1
+    `).get(course.id, ownerSession.user.id);
+
+    const stamp = String(Date.now()).slice(-8);
+    const otherTeacher = authService.createUser({
+      name: `Shared Bank Teacher ${stamp}`,
+      username: `shared-bank-${stamp}`,
+      email: `shared-bank-teacher-${stamp}@example.com`,
+      role: 'teacher',
+      password: 'SharedBank123!',
+      staffNumber: `SBT-${stamp}`
+    });
+    db.prepare(`
+      INSERT OR IGNORE INTO enrollments (courseId, userId, role, status)
+      VALUES (?, ?, 'teacher', 'active')
+    `).run(course.id, otherTeacher.id);
+    const otherSession = authService.login(otherTeacher.email, 'SharedBank123!');
+
+    await request(app)
+      .get(`/api/questions?courseId=${course.id}`)
+      .set('Cookie', cookie(otherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(item => item.id === ownerQuestion.id)).toBe(false);
+      });
+
+    await request(app)
+      .get(`/api/quizzes?courseId=${course.id}`)
+      .set('Cookie', cookie(otherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(item => item.id === ownerQuiz.id)).toBe(false);
+      });
+
+    const categoryResponse = await request(app)
+      .post('/api/categories')
+      .set('Cookie', cookie(ownerSession))
+      .send({
+        name: `Shared Category ${stamp}`,
+        description: 'Category sharing regression',
+        courseId: course.id
+      })
+      .expect(201);
+    const sharedCategoryId = categoryResponse.body.id;
+
+    const categoryQuestionResponse = await request(app)
+      .post('/api/questions')
+      .set('Cookie', cookie(ownerSession))
+      .send({
+        categoryId: sharedCategoryId,
+        text: `Category shared question ${stamp}`,
+        type: 'TF',
+        correctAnswer: 'true',
+        points: 4
+      })
+      .expect(201);
+    const categoryQuestionId = categoryQuestionResponse.body.id;
+
+    await request(app)
+      .get(`/api/categories?courseId=${course.id}`)
+      .set('Cookie', cookie(otherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(item => item.id === sharedCategoryId)).toBe(false);
+      });
+
+    await request(app)
+      .post(`/api/categories/${sharedCategoryId}/share`)
+      .set('Cookie', cookie(ownerSession))
+      .send({ teacherEmail: otherTeacher.email, accessLevel: 'read' })
+      .expect(201);
+
+    await request(app)
+      .get(`/api/categories?courseId=${course.id}`)
+      .set('Cookie', cookie(otherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(item => item.id === sharedCategoryId)).toBe(true);
+      });
+
+    await request(app)
+      .get(`/api/questions?courseId=${course.id}`)
+      .set('Cookie', cookie(otherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(item => item.id === categoryQuestionId)).toBe(true);
+      });
+
+    await request(app)
+      .put(`/api/categories/${sharedCategoryId}`)
+      .set('Cookie', cookie(otherSession))
+      .send({ name: `Read Only Category ${stamp}` })
+      .expect(403);
+
+    await request(app)
+      .post(`/api/categories/${sharedCategoryId}/share`)
+      .set('Cookie', cookie(ownerSession))
+      .send({ teacherEmail: otherTeacher.email, accessLevel: 'write' })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/categories/${sharedCategoryId}`)
+      .set('Cookie', cookie(otherSession))
+      .send({ name: `Edited Shared Category ${stamp}` })
+      .expect(200)
+      .expect(response => {
+        expect(response.body.name).toContain('Edited Shared Category');
+        expect(response.body.updatedByName).toBe(otherTeacher.name);
+      });
+
+    await request(app)
+      .get(`/api/categories/${sharedCategoryId}/access`)
+      .set('Cookie', cookie(ownerSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.grants).toHaveLength(1);
+        expect(response.body.grants[0].teacherEmail).toBe(otherTeacher.email);
+        expect(response.body.grants[0].accessLevel).toBe('write');
+        expect(response.body.history.map(item => item.action)).toEqual(expect.arrayContaining([
+          'CATEGORY_SHARED',
+          'CATEGORY_ACCESS_UPDATED'
+        ]));
+      });
+
+    await request(app)
+      .delete(`/api/categories/${sharedCategoryId}/access/${otherTeacher.id}`)
+      .set('Cookie', cookie(ownerSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.grants).toHaveLength(0);
+        expect(response.body.history.map(item => item.action)).toContain('CATEGORY_ACCESS_REMOVED');
+      });
+
+    await request(app)
+      .post(`/api/questions/${ownerQuestion.id}/share`)
+      .set('Cookie', cookie(ownerSession))
+      .send({ teacherEmail: otherTeacher.email, accessLevel: 'read' })
+      .expect(201);
+
+    await request(app)
+      .get(`/api/questions?courseId=${course.id}`)
+      .set('Cookie', cookie(otherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(item => item.id === ownerQuestion.id)).toBe(true);
+      });
+
+    await request(app)
+      .put(`/api/questions/${ownerQuestion.id}`)
+      .set('Cookie', cookie(otherSession))
+      .send({ points: 7 })
+      .expect(403);
+
+    await request(app)
+      .post(`/api/questions/${ownerQuestion.id}/share`)
+      .set('Cookie', cookie(ownerSession))
+      .send({ teacherEmail: otherTeacher.email, accessLevel: 'write' })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/questions/${ownerQuestion.id}`)
+      .set('Cookie', cookie(otherSession))
+      .send({ points: 7 })
+      .expect(200)
+      .expect(response => {
+        expect(response.body.points).toBe(7);
+        expect(response.body.updatedByName).toBe(otherTeacher.name);
+      });
+
+    await request(app)
+      .get(`/api/questions/${ownerQuestion.id}`)
+      .set('Cookie', cookie(ownerSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.points).toBe(ownerQuestion.points);
+      });
+
+    await request(app)
+      .get(`/api/questions/${ownerQuestion.id}/access`)
+      .set('Cookie', cookie(ownerSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.grants).toHaveLength(1);
+        expect(response.body.grants[0].teacherEmail).toBe(otherTeacher.email);
+        expect(response.body.grants[0].accessLevel).toBe('write');
+        expect(response.body.history.map(item => item.action)).toEqual(expect.arrayContaining([
+          'QUESTION_SHARED',
+          'QUESTION_ACCESS_UPDATED'
+        ]));
+      });
+
+    await request(app)
+      .delete(`/api/questions/${ownerQuestion.id}/access/${otherTeacher.id}`)
+      .set('Cookie', cookie(ownerSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.grants).toHaveLength(0);
+        expect(response.body.history.map(item => item.action)).toContain('QUESTION_ACCESS_REMOVED');
+      });
+
+    await request(app)
+      .get(`/api/questions?courseId=${course.id}`)
+      .set('Cookie', cookie(otherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(item => item.id === ownerQuestion.id)).toBe(false);
+      });
+
+    await request(app)
+      .post(`/api/quizzes/${ownerQuiz.id}/share`)
+      .set('Cookie', cookie(ownerSession))
+      .send({ teacherEmail: otherTeacher.email, accessLevel: 'read' })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/quizzes/${ownerQuiz.id}`)
+      .set('Cookie', cookie(otherSession))
+      .send({ title: 'Read only should fail' })
+      .expect(403);
+
+    await request(app)
+      .post(`/api/quizzes/${ownerQuiz.id}/share`)
+      .set('Cookie', cookie(ownerSession))
+      .send({ teacherEmail: otherTeacher.email, accessLevel: 'write' })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/quizzes/${ownerQuiz.id}`)
+      .set('Cookie', cookie(otherSession))
+      .send({ title: `${ownerQuiz.title} shared edit` })
+      .expect(200)
+      .expect(response => {
+        expect(response.body.title).toContain('shared edit');
+        expect(response.body.updatedByName).toBe(otherTeacher.name);
+      });
+
+    await request(app)
+      .get(`/api/quizzes/${ownerQuiz.id}/access`)
+      .set('Cookie', cookie(ownerSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.grants).toHaveLength(1);
+        expect(response.body.grants[0].teacherEmail).toBe(otherTeacher.email);
+        expect(response.body.grants[0].accessLevel).toBe('write');
+        expect(response.body.history.map(item => item.action)).toEqual(expect.arrayContaining([
+          'QUIZ_SHARED',
+          'QUIZ_ACCESS_UPDATED'
+        ]));
+      });
+
+    await request(app)
+      .delete(`/api/quizzes/${ownerQuiz.id}/access/${otherTeacher.id}`)
+      .set('Cookie', cookie(ownerSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.grants).toHaveLength(0);
+        expect(response.body.history.map(item => item.action)).toContain('QUIZ_ACCESS_REMOVED');
+      });
+  });
+
+  test('attendance sessions are limited to the teacher assigned to the lecture offering', async () => {
+    const db = getDatabase();
+    const offering = db.prepare(`
+      SELECT co.*
+      FROM course_offerings co
+      JOIN courses c ON c.id = co.courseId
+      WHERE c.code = ?
+      ORDER BY co.id ASC
+      LIMIT 1
+    `).get('WEB101');
+    const stamp = String(Date.now()).slice(-8);
+    const otherTeacher = authService.createUser({
+      name: `Other Lecture Teacher ${stamp}`,
+      username: `lecture-teacher-${stamp}`,
+      email: `other-lecture-teacher-${stamp}@example.com`,
+      role: 'teacher',
+      password: 'LectureScope123!',
+      staffNumber: `OLT-${stamp}`
+    });
+    db.prepare(`
+      INSERT OR IGNORE INTO enrollments (courseId, userId, role, status)
+      VALUES (?, ?, 'teacher', 'active')
+    `).run(offering.courseId, otherTeacher.id);
+    const ownerSession = authService.login('teacher@example.com', 'Teacher123!');
+    const otherSession = authService.login(otherTeacher.email, 'LectureScope123!');
+
+    const ownedSessionResponse = await request(app)
+      .post('/api/academic/attendance/sessions')
+      .set('Cookie', cookie(ownerSession))
+      .send({
+        courseOfferingId: offering.id,
+        sessionDate: new Date().toISOString(),
+        topic: `Owned lecture attendance ${stamp}`
+      })
+      .expect(201);
+
+    await request(app)
+      .get('/api/academic/attendance/sessions')
+      .set('Cookie', cookie(otherSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.some(item => Number(item.id) === Number(ownedSessionResponse.body.id))).toBe(false);
+      });
+
+    await request(app)
+      .post('/api/academic/attendance/sessions')
+      .set('Cookie', cookie(otherSession))
+      .send({
+        courseOfferingId: offering.id,
+        sessionDate: new Date().toISOString(),
+        topic: 'Unauthorized lecture attendance'
+      })
+      .expect(403);
+  });
+
   test('chat muted restriction blocks discussion posting', async () => {
     const db = getDatabase();
     const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');

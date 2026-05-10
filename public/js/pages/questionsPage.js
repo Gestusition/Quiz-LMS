@@ -111,15 +111,31 @@ export const QuestionsPage = {
           <aside class="qb-sidebar">
             <div class="panel">
               <div class="panel-header"><h2>Categories</h2><span class="qb-cat-count">${categories.length}</span></div>
-              <div class="list qb-cat-list">${categories.map(category => `
-                <div class="list-row qb-cat-row ${String(this._qbFilters.categoryId) === String(category.id) ? 'qb-cat-active' : ''}" data-cat-id="${category.id}">
-                  <div class="qb-cat-info">
-                    <strong>${this.esc(category.name)}</strong>
-                    <small>${category.questionCount} question${category.questionCount === 1 ? '' : 's'}</small>
+              <div class="list qb-cat-list">${categories.map(category => {
+                const readOnly = category.accessLevel === 'read';
+                const canDelete = this.user.role === 'admin' || Number(category.createdBy) === Number(this.user.id);
+                const canManageAccess = this.user.role === 'admin'
+                  || Number(category.createdBy) === Number(this.user.id)
+                  || category.accessLevel === 'write';
+                const meta = [
+                  `${category.questionCount} question${category.questionCount === 1 ? '' : 's'}`,
+                  category.createdByName ? `Created by ${this.esc(category.createdByName)}` : '',
+                  category.updatedByName ? `Edited by ${this.esc(category.updatedByName)}` : '',
+                  category.accessLevel ? `${readOnly ? 'Read only' : 'Full access'}` : ''
+                ].filter(Boolean).join(' - ');
+                return `
+                  <div class="list-row qb-cat-row ${String(this._qbFilters.categoryId) === String(category.id) ? 'qb-cat-active' : ''}" data-cat-id="${category.id}">
+                    <div class="qb-cat-info">
+                      <strong>${this.esc(category.name)}</strong>
+                      <small>${meta}</small>
+                    </div>
+                    <div class="qb-cat-actions">
+                      ${canManageAccess ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); App.showShareCategoryForm(${category.id})" title="Manage shared category access">Shared Access</button>` : ''}
+                      ${canDelete ? `<button class="btn btn-ghost btn-sm qb-cat-del" onclick="event.stopPropagation(); App.deleteCategory(${category.id})" title="Delete category">Delete</button>` : ''}
+                    </div>
                   </div>
-                  <button class="btn btn-ghost btn-sm qb-cat-del" onclick="event.stopPropagation(); App.deleteCategory(${category.id})" title="Delete category">🗑</button>
-                </div>
-              `).join('') || this.emptyLine('No categories.')}</div>
+                `;
+              }).join('') || this.emptyLine('No categories.')}</div>
             </div>
           </aside>
 
@@ -779,6 +795,162 @@ export const QuestionsPage = {
     }
   },
 
+  showShareCategoryForm(id) {
+    this.openAccessManager('category', id, 'Category shared access');
+  },
+
+  showShareQuestionForm(id) {
+    this.openAccessManager('question', id, 'Question shared access');
+  },
+
+  accessResourceConfig(type) {
+    const configs = {
+      category: {
+        get: id => API.getCategoryAccess(id),
+        share: (id, payload) => API.shareCategory(id, payload),
+        remove: (id, teacherId) => API.removeCategoryAccess(id, teacherId)
+      },
+      question: {
+        get: id => API.getQuestionAccess(id),
+        share: (id, payload) => API.shareQuestion(id, payload),
+        remove: (id, teacherId) => API.removeQuestionAccess(id, teacherId)
+      },
+      quiz: {
+        get: id => API.getQuizAccess(id),
+        share: (id, payload) => API.shareQuiz(id, payload),
+        remove: (id, teacherId) => API.removeQuizAccess(id, teacherId)
+      }
+    };
+    return configs[type];
+  },
+
+  async openAccessManager(type, id, title) {
+    const config = this.accessResourceConfig(type);
+    if (!config) return;
+
+    this.openModal(title, '<div id="access-manager-root" class="access-manager"></div>');
+    const root = document.getElementById('access-manager-root');
+
+    const refresh = async () => {
+      root.innerHTML = this.loading('Loading access');
+      try {
+        const data = await config.get(id);
+        root.innerHTML = this.accessManagerHtml(data);
+        this.bindAccessManager(root, { id, config, refresh });
+      } catch (err) {
+        root.innerHTML = `<p class="empty-state">${this.esc(err.message)}</p>`;
+      }
+    };
+
+    await refresh();
+  },
+
+  accessManagerHtml(data) {
+    const grants = data.grants || [];
+    const history = data.history || [];
+    return `
+      <form id="share-resource-form" class="access-share-form">
+        ${this.input('share-teacher-email', 'Teacher email', '', 'email')}
+        <label class="form-field"><span>Shared access</span><select class="form-select" id="share-access-level">
+          <option value="read">Read only</option>
+          <option value="write">Full access</option>
+        </select></label>
+        <button class="btn btn-primary">Add or update</button>
+      </form>
+
+      <section class="access-section">
+        <h3>Current shared access</h3>
+        <div class="access-list">
+          ${grants.map(grant => `
+            <div class="access-row" data-teacher-id="${grant.teacherUserId}">
+              <div class="access-person">
+                <strong>${this.esc(grant.teacherName || 'Teacher')}</strong>
+                <small>${this.esc(grant.teacherEmail || '')}</small>
+              </div>
+              <select class="form-select access-level-select" data-teacher-email="${this.esc(grant.teacherEmail || '')}">
+                <option value="read" ${grant.accessLevel === 'read' ? 'selected' : ''}>Read only</option>
+                <option value="write" ${grant.accessLevel === 'write' ? 'selected' : ''}>Full access</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm access-remove">Remove</button>
+            </div>
+          `).join('') || '<p class="empty-state">No teachers have access yet.</p>'}
+        </div>
+      </section>
+
+      <section class="access-section">
+        <h3>Shared access history</h3>
+        <div class="access-history-list">
+          ${history.map(log => `
+            <div class="access-history-row">
+              <strong>${this.esc(this.accessHistoryText(log))}</strong>
+              <small>${this.esc(log.actorName || 'System')} - ${this.esc(this.formatDate(log.createdAt))}</small>
+            </div>
+          `).join('') || '<p class="empty-state">No access changes recorded yet.</p>'}
+        </div>
+      </section>
+    `;
+  },
+
+  bindAccessManager(root, { id, config, refresh }) {
+    root.querySelector('#share-resource-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      try {
+        await config.share(id, {
+          teacherEmail: value('share-teacher-email'),
+          accessLevel: value('share-access-level')
+        });
+        this.toast('Access updated.', 'success');
+        await refresh();
+      } catch (err) {
+        this.toast(err.message, 'error');
+      }
+    });
+
+    root.querySelectorAll('.access-level-select').forEach(select => {
+      select.addEventListener('change', async () => {
+        try {
+          await config.share(id, {
+            teacherEmail: select.dataset.teacherEmail,
+            accessLevel: select.value
+          });
+          this.toast('Access level updated.', 'success');
+          await refresh();
+        } catch (err) {
+          this.toast(err.message, 'error');
+          await refresh();
+        }
+      });
+    });
+
+    root.querySelectorAll('.access-remove').forEach(button => {
+      button.addEventListener('click', async () => {
+        const row = button.closest('.access-row');
+        const teacherId = row?.dataset.teacherId;
+        if (!teacherId || !confirm('Remove this teacher access?')) return;
+        try {
+          await config.remove(id, teacherId);
+          this.toast('Access removed.', 'success');
+          await refresh();
+        } catch (err) {
+          this.toast(err.message, 'error');
+        }
+      });
+    });
+  },
+
+  accessHistoryText(log) {
+    const details = log.details || {};
+    const teacher = details.teacherEmail || (details.teacherUserId ? `teacher #${details.teacherUserId}` : 'teacher');
+    if (log.action.endsWith('_ACCESS_REMOVED')) {
+      return `Removed ${teacher}${details.previousAccessLevel ? ` (${details.previousAccessLevel})` : ''}`;
+    }
+    if (log.action.endsWith('_ACCESS_UPDATED')) {
+      const previous = details.previousAccessLevel ? `${details.previousAccessLevel} to ` : '';
+      return `Changed ${teacher} from ${previous}${details.accessLevel || 'access'}`;
+    }
+    return `Shared with ${teacher} as ${details.accessLevel || 'access'}`;
+  },
+
   async deleteQuestion(id) {
     if (!confirm('Delete this question?')) return;
     try {
@@ -808,6 +980,13 @@ export const QuestionsPage = {
         ? '<span class="grading-badge grading-manual" title="Manual grading">📝 Manual</span>'
         : '';
     const truncText = question.text.length > 120 ? question.text.slice(0, 120) + '…' : question.text;
+    const readOnly = question.accessLevel === 'read';
+    const canDelete = this.user.role === 'admin' || Number(question.createdBy) === Number(this.user.id);
+    const attribution = [
+      question.createdByName ? `Created by ${this.esc(question.createdByName)}` : '',
+      question.updatedByName ? `Edited by ${this.esc(question.updatedByName)}` : '',
+      question.accessLevel ? `${question.accessLevel === 'write' ? 'Full access' : 'Read only'}` : ''
+    ].filter(Boolean).join(' - ');
     return `
       <div class="qb-card" data-qid="${question.id}">
         <div class="qb-card-top">
@@ -818,7 +997,7 @@ export const QuestionsPage = {
             <span class="qb-card-pts-label">pts</span>
             <input type="number" class="qb-card-pts-input" min="0" max="100" step="any"
               value="${question.points}" data-qid="${question.id}" data-original="${question.points}"
-              title="Points (max 100)">
+              title="Points (max 100)" ${readOnly ? 'disabled' : ''}>
           </div>
         </div>
         <div class="qb-card-body">
@@ -828,20 +1007,22 @@ export const QuestionsPage = {
             ${question.mediaUrl ? '<span class="badge badge-tiny">📷 Image</span>' : ''}
             ${question.hintText ? '<span class="badge badge-tiny">💡 Hint</span>' : ''}
           </div>
+          ${attribution ? `<small class="qb-card-owner">${attribution}</small>` : ''}
         </div>
         <div class="qb-card-actions">
-          <button class="btn btn-ghost btn-sm qb-action-edit" onclick="App.showQuestionForm(${question.id}, ${question.courseId})">
+          ${readOnly ? '' : `<button class="btn btn-ghost btn-sm qb-action-edit" onclick="App.showQuestionForm(${question.id}, ${question.courseId})">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
-          </button>
+          </button>`}
+          ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" onclick="App.showShareQuestionForm(${question.id})">Shared Access</button>`}
           <button class="btn btn-ghost btn-sm" onclick="App.duplicateQuestion(${question.id})" title="Duplicate">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Copy
           </button>
-          <button class="btn btn-ghost btn-sm qb-action-delete" onclick="App.deleteQuestion(${question.id})" title="Delete">
+          ${!canDelete ? '' : `<button class="btn btn-ghost btn-sm qb-action-delete" onclick="App.deleteQuestion(${question.id})" title="Delete">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             Delete
-          </button>
+          </button>`}
         </div>
       </div>
     `;
@@ -850,6 +1031,7 @@ export const QuestionsPage = {
   // Bind change/blur events on inline point inputs in Question Bank cards
   bindPointsInputs() {
     document.querySelectorAll('.qb-card-pts-input').forEach(inp => {
+      if (inp.disabled) return;
       inp.addEventListener('keydown', (e) => {
         if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
           e.preventDefault();
@@ -887,7 +1069,6 @@ export const QuestionsPage = {
     });
   },
 
-  // Keep legacy method for any other page that might use it
   questionTableRow(question) {
     const typeColor = TYPE_COLORS[question.type] || '#64748b';
     const gradingBadge = question.gradingType === 'negative'

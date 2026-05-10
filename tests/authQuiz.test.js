@@ -10,9 +10,10 @@ const {
   resolveDatabaseFiles
 } = require('../database/db');
 const authService = require('../services/authService');
+const auditService = require('../services/auditService');
 const quizService = require('../services/quizService');
 const restrictionService = require('../services/restrictionService');
-const { hashPassword, verifyPassword } = require('../utils/security');
+const { hashPassword, hashSessionToken, verifyPassword } = require('../utils/security');
 const request = require('supertest');
 const app = require('../server');
 
@@ -224,6 +225,99 @@ describe('Auth and quiz attempt flow', () => {
       .get('/api/auth/me')
       .set('x-session-token', session.token)
       .expect(401);
+  });
+
+  test('opaque session hashes are not accepted as authentication tokens', async () => {
+    const db = getDatabase();
+    const session = authService.login('STU-0003', 'Student123!');
+    const opaqueToken = `opaque-${Date.now()}`;
+
+    db.prepare(`
+      INSERT INTO sessions (userId, tokenHash, tokenType, expiresAt)
+      VALUES (?, ?, 'jwt', ?)
+    `).run(
+      session.user.id,
+      hashSessionToken(opaqueToken),
+      new Date(Date.now() + 60_000).toISOString()
+    );
+
+    await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', `auth_token=${opaqueToken}`)
+      .expect(401);
+  });
+
+  test('login brute-force lockout blocks a known account after repeated failures', async () => {
+    const suffix = nextSuffix();
+    const admin = authService.createUser({
+      name: `Lockout Admin ${suffix}`,
+      username: `lockout-admin-${suffix}`,
+      email: `lockout-admin-${suffix}@example.com`,
+      role: 'admin',
+      password: 'LockoutAdmin123!'
+    });
+
+    for (let i = 0; i < 5; i += 1) {
+      await request(app)
+        .post('/api/auth/login')
+        .send({ identifier: admin.username, password: 'WrongLockout123!' })
+        .expect(401);
+    }
+
+    await request(app)
+      .post('/api/auth/login')
+      .send({ identifier: admin.username, password: 'LockoutAdmin123!' })
+      .expect(429)
+      .expect(response => {
+        expect(response.body.error).toMatch(/temporarily locked/i);
+        expect(response.body.retryAfterSeconds).toBeGreaterThan(0);
+      });
+  });
+
+  test('failed login for a known email or username is written to audit logs', async () => {
+    const suffix = nextSuffix();
+    const teacher = authService.createUser({
+      name: `Audit Teacher ${suffix}`,
+      username: `audit-teacher-${suffix}`,
+      email: `audit-teacher-${suffix}@example.com`,
+      role: 'teacher',
+      password: 'AuditTeacher123!',
+      staffNumber: `AUD-${uniqueUserSuffix}`
+    });
+    const admin = authService.createUser({
+      name: `Audit Admin ${suffix}`,
+      username: `audit-admin-${suffix}`,
+      email: `audit-admin-${suffix}@example.com`,
+      role: 'admin',
+      password: 'AuditAdmin123!'
+    });
+
+    await request(app)
+      .post('/api/auth/login')
+      .send({ identifier: teacher.email, password: 'WrongAudit123!' })
+      .expect(401);
+
+    await request(app)
+      .post('/api/auth/login')
+      .send({ identifier: admin.username, password: 'WrongAudit123!' })
+      .expect(401);
+
+    const logs = auditService.recent(25);
+    const log = logs.find(entry =>
+      entry.action === 'LOGIN_FAILED' && entry.entityId === teacher.id
+    );
+    const usernameLog = logs.find(entry =>
+      entry.action === 'LOGIN_FAILED' && entry.entityId === admin.id
+    );
+
+    expect(log).toBeDefined();
+    expect(log.actorUserId).toBe(teacher.id);
+    expect(log.details.identifierType).toBe('email');
+    expect(log.details.identifier).toBe(teacher.email.toLowerCase());
+    expect(log.details.reason).toBe('invalid_credentials');
+    expect(log.details.password).toBeUndefined();
+    expect(usernameLog).toBeDefined();
+    expect(usernameLog.details.identifierType).toBe('username');
   });
 
   test('blocks default admin from using the app until username and password are changed', async () => {

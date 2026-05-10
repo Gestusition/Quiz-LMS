@@ -18,7 +18,7 @@ function parseId(value) {
 function loadQuiz(req, res, next) {
   const quizId = parseId(req.params.id);
   if (!quizId) return res.status(400).json({ error: 'Invalid quiz ID.' });
-  const quiz = quizService.getById(quizId);
+  const quiz = quizService.getById(quizId, { user: req.user });
   if (!quiz) return res.status(404).json({ error: 'Quiz not found.' });
   req.quiz = quiz;
   req.quizId = quizId;
@@ -26,17 +26,27 @@ function loadQuiz(req, res, next) {
 }
 
 function requireQuizAccess(req, res, next) {
-  if (!canAccessCourse(req.user, req.quiz.courseId)) {
-    return res.status(403).json({ error: 'Course access required.' });
+  try {
+    if (req.user.role === 'student') {
+      if (!canAccessCourse(req.user, req.quiz.courseId)) {
+        return res.status(403).json({ error: 'Course access required.' });
+      }
+      return next();
+    }
+    quizService.assertCanReadQuiz(req.quiz, req.user);
+    next();
+  } catch (err) {
+    return res.status(err.status || 403).json({ error: err.message });
   }
-  next();
 }
 
 function requireQuizManager(req, res, next) {
-  if (!canManageCourse(req.user, req.quiz.courseId)) {
-    return res.status(403).json({ error: 'Teacher or admin course access required.' });
+  try {
+    quizService.assertCanWriteQuiz(req.quiz, req.user);
+    next();
+  } catch (err) {
+    return res.status(err.status || 403).json({ error: err.message });
   }
-  next();
 }
 
 /**
@@ -354,6 +364,31 @@ router.post('/:id/release-results', loadQuiz, requireQuizManager, (req, res) => 
   }
 });
 
+router.post('/:id/share', loadQuiz, requireQuizManager, (req, res) => {
+  try {
+    res.status(201).json(quizService.share(req.quizId, req.body, req.user));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.get('/:id/access', loadQuiz, requireQuizManager, (req, res) => {
+  try {
+    res.json(quizService.accessSummary(req.quizId, req.user));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+router.delete('/:id/access/:teacherId', loadQuiz, requireQuizManager, (req, res) => {
+  try {
+    const teacherId = parseRequiredPositiveInt(req.params.teacherId, 'teacherId');
+    res.json(quizService.removeAccess(req.quizId, teacherId, req.user));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
 /**
  * @swagger
  * /api/quizzes/grade-schemes:
@@ -447,8 +482,14 @@ router.put('/grade-schemes/:id/thresholds', (req, res) => {
  */
 router.get('/:id', loadQuiz, requireQuizAccess, (req, res) => {
   try {
-    const includeCorrect = canManageCourse(req.user, req.quiz.courseId);
-    res.json(quizService.getById(req.quizId, { includeQuestions: true, includeCorrect }));
+    let includeCorrect = false;
+    try {
+      quizService.assertCanWriteQuiz(req.quiz, req.user);
+      includeCorrect = true;
+    } catch (err) {
+      includeCorrect = req.user.role !== 'student';
+    }
+    res.json(quizService.getById(req.quizId, { includeQuestions: true, includeCorrect, user: req.user }));
   } catch (err) {
     sendError(res, err, 500);
   }
@@ -520,7 +561,7 @@ router.put('/:id', loadQuiz, requireQuizManager, (req, res) => {
  */
 router.delete('/:id', loadQuiz, requireQuizManager, (req, res) => {
   try {
-    quizService.delete(req.quizId);
+    quizService.delete(req.quizId, req.user);
     res.json({ message: 'Quiz deleted successfully.' });
   } catch (err) {
     sendError(res, err, 500);
@@ -561,7 +602,7 @@ router.delete('/:id', loadQuiz, requireQuizManager, (req, res) => {
  */
 router.put('/:id/questions', loadQuiz, requireQuizManager, (req, res) => {
   try {
-    res.json(quizService.setQuestions(req.quizId, req.body.questionIds, req.user.id));
+    res.json(quizService.setQuestions(req.quizId, req.body.questionIds, req.user));
   } catch (err) {
     sendError(res, err, 400);
   }
@@ -594,8 +635,12 @@ router.put('/:id/questions', loadQuiz, requireQuizManager, (req, res) => {
  *         $ref: '#/components/responses/404NotFound'
  */
 router.get('/:id/attempts', loadQuiz, requireQuizAccess, (req, res) => {
-  if (req.user.role !== 'student' && !canManageCourse(req.user, req.quiz.courseId)) {
-    return res.status(403).json({ error: 'Teacher or admin course access required.' });
+  if (req.user.role !== 'student') {
+    try {
+      quizService.assertCanWriteQuiz(req.quiz, req.user);
+    } catch (err) {
+      return res.status(err.status || 403).json({ error: err.message });
+    }
   }
 
   try {

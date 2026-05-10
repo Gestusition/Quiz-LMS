@@ -8,37 +8,47 @@ const { parseOptionalPositiveInt, parseRequiredPositiveInt } = require('../utils
 
 router.use(requireAuth);
 
-function ensureQuestionManager(req, res, question) {
+function ensureQuestionReader(req, res, question) {
   if (!question) {
     res.status(404).json({ error: 'Question not found.' });
     return false;
   }
-  if (!question.courseId && req.user.role !== 'admin') {
-    res.status(403).json({ error: 'Teacher or admin course access required.' });
+  try {
+    questionService.assertCanRead(question, req.user);
+    return true;
+  } catch (err) {
+    res.status(err.status || 403).json({ error: err.message });
     return false;
   }
-  if (question.courseId && !canManageCourse(req.user, question.courseId)) {
-    res.status(403).json({ error: 'Teacher or admin course access required.' });
-    return false;
-  }
-  return true;
 }
 
-function ensureCategoryManager(req, res, categoryId) {
+function ensureQuestionWriter(req, res, question) {
+  if (!question) {
+    res.status(404).json({ error: 'Question not found.' });
+    return false;
+  }
+  try {
+    questionService.assertCanWrite(question, req.user);
+    return true;
+  } catch (err) {
+    res.status(err.status || 403).json({ error: err.message });
+    return false;
+  }
+}
+
+function ensureCategoryWriter(req, res, categoryId) {
   const category = categoryService.getById(categoryId);
   if (!category) {
     res.status(400).json({ error: 'Category not found.' });
     return false;
   }
-  if (!category.courseId && req.user.role !== 'admin') {
-    res.status(403).json({ error: 'Teacher course category required.' });
+  try {
+    categoryService.assertCanWrite(category, req.user);
+    return true;
+  } catch (err) {
+    res.status(err.status || 403).json({ error: err.message });
     return false;
   }
-  if (category.courseId && !canManageCourse(req.user, category.courseId)) {
-    res.status(403).json({ error: 'Teacher or admin course access required.' });
-    return false;
-  }
-  return true;
 }
 
 /**
@@ -187,8 +197,8 @@ router.get('/random', requireRole(['admin', 'teacher']), (req, res) => {
  */
 router.get('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
-    const question = questionService.getById(req.params.id);
-    if (!ensureQuestionManager(req, res, question)) return;
+    const question = questionService.getById(req.params.id, req.user);
+    if (!ensureQuestionReader(req, res, question)) return;
     res.json(question);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -222,9 +232,9 @@ router.get('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => 
 router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId', 'text', 'type']), sanitizeStrings(['text']), (req, res) => {
   try {
     req.body.categoryId = parseRequiredPositiveInt(req.body.categoryId, 'categoryId');
-    if (!ensureCategoryManager(req, res, req.body.categoryId)) return;
+    if (!ensureCategoryWriter(req, res, req.body.categoryId)) return;
     req.body.createdBy = req.user.id;
-    const question = questionService.create(req.body);
+    const question = questionService.create(req.body, req.user);
     res.status(201).json(question);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -265,13 +275,13 @@ router.post('/', requireRole(['admin', 'teacher']), requireFields(['categoryId',
  */
 router.put('/:id', requireRole(['admin', 'teacher']), validateId, sanitizeStrings(['text', 'correctAnswer']), (req, res) => {
   try {
-    const existing = questionService.getById(req.params.id);
-    if (!ensureQuestionManager(req, res, existing)) return;
+    const existing = questionService.getById(req.params.id, req.user);
+    if (!ensureQuestionWriter(req, res, existing)) return;
     if (req.body.categoryId !== undefined) {
       req.body.categoryId = parseRequiredPositiveInt(req.body.categoryId, 'categoryId');
-      if (!ensureCategoryManager(req, res, req.body.categoryId)) return;
+      if (!ensureCategoryWriter(req, res, req.body.categoryId)) return;
     }
-    const question = questionService.update(req.params.id, req.body);
+    const question = questionService.update(req.params.id, req.body, req.user);
     res.json(question);
   } catch (err) {
     if (err.message === 'Question not found.') {
@@ -307,9 +317,9 @@ router.put('/:id', requireRole(['admin', 'teacher']), validateId, sanitizeString
  */
 router.delete('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
-    const existing = questionService.getById(req.params.id);
-    if (!ensureQuestionManager(req, res, existing)) return;
-    questionService.delete(req.params.id);
+    const existing = questionService.getById(req.params.id, req.user);
+    if (!ensureQuestionWriter(req, res, existing)) return;
+    questionService.delete(req.params.id, req.user);
     res.json({ message: 'Question deleted successfully.' });
   } catch (err) {
     if (err.message === 'Question not found.') {
@@ -337,12 +347,37 @@ router.delete('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) 
  */
 router.post('/:id/duplicate', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
-    const existing = questionService.getById(req.params.id);
-    if (!ensureQuestionManager(req, res, existing)) return;
-    const duplicate = questionService.duplicate(req.params.id);
+    const existing = questionService.getById(req.params.id, req.user);
+    if (!ensureQuestionReader(req, res, existing)) return;
+    const duplicate = questionService.duplicate(req.params.id, req.user);
     res.status(201).json(duplicate);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/:id/share', requireRole(['admin', 'teacher']), validateId, (req, res) => {
+  try {
+    res.status(201).json(questionService.share(req.params.id, req.body, req.user));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, field: err.field });
+  }
+});
+
+router.get('/:id/access', requireRole(['admin', 'teacher']), validateId, (req, res) => {
+  try {
+    res.json(questionService.accessSummary(req.params.id, req.user));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, field: err.field });
+  }
+});
+
+router.delete('/:id/access/:teacherId', requireRole(['admin', 'teacher']), validateId, (req, res) => {
+  try {
+    const teacherId = parseRequiredPositiveInt(req.params.teacherId, 'teacherId');
+    res.json(questionService.removeAccess(req.params.id, teacherId, req.user));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, field: err.field });
   }
 });
 

@@ -25,6 +25,7 @@ function extractToken(req) {
 function resolveUserFromDecoded(decoded) {
   const session = sessionRepository.findById(Number(decoded.jti));
   if (!session) return null;
+  if (session.tokenType !== 'jwt') return null;
 
   if (new Date(session.expiresAt).getTime() <= Date.now()) {
     sessionRepository.deleteById(Number(decoded.jti));
@@ -39,31 +40,6 @@ function resolveUserFromDecoded(decoded) {
 
   sessionRepository.updateLastSeen(Number(decoded.jti), new Date().toISOString());
   return serializeCurrentUser(user);
-}
-
-/**
- * Resolve user data from a legacy hash-based token (backwards compatibility).
- * @param {string} token - Raw token string
- * @returns {object|null} Serialized user or null if invalid
- */
-function resolveUserFromLegacyToken(token) {
-  const { hashSessionToken } = require('../utils/security');
-  const tokenHash = hashSessionToken(token);
-  const userFromHash = sessionRepository.findUserByTokenHash(tokenHash);
-  if (!userFromHash) return null;
-
-  if (new Date(userFromHash.expiresAt).getTime() <= Date.now()) {
-    sessionRepository.deleteById(userFromHash.sessionId);
-    return null;
-  }
-
-  if (userFromHash.status !== 'active') {
-    sessionRepository.deleteById(userFromHash.sessionId);
-    return null;
-  }
-
-  sessionRepository.updateLastSeen(userFromHash.sessionId, new Date().toISOString());
-  return serializeCurrentUser(userFromHash);
 }
 
 /**
@@ -128,15 +104,6 @@ function authenticate(req, res, next) {
       });
     }
 
-    const user = resolveUserFromLegacyToken(token);
-    if (user) {
-      const restriction = checkCredentialsChange(req, user);
-      if (restriction) return res.status(restriction.status).json(restriction.json);
-
-      attachUserToRequest(req, user, null, token);
-      return next();
-    }
-
     return res.status(401).json({
       status: 'error',
       message: 'Session expired or invalid. Please sign in again.'
@@ -169,12 +136,6 @@ function optionallyAuthenticate(req, res, next) {
       return next();
     }
 
-    // Fallback: try legacy hash-based lookup
-    const user = resolveUserFromLegacyToken(token);
-    if (user) {
-      attachUserToRequest(req, user, null, token);
-    }
-
     next();
   } catch (err) {
     next();
@@ -184,7 +145,7 @@ function optionallyAuthenticate(req, res, next) {
 /**
  * Session validation middleware.
  * This is used by routes that need to confirm the session is still valid
- * and re-attach user data. It works with both JWT and legacy tokens.
+ * and re-attach user data.
  */
 function validateSession(req, res, next) {
   try {
@@ -196,7 +157,6 @@ function validateSession(req, res, next) {
       });
     }
 
-    // Try JWT first
     const decoded = verifyJwt(token);
     if (decoded && decoded.sub && decoded.jti) {
       const user = resolveUserFromDecoded(decoded);
@@ -210,17 +170,10 @@ function validateSession(req, res, next) {
       });
     }
 
-    // Fallback: legacy hash-based lookup
-    const user = resolveUserFromLegacyToken(token);
-    if (!user) {
-      return res.status(401).json({
-        status: 'error',
-        message: 'Session expired or invalid.'
-      });
-    }
-
-    attachUserToRequest(req, user, null, token);
-    next();
+    return res.status(401).json({
+      status: 'error',
+      message: 'Session expired or invalid.'
+    });
   } catch (err) {
     return res.status(500).json({
       status: 'error',
@@ -275,6 +228,5 @@ module.exports = {
   extractToken,
   canAccessCourse,
   canManageCourse,
-  // Backwards-compatible alias
   requireAuth: authenticate
 };

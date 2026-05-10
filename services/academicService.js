@@ -485,7 +485,7 @@ class AcademicService {
   createAttendanceSession(data, user) {
     const payload = validateAttendanceSession(data);
     const offering = requireRow(academicRepository.findCourseOfferingById(payload.courseOfferingId), 'Course offering not found.');
-    if (!this.canManageOffering(user, offering)) throw forbidden();
+    if (!this.canManageLectureOffering(user, offering)) throw forbidden();
     const result = academicRepository.insertAttendanceSession({
       ...payload,
       openedAt: payload.status === 'open' ? nowIso() : ''
@@ -498,7 +498,7 @@ class AcademicService {
 
   closeAttendanceSession(sessionId, user) {
     const session = requireRow(academicRepository.findAttendanceSessionById(sessionId), 'Attendance session not found.');
-    if (!this.canManageOffering(user, session)) throw forbidden();
+    if (!this.canManageLectureOffering(user, session)) throw forbidden();
     academicRepository.closeAttendanceSession(sessionId, nowIso());
     auditService.log({
       actorUserId: user.id,
@@ -512,7 +512,7 @@ class AcademicService {
 
   markAttendance(sessionId, records, user) {
     const session = requireRow(academicRepository.findAttendanceSessionById(sessionId), 'Attendance session not found.');
-    if (!this.canManageOffering(user, session)) throw forbidden();
+    if (!this.canManageLectureOffering(user, session)) throw forbidden();
     if (!Array.isArray(records) || records.length === 0) {
       throw new Error('At least one attendance record is required.');
     }
@@ -576,13 +576,13 @@ class AcademicService {
 
   listAttendanceRecords(sessionId, user) {
     const session = requireRow(academicRepository.findAttendanceSessionById(sessionId), 'Attendance session not found.');
-    if (!this.canManageOffering(user, session)) throw forbidden();
+    if (!this.canManageLectureOffering(user, session)) throw forbidden();
     return academicRepository.listAttendanceRecords(sessionId);
   }
 
   removeAttendanceRecord(recordId, data, user) {
     const record = requireRow(academicRepository.findAttendanceRecordById(recordId), 'Attendance record not found.');
-    if (!this.canManageOffering(user, record)) throw forbidden();
+    if (!this.canManageLectureOffering(user, record)) throw forbidden();
     const removalNote = requiredText(data.removalNote || data.note || data.reason, 'removalNote', {
       min: 3,
       max: LIMITS.attendance.noteMax
@@ -630,7 +630,7 @@ class AcademicService {
 
   attendanceSummary(courseOfferingId, user) {
     const offering = requireRow(academicRepository.findCourseOfferingById(courseOfferingId), 'Course offering not found.');
-    if (!this.canManageOffering(user, offering)) throw forbidden();
+    if (!this.canManageLectureOffering(user, offering)) throw forbidden();
     return {
       courseOffering: offering,
       summary: academicRepository.attendanceSummary(courseOfferingId)
@@ -657,6 +657,14 @@ class AcademicService {
     if (this.isCourseAccessBlocked(user, offering.courseId)) return false;
     if (Number(offering.instructorId) === Number(user.id)) return true;
     return enrollmentRepository.canManageCourse(user, offering.courseId);
+  }
+
+  canManageLectureOffering(user, offering) {
+    if (!user || !offering) return false;
+    if (user.role === 'admin') return true;
+    if (user.role !== 'teacher') return false;
+    if (this.isCourseAccessBlocked(user, offering.courseId)) return false;
+    return Number(offering.instructorId) === Number(user.id);
   }
 
   canAccessOffering(user, offering) {

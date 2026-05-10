@@ -266,6 +266,9 @@ export const API = {
   getCategory(id) { return this.request(`/categories/${id}`); },
   createCategory(data) { return this.request('/categories', { method: 'POST', body: data }); },
   updateCategory(id, data) { return this.request(`/categories/${id}`, { method: 'PUT', body: data }); },
+  getCategoryAccess(id) { return this.request(`/categories/${id}/access`); },
+  shareCategory(id, data) { return this.request(`/categories/${id}/share`, { method: 'POST', body: data }); },
+  removeCategoryAccess(id, teacherId) { return this.request(`/categories/${id}/access/${teacherId}`, { method: 'DELETE' }); },
   deleteCategory(id) { return this.request(`/categories/${id}`, { method: 'DELETE' }); },
 
   getQuestions(filters = {}) {
@@ -280,6 +283,9 @@ export const API = {
   getQuestion(id) { return this.request(`/questions/${id}`); },
   createQuestion(data) { return this.request('/questions', { method: 'POST', body: data }); },
   updateQuestion(id, data) { return this.request(`/questions/${id}`, { method: 'PUT', body: data }); },
+  getQuestionAccess(id) { return this.request(`/questions/${id}/access`); },
+  shareQuestion(id, data) { return this.request(`/questions/${id}/share`, { method: 'POST', body: data }); },
+  removeQuestionAccess(id, teacherId) { return this.request(`/questions/${id}/access/${teacherId}`, { method: 'DELETE' }); },
   deleteQuestion(id) { return this.request(`/questions/${id}`, { method: 'DELETE' }); },
 
   getQuizzes(filters = {}) {
@@ -292,6 +298,9 @@ export const API = {
   getQuiz(id) { return this.request(`/quizzes/${id}`); },
   createQuiz(data) { return this.request('/quizzes', { method: 'POST', body: data }); },
   updateQuiz(id, data) { return this.request(`/quizzes/${id}`, { method: 'PUT', body: data }); },
+  getQuizAccess(id) { return this.request(`/quizzes/${id}/access`); },
+  shareQuiz(id, data) { return this.request(`/quizzes/${id}/share`, { method: 'POST', body: data }); },
+  removeQuizAccess(id, teacherId) { return this.request(`/quizzes/${id}/access/${teacherId}`, { method: 'DELETE' }); },
   deleteQuiz(id) { return this.request(`/quizzes/${id}`, { method: 'DELETE' }); },
   setQuizQuestions(id, questionIds) { return this.request(`/quizzes/${id}/questions`, { method: 'PUT', body: { questionIds } }); },
   getQuizAttempts(id) { return this.request(`/quizzes/${id}/attempts`); },

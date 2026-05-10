@@ -51,10 +51,6 @@ function verifyPassword(password, salt, expectedHash) {
   return crypto.timingSafeEqual(candidate, expected);
 }
 
-function createSessionToken() {
-  return crypto.randomBytes(32).toString('base64url');
-}
-
 function hashSessionToken(token) {
   return crypto
     .createHash('sha256')
@@ -132,7 +128,6 @@ function verifyJwt(token) {
 
 module.exports = {
   createOneTimeCode,
-  createSessionToken,
   hashPassword,
   hashOneTimeCode,
   hashSessionToken,

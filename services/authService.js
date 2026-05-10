@@ -5,7 +5,6 @@ const profileRepository = require('../repositories/profileRepository');
 const userService = require('./userService');
 const {
   createOneTimeCode,
-  createSessionToken,
   hashOneTimeCode,
   hashPassword,
   hashSessionToken,
@@ -64,17 +63,8 @@ class AuthService {
     });
 
     const expiresAt = sessionExpiryDate();
-
-    // Create a session row (for revocation capability) with a temporary unique tokenHash
-    const tempId = createSessionToken();
-    const tempHash = hashSessionToken(tempId);
-    const sessionResult = sessionRepository.create(user.id, tempHash, expiresAt);
-
-    // Sign a JWT bound to the session row id (jti claim)
-    const jwtPayload = { userId: user.id, role: user.role };
-    const token = signJwt(jwtPayload, sessionResult.lastInsertRowid);
-
-    // Store the hash of the JWT in the session row for revocation lookups
+    const sessionResult = sessionRepository.createPendingJwt(user.id, expiresAt);
+    const token = signJwt({ userId: user.id, role: user.role }, sessionResult.lastInsertRowid);
     const tokenHash = hashSessionToken(token);
     sessionRepository.updateTokenHash(sessionResult.lastInsertRowid, tokenHash);
 
@@ -88,14 +78,12 @@ class AuthService {
   logout(token) {
     if (!token) return true;
 
-    // Try JWT verification first to extract jti
     const decoded = verifyJwt(token);
     if (decoded && decoded.jti) {
       sessionRepository.deleteById(Number(decoded.jti));
       return true;
     }
 
-    // Fallback: hash-based lookup for backwards compatibility
     sessionRepository.deleteByTokenHash(hashSessionToken(token));
     return true;
   }
@@ -103,14 +91,12 @@ class AuthService {
   getUserByToken(token) {
     if (!token) return null;
 
-    // Try JWT verification first
     const decoded = verifyJwt(token);
     if (decoded && decoded.sub && decoded.jti) {
-      // Check that the session still exists in the DB (revocation check)
       const session = sessionRepository.findById(Number(decoded.jti));
       if (!session) return null;
+      if (session.tokenType !== 'jwt') return null;
 
-      // Check session expiry from DB as a secondary expiry gate
       if (new Date(session.expiresAt).getTime() <= Date.now()) {
         sessionRepository.deleteById(Number(decoded.jti));
         return null;
@@ -128,24 +114,7 @@ class AuthService {
       return serializeCurrentUser(user);
     }
 
-    // Fallback: legacy hash-based lookup
-    const tokenHash = hashSessionToken(token);
-    const userFromHash = sessionRepository.findUserByTokenHash(tokenHash);
-    if (!userFromHash) return null;
-
-    if (new Date(userFromHash.expiresAt).getTime() <= Date.now()) {
-      sessionRepository.deleteById(userFromHash.sessionId);
-      return null;
-    }
-
-    if (userFromHash.status !== 'active') {
-      sessionRepository.deleteById(userFromHash.sessionId);
-      return null;
-    }
-
-    sessionRepository.updateLastSeen(userFromHash.sessionId, nowIso());
-
-    return serializeCurrentUser(userFromHash);
+    return null;
   }
 
   requestPasswordReset(identifier) {
@@ -353,6 +322,10 @@ class AuthService {
     }
 
     return null;
+  }
+
+  findAuditSubjectForIdentifier(identifier) {
+    return userRepository.findAuditIdentityCandidate(identifier);
   }
 
   isAllowedLoginMatchType(role, matchType) {

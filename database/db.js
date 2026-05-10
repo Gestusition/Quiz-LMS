@@ -100,6 +100,7 @@ function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,
       tokenHash TEXT NOT NULL UNIQUE,
+      tokenType TEXT NOT NULL DEFAULT 'jwt',
       expiresAt TEXT NOT NULL,
       createdAt TEXT DEFAULT (datetime('now')),
       lastSeenAt TEXT DEFAULT (datetime('now')),
@@ -275,7 +276,10 @@ function createTables() {
       courseId INTEGER,
       name TEXT NOT NULL,
       description TEXT DEFAULT '',
+      createdBy INTEGER,
+      updatedBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE SET NULL
     );
 
@@ -326,7 +330,20 @@ function createTables() {
       hintText TEXT DEFAULT '',
       mediaUrl TEXT DEFAULT '',
       createdBy INTEGER,
-      createdAt TEXT DEFAULT (datetime('now'))
+      updatedBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.question_user_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      questionId INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      points REAL,
+      gradingType TEXT DEFAULT '',
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(questionId, userId),
+      FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS assessment.question_parts (
@@ -368,6 +385,7 @@ function createTables() {
       shuffleQuestions INTEGER NOT NULL DEFAULT 0,
       showCorrectAnswers INTEGER NOT NULL DEFAULT 1,
       createdBy INTEGER,
+      updatedBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now'))
     );
@@ -577,6 +595,18 @@ function createTables() {
       createdAt TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS users.resource_access_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      resourceType TEXT NOT NULL CHECK(resourceType IN ('question', 'category', 'quiz')),
+      resourceId INTEGER NOT NULL,
+      teacherUserId INTEGER NOT NULL,
+      accessLevel TEXT NOT NULL CHECK(accessLevel IN ('read', 'write')),
+      grantedBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(resourceType, resourceId, teacherUserId)
+    );
+
     CREATE TABLE IF NOT EXISTS learning.course_weeks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseId INTEGER NOT NULL,
@@ -635,6 +665,12 @@ function createTables() {
 function migrateExistingTables() {
   ensureColumn('users', 'users', 'username', 'username TEXT');
   ensureColumn('users', 'users', 'mustChangeCredentials', 'mustChangeCredentials INTEGER NOT NULL DEFAULT 0');
+  const hadSessionTokenType = columnExists('users', 'sessions', 'tokenType');
+  ensureColumn('users', 'sessions', 'tokenType', 'tokenType TEXT NOT NULL DEFAULT \'migrated\'');
+  if (!hadSessionTokenType) {
+    db.prepare('DELETE FROM users.sessions WHERE tokenType = ?').run('migrated');
+  }
+  ensureResourceAccessTables();
   ensureColumn('admin', 'admin_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
   ensureColumn('admin', 'admin_profiles', 'facultyId', 'facultyId INTEGER');
   ensureColumn('admin', 'admin_profiles', 'departmentId', 'departmentId INTEGER');
@@ -658,6 +694,9 @@ function migrateExistingTables() {
   ensureColumn('learning', 'courses', 'departmentId', 'departmentId INTEGER');
   ensureColumn('learning', 'courses', 'credits', 'credits INTEGER NOT NULL DEFAULT 3');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
+  ensureColumn('learning', 'categories', 'createdBy', 'createdBy INTEGER');
+  ensureColumn('learning', 'categories', 'updatedBy', 'updatedBy INTEGER');
+  ensureColumn('learning', 'categories', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
   migrateCategoryUniqueness();
   ensureColumn('learning', 'attendance_sessions', 'status', 'status TEXT NOT NULL DEFAULT \'open\'');
   ensureColumn('learning', 'attendance_sessions', 'openedAt', 'openedAt TEXT DEFAULT \'\'');
@@ -678,6 +717,9 @@ function migrateExistingTables() {
   ensureColumn('assessment', 'questions', 'hintText', 'hintText TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'questions', 'mediaUrl', 'mediaUrl TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'questions', 'gradingType', 'gradingType TEXT NOT NULL DEFAULT \'standard\'');
+  ensureColumn('assessment', 'questions', 'updatedBy', 'updatedBy INTEGER');
+  ensureColumn('assessment', 'questions', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
+  ensureQuestionSettingsTable();
 
   ensureColumn('assessment', 'attempt_answers', 'answerJson', 'answerJson TEXT DEFAULT \'{}\'');
 
@@ -699,6 +741,7 @@ function migrateExistingTables() {
   ensureColumn('assessment', 'quizzes', 'sebConfigUrl', 'sebConfigUrl TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'quizzes', 'manualResultReleasedAt', 'manualResultReleasedAt TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'quizzes', 'templateName', 'templateName TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quizzes', 'updatedBy', 'updatedBy INTEGER');
 
   ensureColumn('assessment', 'quiz_attempts', 'expiresAt', 'expiresAt TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'quiz_attempts', 'lifecycleStatus', 'lifecycleStatus TEXT NOT NULL DEFAULT \'in_progress\'');
@@ -783,6 +826,47 @@ function ensureAdvancedIndexes() {
     CREATE INDEX IF NOT EXISTS users.idx_validation_issues_lookup
     ON validation_issues(entityType, entityId, status, severity)
   `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS users.idx_resource_access_lookup
+    ON resource_access_grants(resourceType, resourceId, teacherUserId)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_question_user_settings_lookup
+    ON question_user_settings(questionId, userId)
+  `);
+}
+
+function ensureResourceAccessTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users.resource_access_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      resourceType TEXT NOT NULL CHECK(resourceType IN ('question', 'category', 'quiz')),
+      resourceId INTEGER NOT NULL,
+      teacherUserId INTEGER NOT NULL,
+      accessLevel TEXT NOT NULL CHECK(accessLevel IN ('read', 'write')),
+      grantedBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(resourceType, resourceId, teacherUserId)
+    )
+  `);
+}
+
+function ensureQuestionSettingsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS assessment.question_user_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      questionId INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      points REAL,
+      gradingType TEXT DEFAULT '',
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(questionId, userId),
+      FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
+    )
+  `);
 }
 
 function migrateCategoryUniqueness() {
@@ -806,7 +890,10 @@ function migrateCategoryUniqueness() {
         courseId INTEGER,
         name TEXT NOT NULL,
         description TEXT DEFAULT '',
+        createdBy INTEGER,
+        updatedBy INTEGER,
         createdAt TEXT DEFAULT (datetime('now')),
+        updatedAt TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE SET NULL
       );
 
@@ -1027,10 +1114,14 @@ function seedExamTemplates() {
 }
 
 function ensureColumn(schema, tableName, columnName, columnSql) {
-  const columns = db.prepare(`PRAGMA ${schema}.table_info(${tableName})`).all();
-  if (!columns.some(column => column.name === columnName)) {
+  if (!columnExists(schema, tableName, columnName)) {
     db.exec(`ALTER TABLE ${schema}.${tableName} ADD COLUMN ${columnSql}`);
   }
+}
+
+function columnExists(schema, tableName, columnName) {
+  const columns = db.prepare(`PRAGMA ${schema}.table_info(${tableName})`).all();
+  return columns.some(column => column.name === columnName);
 }
 
 function migrateLegacySingleDatabase(dbPath) {
@@ -1049,7 +1140,6 @@ function migrateLegacySingleDatabase(dbPath) {
     if (!legacyHasAnyTable) return;
 
     copyLegacyTable('users', 'users');
-    copyLegacyTable('users', 'sessions');
     copyLegacyTable('learning', 'courses');
     copyLegacyTable('learning', 'enrollments');
     copyLegacyTable('learning', 'categories');
@@ -1075,7 +1165,6 @@ function migrateLegacyIdentityDatabase() {
   db.exec(`ATTACH DATABASE '${escapeSqlPath(legacyIdentityPath)}' AS legacy_identity`);
   try {
     copyTable('legacy_identity', 'users', 'users');
-    copyTable('legacy_identity', 'users', 'sessions');
     normalizeUserIdentityState();
     normalizeAcademicProfileState();
   } finally {
@@ -1500,7 +1589,7 @@ function seedQuestionBank(database) {
   const teacherId = teacher ? teacher.id : null;
 
   const insertCategory = database.prepare(
-    'INSERT INTO categories (courseId, name, description) VALUES (?, ?, ?)'
+    'INSERT INTO categories (courseId, name, description, createdBy) VALUES (?, ?, ?, ?)'
   );
   const insertQuestion = database.prepare(`
     INSERT INTO questions (categoryId, text, type, options, correctAnswer, difficulty, points, createdBy)
@@ -1510,10 +1599,10 @@ function seedQuestionBank(database) {
   database.exec('BEGIN TRANSACTION');
   try {
     const categories = {
-      javascript: Number(insertCategory.run(courseId, 'JavaScript', 'Questions about JavaScript programming language fundamentals').lastInsertRowid),
-      html: Number(insertCategory.run(courseId, 'HTML & CSS', 'Questions about web markup and styling').lastInsertRowid),
-      databases: Number(insertCategory.run(courseId, 'Databases', 'Questions about database concepts and SQL').lastInsertRowid),
-      general: Number(insertCategory.run(courseId, 'General Knowledge', 'General programming and computer science questions').lastInsertRowid)
+      javascript: Number(insertCategory.run(courseId, 'JavaScript', 'Questions about JavaScript programming language fundamentals', teacherId).lastInsertRowid),
+      html: Number(insertCategory.run(courseId, 'HTML & CSS', 'Questions about web markup and styling', teacherId).lastInsertRowid),
+      databases: Number(insertCategory.run(courseId, 'Databases', 'Questions about database concepts and SQL', teacherId).lastInsertRowid),
+      general: Number(insertCategory.run(courseId, 'General Knowledge', 'General programming and computer science questions', teacherId).lastInsertRowid)
     };
 
     const seededQuestionIds = [];

@@ -673,14 +673,8 @@ function listAttendanceSessions(user, filters = {}) {
   `;
 
   if (user.role === 'teacher') {
-    query += ` AND (
-      co.instructorId = ?
-      OR co.courseId IN (
-        SELECT courseId FROM enrollments
-        WHERE userId = ? AND role = 'teacher' AND status = 'active'
-      )
-    )`;
-    params.push(user.id, user.id);
+    query += ' AND co.instructorId = ?';
+    params.push(user.id);
   } else if (user.role === 'student') {
     query += ` AND ats.courseOfferingId IN (
       SELECT courseOfferingId FROM course_offering_enrollments
@@ -823,14 +817,8 @@ function listAttendanceRecordDetails(user, filters = {}) {
   `;
 
   if (user.role === 'teacher') {
-    query += ` AND (
-      co.instructorId = ?
-      OR co.courseId IN (
-        SELECT courseId FROM enrollments
-        WHERE userId = ? AND role = 'teacher' AND status = 'active'
-      )
-    )`;
-    params.push(user.id, user.id);
+    query += ' AND co.instructorId = ?';
+    params.push(user.id);
   }
 
   if (filters.status) {
