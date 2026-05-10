@@ -1180,7 +1180,7 @@ function normalizeUserIdentityState() {
   users.forEach(user => {
     if (user.username) return;
 
-    const preferred = user.role === 'admin' && String(user.email).toLowerCase() === 'admin@example.com'
+    const preferred = user.role === 'admin' && (String(user.email).toLowerCase() === 'admin@example.com' || user.email === '')
       ? 'admin'
       : usernameFromUser(user);
     const username = uniqueUsername(preferred, used);
@@ -1192,7 +1192,7 @@ function normalizeUserIdentityState() {
     UPDATE users
     SET mustChangeCredentials = 1
     WHERE role = 'admin'
-      AND LOWER(email) = LOWER('admin@example.com')
+      AND (LOWER(email) = LOWER('admin@example.com') OR email = '')
       AND LOWER(username) = LOWER('admin')
   `).run();
 }
@@ -1350,7 +1350,7 @@ function seedUsers(database) {
   `);
 
   [
-    ['Admin User', 'admin', 'admin@example.com', 'admin', 'Admin123!', 1],
+    ['Admin User', 'admin', '', 'admin', 'Admin123!', 1],
     ['Teacher User', 'teacher', 'teacher@example.com', 'teacher', 'Teacher123!', 0],
     ['Student User', 'student', 'student@example.com', 'student', 'Student123!', 0]
   ].forEach(([name, username, email, role, password, mustChangeCredentials]) => {
