@@ -152,16 +152,20 @@ function getQuestions(quizId) {
   `).all(quizId);
 }
 
-function replaceQuestions(quizId, questions, questionIds) {
+function replaceQuestions(quizId, questions, parsedQuestions) {
   const db = getDatabase();
   db.prepare('DELETE FROM quiz_questions WHERE quizId = ?').run(quizId);
   const insert = db.prepare(`
     INSERT INTO quiz_questions (quizId, questionId, points, position)
     VALUES (?, ?, ?, ?)
   `);
-  questionIds.forEach((questionId, index) => {
+  parsedQuestions.forEach((parsedQ, index) => {
+    // Determine the ID from parsedQ (could be just the ID for backward compatibility, or the object)
+    const questionId = typeof parsedQ === 'object' ? parsedQ.id : parsedQ;
+    const customPoints = typeof parsedQ === 'object' ? parsedQ.points : null;
     const question = questions.find(item => item.id === questionId);
-    insert.run(quizId, questionId, question.points || 1, index + 1);
+    
+    insert.run(quizId, questionId, customPoints !== null ? customPoints : (question.points || 1), index + 1);
   });
 }
 

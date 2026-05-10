@@ -632,7 +632,22 @@ const options = {
           type: 'object',
           required: ['questionIds'],
           properties: {
-            questionIds: { type: 'array', items: { type: 'integer' } }
+            questionIds: { 
+              type: 'array', 
+              items: {
+                oneOf: [
+                  { type: 'integer' },
+                  {
+                    type: 'object',
+                    required: ['id'],
+                    properties: {
+                      id: { type: 'integer' },
+                      points: { type: 'number' }
+                    }
+                  }
+                ]
+              } 
+            }
           }
         },
         QuizAttempt: {

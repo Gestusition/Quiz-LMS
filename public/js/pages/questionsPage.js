@@ -172,31 +172,58 @@ export const QuestionsPage = {
         const unlocked = inputs.filter(inp => inp.dataset.edited !== 'true');
 
         const lockedSum = locked.reduce((s, inp) => s + (Number(inp.value) || 0), 0);
-        if (lockedSum > 100) {
-          this.toast(`Manually-set points (${lockedSum}) already exceed 100. Reduce them first.`, 'error');
-          return;
-        }
-        if (unlocked.length === 0 && lockedSum !== 100) {
-          this.toast('All questions have manually-set points. Clear some to redistribute.', 'error');
-          return;
-        }
 
-        const remaining = 100 - lockedSum;
-        const perQuestion = remaining / (unlocked.length || 1);
-        // Round to 2 decimal places, adjust last to hit exactly 100
-        let distributed = 0;
-        unlocked.forEach((inp, i) => {
-          if (i < unlocked.length - 1) {
-            const pts = Math.round(perQuestion * 100) / 100;
-            inp.value = pts;
-            distributed += pts;
+        if (unlocked.length > 0 && lockedSum < 100) {
+          const remaining = 100 - lockedSum;
+          const perQuestion = remaining / unlocked.length;
+          let distributed = 0;
+          unlocked.forEach((inp, i) => {
+            if (i < unlocked.length - 1) {
+              const pts = Math.round(perQuestion * 100) / 100;
+              inp.value = pts;
+              distributed += pts;
+            } else {
+              inp.value = Math.round((remaining - distributed) * 100) / 100;
+            }
+            inp.classList.add('pts-synced');
+            setTimeout(() => inp.classList.remove('pts-synced'), 1200);
+            inp.dataset.edited = 'true';
+          });
+        } else {
+          // Proportionally scale ALL inputs to sum to 100
+          const currentTotal = inputs.reduce((sum, inp) => sum + (parseFloat(inp.value) || 0), 0);
+          
+          if (currentTotal === 0) {
+            const perQuestion = 100 / inputs.length;
+            let currentSum = 0;
+            inputs.forEach((inp, idx) => {
+              if (idx === inputs.length - 1) {
+                inp.value = (Math.round((100 - currentSum) * 100) / 100).toFixed(2);
+              } else {
+                const val = Math.round(perQuestion * 100) / 100;
+                inp.value = val.toFixed(2);
+                currentSum += val;
+              }
+            });
           } else {
-            // Last one gets the remainder
-            inp.value = Math.round((remaining - distributed) * 100) / 100;
+            let currentSum = 0;
+            inputs.forEach((inp, idx) => {
+              const currentVal = parseFloat(inp.value) || 0;
+              if (idx === inputs.length - 1) {
+                inp.value = (Math.round((100 - currentSum) * 100) / 100).toFixed(2);
+              } else {
+                const val = Math.round((currentVal / currentTotal * 100) * 100) / 100;
+                inp.value = val.toFixed(2);
+                currentSum += val;
+              }
+            });
           }
-          inp.classList.add('pts-synced');
-          setTimeout(() => inp.classList.remove('pts-synced'), 1200);
-        });
+          inputs.forEach(inp => {
+            inp.classList.add('pts-synced');
+            setTimeout(() => inp.classList.remove('pts-synced'), 1200);
+            inp.dataset.edited = 'true';
+          });
+        }
 
         this._qbUpdateTotal();
 

@@ -132,14 +132,34 @@ class QuizService {
       throw validationError('question_ids', 'questionIds must be an array.');
     }
 
-    const parsedIds = questionIds.map((id, index) => {
+    const parsedQuestions = [];
+    const uniqueIds = [];
+    
+    questionIds.forEach((item, index) => {
+      let id;
+      let points = null;
       try {
-        return parseRequiredPositiveInt(id, `questionIds[${index}]`);
+        if (typeof item === 'object' && item !== null) {
+          id = parseRequiredPositiveInt(item.id, `questionIds[${index}].id`);
+          if (item.points !== undefined && item.points !== null) {
+            points = Number(item.points);
+            if (!Number.isFinite(points) || points <= 0 || points > LIMITS.questions.pointsMax) {
+              throw new Error('Invalid points value.');
+            }
+          }
+        } else {
+          id = parseRequiredPositiveInt(item, `questionIds[${index}]`);
+        }
       } catch (err) {
-        throw validationError('question_ids', 'questionIds must contain only positive integer IDs.');
+        throw validationError('question_ids', 'questionIds must contain positive integer IDs or objects with id and valid points.');
+      }
+      
+      if (!uniqueIds.includes(id)) {
+        uniqueIds.push(id);
+        parsedQuestions.push({ id, points });
       }
     });
-    const uniqueIds = [...new Set(parsedIds)];
+
     if (uniqueIds.length === 0) {
       throw validationError('question_ids', 'At least one question is required.');
     }
@@ -169,7 +189,7 @@ class QuizService {
     }
 
     quizRepository.withTransaction(() => {
-      quizRepository.replaceQuestions(quizId, questions, uniqueIds);
+      quizRepository.replaceQuestions(quizId, questions, parsedQuestions);
     });
 
     const updated = this.getById(quizId, { includeQuestions: true, includeCorrect: true });

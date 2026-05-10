@@ -343,7 +343,13 @@ export const QuizzesPage = {
     this.openModal('Assign questions to ' + quiz.title, `
       <div class="assign-questions-panel">
         <div class="assigned-section">
-          <h3>Assigned (<span id="assigned-count">${assignedIds.size}</span>)</h3>
+          <div class="assigned-header-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h3 style="margin: 0;">Assigned (<span id="assigned-count">${assignedIds.size}</span>)</h3>
+            <div class="qb-points-bar" style="margin: 0; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center; gap: 12px; background: var(--bg-surface-alt); border: 1px solid var(--border);">
+              <span class="qb-points-total" style="font-size: 0.85rem;">Total: <strong id="assign-total-pts-display">0.00 pts</strong></span>
+              <button type="button" class="btn btn-sm btn-outline" id="btn-assign-sync-100" title="Distribute 100 points proportionally" style="padding: 2px 8px; font-size: 0.8rem;">⚖️ Sync to 100</button>
+            </div>
+          </div>
           <div id="assigned-list" class="question-mini-list">
             ${(quiz.questions || []).map(q => `
               <div class="question-mini-item assigned" data-id="${q.id}">
@@ -352,7 +358,7 @@ export const QuizzesPage = {
                 ${diffBadge(q.difficulty)}
                 <span>${this.esc(q.text.slice(0, 55))}</span>
                 ${q.gradingType === 'negative' ? '<span class="grading-badge grading-negative" title="Negative marking">➖</span>' : q.gradingType === 'manual' ? '<span class="grading-badge grading-manual" title="Manual grading">📝</span>' : ''}
-                <span class="pts">${Math.round(q.points * 100) / 100} pts</span>
+                <span class="pts-container"><input type="number" class="form-input qb-card-pts-input assign-pts-input" value="${Math.round(q.points * 100) / 100}" min="0.1" max="100" step="any" style="width: 70px; display: inline-block; padding: 2px 6px; height: 28px;"> pts</span>
               </div>
             `).join('') || '<p class="muted">No questions assigned.</p>'}
           </div>
@@ -432,9 +438,94 @@ export const QuizzesPage = {
     document.getElementById('assign-difficulty-filter')?.addEventListener('change', refreshAvailable);
     document.getElementById('assign-search')?.addEventListener('input', refreshAvailable);
 
+    // Total updating
+    const updateAssignTotal = () => {
+      const inputs = Array.from(document.querySelectorAll('#assigned-list .assign-pts-input'));
+      let sum = inputs.reduce((acc, input) => acc + (parseFloat(input.value) || 0), 0);
+      sum = Math.round(sum * 100) / 100;
+      const display = document.getElementById('assign-total-pts-display');
+      if (display) {
+        display.textContent = sum.toFixed(2) + ' pts';
+        display.className = sum > 100 ? 'qb-over-100' : '';
+      }
+    };
+    this._updateAssignTotal = updateAssignTotal;
+
+    document.getElementById('assigned-list')?.addEventListener('input', (e) => {
+      if (e.target.classList.contains('assign-pts-input')) {
+        e.target.dataset.edited = 'true';
+        updateAssignTotal();
+      }
+    });
+
+    document.getElementById('btn-assign-sync-100')?.addEventListener('click', () => {
+      const inputs = Array.from(document.querySelectorAll('#assigned-list .assign-pts-input'));
+      if (inputs.length === 0) return;
+
+      const lockedInputs = inputs.filter(inp => inp.dataset.edited === 'true');
+      const unlockedInputs = inputs.filter(inp => inp.dataset.edited !== 'true');
+      const lockedSum = lockedInputs.reduce((sum, inp) => sum + (parseFloat(inp.value) || 0), 0);
+      
+      if (unlockedInputs.length > 0 && lockedSum < 100) {
+        const remainingBudget = 100 - lockedSum;
+        const perQuestion = remainingBudget / unlockedInputs.length;
+        let currentSum = 0;
+        unlockedInputs.forEach((inp, idx) => {
+          if (idx === unlockedInputs.length - 1) {
+            inp.value = (Math.round((remainingBudget - currentSum) * 100) / 100).toFixed(2);
+          } else {
+            const val = Math.round(perQuestion * 100) / 100;
+            inp.value = val.toFixed(2);
+            currentSum += val;
+          }
+          inp.dataset.edited = 'true';
+        });
+      } else {
+        // Proportionally scale ALL inputs
+        const currentTotal = inputs.reduce((sum, inp) => sum + (parseFloat(inp.value) || 0), 0);
+        
+        if (currentTotal === 0) {
+          const perQuestion = 100 / inputs.length;
+          let currentSum = 0;
+          inputs.forEach((inp, idx) => {
+            if (idx === inputs.length - 1) {
+              inp.value = (Math.round((100 - currentSum) * 100) / 100).toFixed(2);
+            } else {
+              const val = Math.round(perQuestion * 100) / 100;
+              inp.value = val.toFixed(2);
+              currentSum += val;
+            }
+          });
+        } else {
+          let currentSum = 0;
+          inputs.forEach((inp, idx) => {
+            const currentVal = parseFloat(inp.value) || 0;
+            if (idx === inputs.length - 1) {
+              inp.value = (Math.round((100 - currentSum) * 100) / 100).toFixed(2);
+            } else {
+              const val = Math.round((currentVal / currentTotal * 100) * 100) / 100;
+              inp.value = val.toFixed(2);
+              currentSum += val;
+            }
+          });
+        }
+        inputs.forEach(inp => {
+          inp.dataset.edited = 'true';
+        });
+      }
+      updateAssignTotal();
+    });
+
     document.getElementById('btn-save-assign')?.addEventListener('click', async () => {
       try {
-        await API.setQuizQuestions(this._quizId, Array.from(this._assignedIds));
+        const payloadQuestions = [];
+        document.querySelectorAll('#assigned-list .question-mini-item.assigned').forEach(item => {
+          const id = Number(item.dataset.id);
+          const points = parseFloat(item.querySelector('.assign-pts-input')?.value || 1);
+          if (id) payloadQuestions.push({ id, points });
+        });
+        
+        await API.setQuizQuestions(this._quizId, payloadQuestions);
         this.closeModal();
         this.renderQuizzes();
         this.toast('Questions assigned.', 'success');
@@ -442,6 +533,9 @@ export const QuizzesPage = {
         this.toast(err.message, 'error');
       }
     });
+
+    // Run initial total calculation
+    requestAnimationFrame(updateAssignTotal);
   },
 
   addAssigned(questionId) {
@@ -451,6 +545,11 @@ export const QuizzesPage = {
       item.classList.add('assigned');
       item.querySelector('button').textContent = '✕';
       item.querySelector('button').setAttribute('onclick', `App.removeAssigned(${questionId})`);
+      const ptsSpan = item.querySelector('.pts');
+      if (ptsSpan) {
+        const ptsValue = parseFloat(ptsSpan.textContent);
+        ptsSpan.outerHTML = `<span class="pts-container"><input type="number" class="form-input qb-card-pts-input assign-pts-input" value="${ptsValue}" min="0.1" max="100" step="any" style="width: 70px; display: inline-block; padding: 2px 6px; height: 28px;"> pts</span>`;
+      }
       document.getElementById('assigned-list')?.appendChild(item);
       // Remove "No questions assigned" placeholder if present
       const placeholder = document.querySelector('#assigned-list .muted');
@@ -461,6 +560,7 @@ export const QuizzesPage = {
     if (countEl) countEl.textContent = this._assignedIds.size;
     // Refresh the available grouped list
     if (this._refreshAvailable) this._refreshAvailable();
+    if (this._updateAssignTotal) this._updateAssignTotal();
   },
 
   removeAssigned(questionId) {
@@ -478,6 +578,7 @@ export const QuizzesPage = {
     if (countEl) countEl.textContent = this._assignedIds.size;
     // Refresh the available grouped list
     if (this._refreshAvailable) this._refreshAvailable();
+    if (this._updateAssignTotal) this._updateAssignTotal();
   },
 
   async showQuizAttempts(quizId) {
