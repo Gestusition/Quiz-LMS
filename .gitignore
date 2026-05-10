@@ -135,3 +135,6 @@ data/
 
 # Ignored PDFs
 SAD_Requirements (2).pdf
+
+# Uploads
+public/uploads/
