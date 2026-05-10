@@ -331,12 +331,17 @@ describe('Auth and quiz attempt flow', () => {
         expect(response.body.code).toBe('CREDENTIAL_CHANGE_REQUIRED');
       });
 
-    const user = authService.changeOwnCredentials(session.user.id, session.token, {
-      username: 'primary-admin',
-      currentPassword: 'Admin123!',
-      newPassword: 'BetterAdmin123!'
-    });
+    const response = await request(app)
+      .post('/api/auth/change-credentials')
+      .set('Cookie', cookie(session))
+      .send({
+        username: 'primary-admin',
+        currentPassword: 'Admin123!',
+        newPassword: 'BetterAdmin123!'
+      })
+      .expect(200);
 
+    const user = response.body;
     expect(user.username).toBe('primary-admin');
     expect(Boolean(user.mustChangeCredentials)).toBe(false);
     expect(authService.login('primary-admin', 'BetterAdmin123!').user.role).toBe('admin');

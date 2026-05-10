@@ -60,7 +60,8 @@ function attachUserToRequest(req, user, decoded, token) {
 
 function checkCredentialsChange(req, user) {
   if (user.mustChangeCredentials) {
-    const isAuthRoute = req.path.startsWith('/api/auth') || req.path.startsWith('/api/users/me/credentials');
+    const requestPath = req.originalUrl || req.path;
+    const isAuthRoute = requestPath.startsWith('/api/auth') || requestPath.startsWith('/api/users/me/credentials');
     if (!isAuthRoute) {
       return {
         status: 403,
