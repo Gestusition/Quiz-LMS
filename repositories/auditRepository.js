@@ -13,15 +13,25 @@ function create(entry) {
   );
 }
 
-function listRecent(limit = 20) {
+function listRecent(limit = 20, filters = {}) {
   const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 200);
+  const clauses = [];
+  const params = [];
+
+  if (filters.date) {
+    clauses.push('date(l.createdAt) = ?');
+    params.push(filters.date);
+  }
+
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   return getDatabase().prepare(`
     SELECT l.*, u.name as actorName, u.role as actorRole
     FROM audit_logs l
     LEFT JOIN users u ON u.id = l.actorUserId
+    ${where}
     ORDER BY l.createdAt DESC, l.id DESC
     LIMIT ?
-  `).all(safeLimit);
+  `).all(...params, safeLimit);
 }
 
 function listForEntity(entityType, entityId, limit = 20) {

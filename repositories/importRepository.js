@@ -3,24 +3,29 @@ const { parsePagination } = require('../utils/validation');
 
 function listBatches(filters = {}) {
   const paging = parsePagination(filters);
-  let query = `SELECT * FROM import_batches WHERE 1=1`;
+  const clauses = [];
   const params = [];
+
   if (filters.type) {
-    query += ' AND type = ?';
+    clauses.push('type = ?');
     params.push(filters.type);
   }
   if (filters.status) {
-    query += ' AND status = ?';
+    clauses.push('status = ?');
     params.push(filters.status);
   }
+  if (filters.date) {
+    clauses.push('date(createdAt) = ?');
+    params.push(filters.date);
+  }
+
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
   const total = getDatabase().prepare(`
-    SELECT COUNT(*) as count FROM import_batches WHERE 1=1
-    ${filters.type ? 'AND type = ?' : ''}
-    ${filters.status ? 'AND status = ?' : ''}
+    SELECT COUNT(*) as count FROM import_batches ${where}
   `).get(...params).count;
 
-  query += ' ORDER BY createdAt DESC, id DESC LIMIT ? OFFSET ?';
+  const query = `SELECT * FROM import_batches ${where} ORDER BY createdAt DESC, id DESC LIMIT ? OFFSET ?`;
   const items = getDatabase().prepare(query).all(...params, paging.limit, paging.offset);
   return {
     items,

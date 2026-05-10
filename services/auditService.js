@@ -6,8 +6,8 @@ class AuditService {
     return auditRepository.create(entry);
   }
 
-  recent(limit = 20) {
-    return auditRepository.listRecent(limit).map(row => ({
+  recent(limit = 20, filters = {}) {
+    return auditRepository.listRecent(limit, filters).map(row => ({
       id: row.id,
       actorUserId: row.actorUserId,
       actorName: row.actorName || 'System',

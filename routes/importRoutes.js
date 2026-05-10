@@ -5,7 +5,7 @@ const auditService = require('../services/auditService');
 const validationIssueService = require('../services/validationIssueService');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendError } = require('../utils/appError');
-const { parseRequiredPositiveInt } = require('../utils/validation');
+const { dateOnlyValue, parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 router.use(requireRole('admin'));
@@ -35,6 +35,11 @@ router.use(requireRole('admin'));
  *         name: limit
  *         schema:
  *           type: integer
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
  *     responses:
  *       200:
  *         description: Paginated import batches
@@ -57,6 +62,7 @@ router.get('/batches', (req, res) => {
     res.json(importService.listBatches({
       type: req.query.type,
       status: req.query.status,
+      date: dateOnlyValue(req.query.date, 'date'),
       page: req.query.page,
       limit: req.query.limit
     }));

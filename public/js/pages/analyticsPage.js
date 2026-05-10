@@ -1,5 +1,8 @@
 import { API } from '../api.js';
 
+const AUDIT_LOG_LIMIT = 15;
+const IMPORT_BATCH_LIMIT = 10;
+
 export const AnalyticsPage = {
   async renderAnalytics() {
     if (this.user.role !== 'admin') return this.setApp(this.emptyBlock('Admin access is required.'));
@@ -7,7 +10,7 @@ export const AnalyticsPage = {
     try {
       const [data, importBatches] = await Promise.all([
         API.getAdminAnalytics(),
-        API.getImportBatches({ limit: 10 }).catch(() => ({ items: [] }))
+        API.getImportBatches({ limit: IMPORT_BATCH_LIMIT }).catch(() => ({ items: [] }))
       ]);
       const totals = data.totals || {};
       const health = data.systemHealth || {};
@@ -53,22 +56,20 @@ export const AnalyticsPage = {
             <div class="list compact" id="attendance-summary-list">${this.attendanceSummaryRows(data.attendanceSummary || [])}</div>
           </div>
           <div class="panel">
-            <div class="panel-header"><h2>Recent Audit Logs</h2><span>${recentAudit.length}</span></div>
-            <div class="list compact scroll-list analytics-scroll-list">${recentAudit.map(log => `
-              <div class="list-row">
-                <div><strong>${this.esc(log.action)}</strong><small>${this.esc(log.actorName || 'System')} - ${this.esc(log.entityType)} #${this.esc(log.entityId || '-')}</small></div>
-                <small>${this.esc(this.formatDate(log.createdAt))}</small>
-              </div>
-            `).join('') || this.emptyLine('No audit activity yet.')}</div>
+            <div class="panel-header"><h2>Recent Audit Logs</h2><span id="audit-log-total">${recentAudit.length}</span></div>
+            <div class="toolbar compact-toolbar">
+              <label class="form-field inline-field"><span>Date</span><input class="form-input" id="audit-log-date" type="date"></label>
+              <button class="btn btn-ghost btn-sm" id="audit-log-clear" type="button">Clear</button>
+            </div>
+            <div class="list compact scroll-list analytics-scroll-list" id="audit-log-list">${this.auditLogRows(recentAudit)}</div>
           </div>
           <div class="panel">
-            <div class="panel-header"><h2>Import Batches</h2><span>${batches.length}</span></div>
-            <div class="list compact scroll-list analytics-scroll-list">${batches.map(batch => `
-              <div class="list-row">
-                <div><strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong><small>${this.esc(batch.status)} | ${batch.successCount}/${batch.totalRows} success</small></div>
-                <button class="btn btn-ghost btn-sm" onclick="App.showImportBatchErrors(${batch.id})">Errors</button>
-              </div>
-            `).join('') || this.emptyLine('No import batches yet.')}</div>
+            <div class="panel-header"><h2>Import Batches</h2><span id="import-batch-total">${batches.length}</span></div>
+            <div class="toolbar compact-toolbar">
+              <label class="form-field inline-field"><span>Date</span><input class="form-input" id="import-batch-date" type="date"></label>
+              <button class="btn btn-ghost btn-sm" id="import-batch-clear" type="button">Clear</button>
+            </div>
+            <div class="list compact scroll-list analytics-scroll-list" id="import-batch-list">${this.importBatchRows(batches)}</div>
           </div>
         </section>
         <section class="panel">
@@ -91,8 +92,111 @@ export const AnalyticsPage = {
         </section>
       `);
       this.initAttendanceSummary(data.attendanceSummary || [], totals.attendanceRecords || 0);
+      this.initAuditLogFilter(recentAudit);
+      this.initImportBatchFilter(batches);
     } catch (err) {
       this.renderError(err);
+    }
+  },
+
+  auditLogRows(logs = []) {
+    return logs.map(log => this.auditLogRow(log)).join('') || this.emptyLine('No audit activity yet.');
+  },
+
+  auditLogRow(log) {
+    return `
+      <div class="list-row">
+        <div><strong>${this.esc(log.action)}</strong><small>${this.esc(log.actorName || 'System')} - ${this.esc(log.entityType)} #${this.esc(log.entityId || '-')}</small></div>
+        <small>${this.esc(this.formatDate(log.createdAt))}</small>
+      </div>
+    `;
+  },
+
+  importBatchRows(batches = []) {
+    return batches.map(batch => this.importBatchRow(batch)).join('') || this.emptyLine('No import batches yet.');
+  },
+
+  importBatchRow(batch) {
+    const createdAt = batch.createdAt ? ` - ${this.esc(this.formatDate(batch.createdAt))}` : '';
+    return `
+      <div class="list-row">
+        <div><strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong><small>${this.esc(batch.status)} | ${batch.successCount}/${batch.totalRows} success${createdAt}</small></div>
+        <button class="btn btn-ghost btn-sm" onclick="App.showImportBatchErrors(${batch.id})">Errors</button>
+      </div>
+    `;
+  },
+
+  initAuditLogFilter(logs) {
+    this.auditLogBase = logs;
+    const dateInput = document.getElementById('audit-log-date');
+    const clearButton = document.getElementById('audit-log-clear');
+    if (dateInput) {
+      dateInput.addEventListener('change', () => this.updateAuditLogsForDate());
+    }
+    if (clearButton) {
+      clearButton.addEventListener('click', () => {
+        if (dateInput) dateInput.value = '';
+        this.renderAuditLogs(logs);
+      });
+    }
+  },
+
+  renderAuditLogs(logs = []) {
+    const list = document.getElementById('audit-log-list');
+    const totalLabel = document.getElementById('audit-log-total');
+    if (list) list.innerHTML = this.auditLogRows(logs);
+    if (totalLabel) totalLabel.textContent = logs.length;
+  },
+
+  async updateAuditLogsForDate() {
+    const date = document.getElementById('audit-log-date')?.value || '';
+    if (!date) {
+      this.renderAuditLogs(this.auditLogBase || []);
+      return;
+    }
+
+    try {
+      const logs = await API.getAuditLogs({ limit: AUDIT_LOG_LIMIT, date });
+      this.renderAuditLogs(logs || []);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  initImportBatchFilter(batches) {
+    this.importBatchBase = batches;
+    const dateInput = document.getElementById('import-batch-date');
+    const clearButton = document.getElementById('import-batch-clear');
+    if (dateInput) {
+      dateInput.addEventListener('change', () => this.updateImportBatchesForDate());
+    }
+    if (clearButton) {
+      clearButton.addEventListener('click', () => {
+        if (dateInput) dateInput.value = '';
+        this.renderImportBatches(batches);
+      });
+    }
+  },
+
+  renderImportBatches(batches = []) {
+    const list = document.getElementById('import-batch-list');
+    const totalLabel = document.getElementById('import-batch-total');
+    if (list) list.innerHTML = this.importBatchRows(batches);
+    if (totalLabel) totalLabel.textContent = batches.length;
+  },
+
+  async updateImportBatchesForDate() {
+    const date = document.getElementById('import-batch-date')?.value || '';
+    if (!date) {
+      this.renderImportBatches(this.importBatchBase || []);
+      return;
+    }
+
+    try {
+      const result = await API.getImportBatches({ limit: IMPORT_BATCH_LIMIT, date });
+      this.renderImportBatches(result.items || []);
+    } catch (err) {
+      this.toast(err.message, 'error');
     }
   },
 

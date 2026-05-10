@@ -559,4 +559,51 @@ describe('Academic management system', () => {
         expect(Array.isArray(response.body.departmentSummary)).toBe(true);
       });
   });
+
+  test('admin audit logs and import batches can be filtered by date', async () => {
+    const stamp = Date.now();
+    const db = getDatabase();
+    const oldAction = `FILTER_OLD_${stamp}`;
+    const newAction = `FILTER_NEW_${stamp}`;
+    const oldFileName = `old-import-${stamp}.csv`;
+    const newFileName = `new-import-${stamp}.csv`;
+
+    db.prepare(`
+      INSERT INTO audit_logs (action, entityType, entityId, detailsJson, createdAt)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(oldAction, 'test_entity', 1, '{}', '2026-05-01 09:00:00');
+    db.prepare(`
+      INSERT INTO audit_logs (action, entityType, entityId, detailsJson, createdAt)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(newAction, 'test_entity', 2, '{}', '2026-05-02 09:00:00');
+
+    await request(app)
+      .get('/api/audit?date=2026-05-01&limit=50')
+      .set('Cookie', cookie(adminSession))
+      .expect(200)
+      .expect(response => {
+        const actions = response.body.map(item => item.action);
+        expect(actions).toContain(oldAction);
+        expect(actions).not.toContain(newAction);
+      });
+
+    db.prepare(`
+      INSERT INTO import_batches (type, uploadedBy, fileName, status, totalRows, successCount, failedCount, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('users', null, oldFileName, 'processed', 2, 2, 0, '2026-05-01 08:00:00');
+    db.prepare(`
+      INSERT INTO import_batches (type, uploadedBy, fileName, status, totalRows, successCount, failedCount, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('users', null, newFileName, 'processed', 2, 2, 0, '2026-05-02 08:00:00');
+
+    await request(app)
+      .get('/api/imports/batches?date=2026-05-01&limit=50')
+      .set('Cookie', cookie(adminSession))
+      .expect(200)
+      .expect(response => {
+        const fileNames = response.body.items.map(item => item.fileName);
+        expect(fileNames).toContain(oldFileName);
+        expect(fileNames).not.toContain(newFileName);
+      });
+  });
 });

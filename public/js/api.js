@@ -172,7 +172,13 @@ export const API = {
   getMyAttendance() { return this.request('/academic/attendance/my'); },
   getAttendanceSummary(courseOfferingId) { return this.request(`/academic/attendance/offerings/${courseOfferingId}/summary`); },
   getAdminAnalytics() { return this.request('/analytics/admin'); },
-  getAuditLogs(limit = 20) { return this.request(`/audit?limit=${encodeURIComponent(limit)}`); },
+  getAuditLogs(filters = {}) {
+    const params = new URLSearchParams();
+    const options = typeof filters === 'number' ? { limit: filters } : filters;
+    if (options.limit) params.set('limit', options.limit);
+    if (options.date) params.set('date', options.date);
+    return this.request(`/audit${params.toString() ? `?${params}` : ''}`);
+  },
 
   getValidationIssues(filters = {}) {
     const params = new URLSearchParams();
@@ -207,6 +213,7 @@ export const API = {
     const params = new URLSearchParams();
     if (filters.type) params.set('type', filters.type);
     if (filters.status) params.set('status', filters.status);
+    if (filters.date) params.set('date', filters.date);
     if (filters.page) params.set('page', filters.page);
     if (filters.limit) params.set('limit', filters.limit);
     return this.request(`/imports/batches${params.toString() ? `?${params}` : ''}`);

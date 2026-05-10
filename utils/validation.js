@@ -156,6 +156,23 @@ function dateValue(value, field, { required = false } = {}) {
   return new Date(ts).toISOString();
 }
 
+function dateOnlyValue(value, field, { required = false } = {}) {
+  const text = asTrimmedString(value);
+  if (!text) {
+    if (required) throw validationError(field, `${field} is required.`);
+    return '';
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw validationError(field, `${field} must be a date in YYYY-MM-DD format.`);
+  }
+
+  const parsed = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== text) {
+    throw validationError(field, `${field} must be a valid calendar date.`);
+  }
+  return text;
+}
+
 function ensureDateOrder(start, end, startField, endField) {
   if (!start || !end) return;
   if (new Date(start).getTime() > new Date(end).getTime()) {
@@ -187,6 +204,7 @@ function stripInvisible(value) {
 module.exports = {
   asTrimmedString,
   booleanValue,
+  dateOnlyValue,
   dateValue,
   ensureDateOrder,
   enumValue,
