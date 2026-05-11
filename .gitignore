@@ -138,3 +138,6 @@ SAD_Requirements (2).pdf
 
 # Uploads
 public/uploads/
+
+# Test outputs
+test_output.txt
