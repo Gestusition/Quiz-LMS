@@ -107,6 +107,14 @@ function createTables() {
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS users.system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updatedBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS users.password_reset_codes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,
@@ -670,6 +678,7 @@ function migrateExistingTables() {
   if (!hadSessionTokenType) {
     db.prepare('DELETE FROM users.sessions WHERE tokenType = ?').run('migrated');
   }
+  ensureSystemSettings();
   ensureResourceAccessTables();
   ensureColumn('admin', 'admin_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
   ensureColumn('admin', 'admin_profiles', 'facultyId', 'facultyId INTEGER');
@@ -1111,6 +1120,13 @@ function seedExamTemplates() {
     gradingMode: 'standard',
     requiresSeb: true
   }));
+}
+
+function ensureSystemSettings() {
+  db.prepare(`
+    INSERT OR IGNORE INTO users.system_settings (key, value)
+    VALUES (?, ?)
+  `).run('maintenance_mode', 'true');
 }
 
 function ensureColumn(schema, tableName, columnName, columnSql) {

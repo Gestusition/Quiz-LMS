@@ -4,6 +4,7 @@ const request = require('supertest');
 const app = require('../server');
 const { initDatabase, seedDatabase, closeDatabase, resolveDatabaseFiles, getDatabase } = require('../database/db');
 const authService = require('../services/authService');
+const settingsService = require('../services/settingsService');
 const gradeSchemeService = require('../services/gradeSchemeService');
 const quizService = require('../services/quizService');
 const categoryService = require('../services/categoryService');
@@ -37,6 +38,7 @@ beforeAll(() => {
   removeDbFiles();
   initDatabase(TEST_DB);
   seedDatabase();
+  settingsService.setMaintenanceMode(false);
 
   const stamp = Date.now();
   const db = getDatabase();

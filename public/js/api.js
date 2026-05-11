@@ -12,6 +12,18 @@ export const API = {
     }
   },
 
+  handleUnauthorized(data = {}) {
+    const app = window.App;
+    if (!app || !app.user) return;
+
+    app.user = null;
+    app.stopSessionWatchdog?.();
+    app.renderShell();
+    location.hash = '#/';
+    app.renderLogin();
+    app.toast(data.message || 'Your session ended. Please sign in again.', 'error');
+  },
+
   async request(endpoint, options = {}) {
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const headers = isFormData
@@ -28,8 +40,17 @@ export const API = {
     const data = contentType.includes('application/json') ? await response.json() : {};
 
     if (!response.ok) {
-      if (response.status === 401 && endpoint !== '/auth/logout') await this.clearSession();
-      throw new Error(data.message || data.error || `Request failed with status ${response.status}`);
+      const error = new Error(data.message || data.error || `Request failed with status ${response.status}`);
+      error.status = response.status;
+      error.code = data.code || '';
+
+      if (response.status === 401 && !['/auth/login', '/auth/logout'].includes(endpoint)) {
+        await this.clearSession();
+        this.handleUnauthorized(data);
+        error.sessionHandled = true;
+      }
+
+      throw error;
     }
 
     return data;
@@ -179,6 +200,8 @@ export const API = {
     if (options.date) params.set('date', options.date);
     return this.request(`/audit${params.toString() ? `?${params}` : ''}`);
   },
+  getMaintenanceMode() { return this.request('/settings/maintenance'); },
+  updateMaintenanceMode(enabled) { return this.request('/settings/maintenance', { method: 'PUT', body: { enabled } }); },
 
   getValidationIssues(filters = {}) {
     const params = new URLSearchParams();

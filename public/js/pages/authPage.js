@@ -49,6 +49,7 @@ export const AuthPage = {
       this.user = session.user;
       document.body.classList.remove('login-page');
       this.renderShell();
+      this.startSessionWatchdog();
       if (this.user.mustChangeCredentials) {
         this.renderCredentialChange();
       } else {
@@ -64,6 +65,7 @@ export const AuthPage = {
   async logout() {
     try { await API.logout(); } catch (e) { await API.clearSession(); }
     this.user = null;
+    this.stopSessionWatchdog();
     this.renderShell();
     location.hash = '#/';
     this.renderLogin();
@@ -174,6 +176,7 @@ export const AuthPage = {
         });
         this.user = user;
         this.renderShell();
+        this.startSessionWatchdog();
         location.hash = '#/';
         await this.renderDashboard();
         this.toast('Credentials updated.', 'success');

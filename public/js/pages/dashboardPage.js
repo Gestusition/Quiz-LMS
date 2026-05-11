@@ -21,14 +21,15 @@ export const DashboardPage = {
   },
 
   async renderAdminDashboard() {
-    const [usersResult, courses, terms, analytics, issuesResult, importsResult, auditLogs] = await Promise.all([
+    const [usersResult, courses, terms, analytics, issuesResult, importsResult, auditLogs, maintenance] = await Promise.all([
       API.getUsers({ page: 1, limit: 100 }),
       API.getCourses(),
       API.getTerms().catch(() => []),
       API.getAdminAnalytics(),
       API.getValidationIssues({ status: 'open', limit: 20 }).catch(() => ({ items: [] })),
       API.getImportBatches({ limit: 20 }).catch(() => ({ items: [] })),
-      API.getAuditLogs(40).catch(() => [])
+      API.getAuditLogs(40).catch(() => []),
+      API.getMaintenanceMode().catch(() => ({ enabled: false }))
     ]);
 
     const users = usersResult.items || [];
@@ -48,6 +49,8 @@ export const DashboardPage = {
           <a class="btn btn-primary" href="#/academic">Academic setup</a>
         </div>
       </header>
+
+      ${this.maintenanceNotice(maintenance)}
 
       <section class="stats-grid">
         ${this.stat('Total users', totals.users || users.length)}
@@ -105,6 +108,70 @@ export const DashboardPage = {
         </div>
       </section>
     `);
+  },
+
+  async renderMaintenance() {
+    document.body.classList.remove('login-page');
+    this.setApp(this.loading('Loading maintenance mode'));
+
+    try {
+      const maintenance = await API.getMaintenanceMode();
+      const statusLabel = maintenance.enabled ? 'On' : 'Off';
+      const actionLabel = maintenance.enabled ? 'Turn off maintenance mode' : 'Turn on maintenance mode';
+      const actionEnabled = maintenance.enabled ? 'false' : 'true';
+
+      this.setApp(`
+        <header class="page-header">
+          <div>
+            <a class="back-link" href="#/">Back to dashboard</a>
+            <h1>Maintenance Mode</h1>
+            <p>Control whether teachers and students can access Quiz LMS.</p>
+          </div>
+        </header>
+
+        <section class="panel maintenance-panel">
+          <div class="maintenance-status-row">
+            <div>
+              <span class="status-chip ${maintenance.enabled ? 'restricted' : 'active'}">Maintenance ${statusLabel}</span>
+              <h2>${maintenance.enabled ? 'Teachers and students are locked out' : 'Quiz LMS is open'}</h2>
+              <p class="muted">${maintenance.enabled
+                ? 'Teachers and students cannot sign in. Active teacher and student sessions are ended by the server.'
+                : 'Teachers and students can sign in and continue normal coursework.'}</p>
+            </div>
+            <button class="btn ${maintenance.enabled ? 'btn-primary' : 'btn-danger'}" id="btn-toggle-maintenance" data-enabled="${actionEnabled}">
+              ${actionLabel}
+            </button>
+          </div>
+          <div class="maintenance-meta">
+            <span>Default on for fresh installs</span>
+            <span>Last updated: ${this.esc(maintenance.updatedAt ? this.formatDate(maintenance.updatedAt) : 'Never')}</span>
+          </div>
+        </section>
+      `);
+
+      document.getElementById('btn-toggle-maintenance').addEventListener('click', event => {
+        const enabled = event.currentTarget.dataset.enabled === 'true';
+        this.toggleMaintenanceMode(enabled);
+      });
+    } catch (err) {
+      this.renderError(err);
+    }
+  },
+
+  async toggleMaintenanceMode(enabled) {
+    if (enabled && !confirm('Turn on maintenance mode? Teachers and students will be signed out.')) return;
+
+    try {
+      const result = await API.updateMaintenanceMode(enabled);
+      const revoked = Number(result.revokedSessions || 0);
+      this.toast(enabled
+        ? `Maintenance mode is on. ${revoked} teacher/student session${revoked === 1 ? '' : 's'} ended.`
+        : 'Maintenance mode is off. Teachers and students can sign in.',
+      'success');
+      await this.renderMaintenance();
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
   },
 
   async renderTeacherDashboard() {
@@ -240,5 +307,19 @@ export const DashboardPage = {
 
   stat(label, valueText) {
     return `<div class="stat-card"><span>${this.esc(label)}</span><strong>${valueText}</strong></div>`;
+  },
+
+  maintenanceNotice(maintenance) {
+    if (!maintenance || !maintenance.enabled) return '';
+
+    return `
+      <section class="maintenance-banner" role="status">
+        <div>
+          <strong>Maintenance mode is on</strong>
+          <p>Teachers and students cannot sign in. Turn it off when setup is complete.</p>
+        </div>
+        <a class="btn btn-primary" href="#/maintenance">Open maintenance page</a>
+      </section>
+    `;
   }
 };

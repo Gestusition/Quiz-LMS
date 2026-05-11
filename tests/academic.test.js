@@ -4,6 +4,7 @@ const request = require('supertest');
 const app = require('../server');
 const { initDatabase, seedDatabase, closeDatabase, resolveDatabaseFiles, getDatabase } = require('../database/db');
 const authService = require('../services/authService');
+const settingsService = require('../services/settingsService');
 
 const TEST_DB = path.join(__dirname, 'test_academic.db');
 
@@ -24,6 +25,7 @@ beforeAll(() => {
   removeDbFiles();
   initDatabase(TEST_DB);
   seedDatabase();
+  settingsService.setMaintenanceMode(false);
 });
 
 afterAll(() => {

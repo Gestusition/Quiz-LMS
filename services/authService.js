@@ -23,6 +23,7 @@ const {
 const { roles } = require('../constants/enums');
 const { serializeCurrentUser } = require('../serializers/userSerializer');
 const restrictionService = require('./restrictionService');
+const settingsService = require('./settingsService');
 const {
   AppError,
   conflictError,
@@ -61,6 +62,7 @@ class AuthService {
       scopeType: 'global',
       safeMessage: 'Your account access is restricted. Please contact your instructor or administrator.'
     });
+    settingsService.assertLoginAllowed(user);
 
     const expiresAt = sessionExpiryDate();
     const sessionResult = sessionRepository.createPendingJwt(user.id, expiresAt);

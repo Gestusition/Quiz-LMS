@@ -17,6 +17,7 @@ const importRoutes = require('./routes/importRoutes');
 const discussionRoutes = require('./routes/discussionRoutes');
 const courseWeekRoutes = require('./routes/courseWeekRoutes');
 const auditRoutes = require('./routes/auditRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -87,6 +88,7 @@ app.use('/api/imports', importRoutes);
 app.use('/api/discussion', discussionRoutes);
 app.use('/api/weeks', courseWeekRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Swagger API Documentation
 setupSwagger(app);

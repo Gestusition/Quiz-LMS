@@ -3,6 +3,10 @@ const enrollmentRepository = require('../repositories/enrollmentRepository');
 const { verifyJwt } = require('../utils/security');
 const sessionRepository = require('../repositories/sessionRepository');
 const { serializeCurrentUser } = require('../serializers/userSerializer');
+const settingsService = require('../services/settingsService');
+
+const SESSION_COOKIE_NAME = 'auth_token';
+const { MAINTENANCE_MODE_CODE, MAINTENANCE_MESSAGE } = settingsService;
 
 function extractToken(req) {
   const cookieHeader = req.headers && req.headers.cookie;
@@ -15,6 +19,15 @@ function extractToken(req) {
     }
   }
   return '';
+}
+
+function clearSessionCookie(res) {
+  res.clearCookie(SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/'
+  });
 }
 
 /**
@@ -58,6 +71,22 @@ function attachUserToRequest(req, user, decoded, token) {
   };
 }
 
+function checkMaintenanceMode(user, decoded) {
+  if (!user || !decoded || !decoded.jti || !settingsService.isRoleBlocked(user.role)) {
+    return null;
+  }
+
+  sessionRepository.deleteById(Number(decoded.jti));
+  return {
+    status: 401,
+    json: {
+      status: 'error',
+      code: MAINTENANCE_MODE_CODE,
+      message: MAINTENANCE_MESSAGE
+    }
+  };
+}
+
 function checkCredentialsChange(req, user) {
   if (user.mustChangeCredentials) {
     const requestPath = req.originalUrl || req.path;
@@ -93,6 +122,12 @@ function authenticate(req, res, next) {
     if (decoded && decoded.sub && decoded.jti) {
       const user = resolveUserFromDecoded(decoded);
       if (user) {
+        const maintenance = checkMaintenanceMode(user, decoded);
+        if (maintenance) {
+          clearSessionCookie(res);
+          return res.status(maintenance.status).json(maintenance.json);
+        }
+
         const restriction = checkCredentialsChange(req, user);
         if (restriction) return res.status(restriction.status).json(restriction.json);
 
@@ -132,6 +167,12 @@ function optionallyAuthenticate(req, res, next) {
     if (decoded && decoded.sub && decoded.jti) {
       const user = resolveUserFromDecoded(decoded);
       if (user) {
+        const maintenance = checkMaintenanceMode(user, decoded);
+        if (maintenance) {
+          clearSessionCookie(res);
+          return next();
+        }
+
         attachUserToRequest(req, user, decoded, token);
       }
       return next();
@@ -162,6 +203,12 @@ function validateSession(req, res, next) {
     if (decoded && decoded.sub && decoded.jti) {
       const user = resolveUserFromDecoded(decoded);
       if (user) {
+        const maintenance = checkMaintenanceMode(user, decoded);
+        if (maintenance) {
+          clearSessionCookie(res);
+          return res.status(maintenance.status).json(maintenance.json);
+        }
+
         attachUserToRequest(req, user, decoded, token);
         return next();
       }

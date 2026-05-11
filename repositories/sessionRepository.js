@@ -25,6 +25,21 @@ function deleteByUserId(userId) {
   return getDatabase().prepare('DELETE FROM users.sessions WHERE userId = ?').run(userId);
 }
 
+function deleteByUserRoles(roles) {
+  const roleList = Array.isArray(roles) ? roles.filter(Boolean) : [];
+  if (roleList.length === 0) return { changes: 0 };
+
+  const placeholders = roleList.map(() => '?').join(', ');
+  return getDatabase().prepare(`
+    DELETE FROM users.sessions
+    WHERE userId IN (
+      SELECT id
+      FROM users.users
+      WHERE role IN (${placeholders})
+    )
+  `).run(...roleList);
+}
+
 function deleteOtherUserSessions(userId, currentTokenHash) {
   return getDatabase().prepare('DELETE FROM users.sessions WHERE userId = ? AND tokenHash != ?').run(userId, currentTokenHash);
 }
@@ -50,6 +65,7 @@ module.exports = {
   deleteById,
   deleteByTokenHash,
   deleteByUserId,
+  deleteByUserRoles,
   deleteOtherUserSessions,
   findById,
   updateLastSeen,

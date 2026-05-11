@@ -4,6 +4,7 @@ export const emptyStateMethods = {
   },
 
   renderError(err) {
+    if (err && err.sessionHandled) return;
     this.setApp(`<div class="empty-state"><h2>${this.esc(err.message)}</h2><button class="btn btn-primary" onclick="App.route()">Retry</button></div>`);
   },
 

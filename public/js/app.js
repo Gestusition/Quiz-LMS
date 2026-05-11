@@ -56,6 +56,7 @@ const App = {
     }
 
     this.renderShell();
+    this.startSessionWatchdog();
     this.route();
   },
 
@@ -92,7 +93,7 @@ const App = {
     ];
     if (this.user.role !== 'student') items.splice(3, 0, ['#/academic', 'Academic']);
     if (this.canManageLearning()) items.push(['#/questions', 'Question Bank']);
-    if (this.user.role === 'admin') items.push(['#/users', 'Users'], ['#/analytics', 'Analytics']);
+    if (this.user.role === 'admin') items.push(['#/users', 'Users'], ['#/analytics', 'Analytics'], ['#/maintenance', 'Maintenance']);
 
     links.innerHTML = items.map(([href, label]) =>
       `<a class="nav-link" href="${href}" data-href="${href}">${label}</a>`
@@ -133,6 +134,26 @@ const App = {
 
   canManageLearning() {
     return this.user && ['admin', 'teacher'].includes(this.user.role);
+  },
+
+  startSessionWatchdog() {
+    this.stopSessionWatchdog();
+    if (!this.user || this.user.role === 'admin') return;
+
+    this._sessionWatchdog = window.setInterval(async () => {
+      if (!this.user || this.user.role === 'admin') return;
+      try {
+        await API.me();
+      } catch (e) {
+        // API.request handles revoked sessions and routes the user back to sign-in.
+      }
+    }, 10000);
+  },
+
+  stopSessionWatchdog() {
+    if (!this._sessionWatchdog) return;
+    window.clearInterval(this._sessionWatchdog);
+    this._sessionWatchdog = null;
   },
 
   renderForbidden() {

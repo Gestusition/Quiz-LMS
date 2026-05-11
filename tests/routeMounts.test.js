@@ -62,7 +62,8 @@ describe('API route mounts', () => {
       { name: 'imports', path: '/api/imports/batches?limit=1', auth: true },
       { name: 'discussion', path: `/api/discussion/courses/${course.id}/threads`, auth: true },
       { name: 'weeks', path: `/api/weeks/courses/${course.id}/weeks`, auth: true },
-      { name: 'audit', path: '/api/audit?limit=1', auth: true }
+      { name: 'audit', path: '/api/audit?limit=1', auth: true },
+      { name: 'settings', path: '/api/settings/maintenance', auth: true }
     ];
 
     for (const route of mountedRoutes) {

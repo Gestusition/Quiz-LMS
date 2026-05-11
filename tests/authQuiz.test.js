@@ -10,6 +10,7 @@ const {
   resolveDatabaseFiles
 } = require('../database/db');
 const authService = require('../services/authService');
+const settingsService = require('../services/settingsService');
 const auditService = require('../services/auditService');
 const quizService = require('../services/quizService');
 const restrictionService = require('../services/restrictionService');
@@ -72,6 +73,7 @@ beforeAll(() => {
   removeDbFiles();
   initDatabase(TEST_DB);
   seedDatabase();
+  settingsService.setMaintenanceMode(false);
 });
 
 afterAll(() => {

@@ -29,6 +29,8 @@ export function routeTo(app) {
   if (root === 'users') return app.renderUsers();
   if (root === 'analytics' && app.user.role !== 'admin') return app.renderForbidden();
   if (root === 'analytics') return app.renderAnalytics();
+  if (root === 'maintenance' && app.user.role !== 'admin') return app.renderForbidden();
+  if (root === 'maintenance') return app.renderMaintenance();
   if (root === 'attempt' && parts[1]) return app.renderAttempt(Number(parts[1]));
 
   app.setApp(`<div class="empty-state"><h2>Page not found</h2><a class="btn btn-primary" href="#/">Dashboard</a></div>`);
