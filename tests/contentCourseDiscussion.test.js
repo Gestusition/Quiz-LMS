@@ -128,6 +128,28 @@ describe('course service workflows', () => {
     expect(updated.title).toMatch(/Updated/);
     expect(updated.credits).toBe(5);
     expect(() => courseService.update(999999, { title: 'Missing' })).toThrow(/course not found/i);
+
+    const pastCourse = courseService.create({
+      code: `PAST-${String(Date.now()).slice(-8)}`,
+      title: 'Past Course From Weeks',
+      description: 'Course lifecycle is derived from weekly end dates.',
+      visibility: 'published'
+    }, teacher);
+    courseWeekService.createWeek(pastCourse.id, teacher, {
+      weekNumber: 1,
+      title: 'Past Week',
+      startsAt: '2000-01-01T00:00:00.000Z',
+      endsAt: '2000-01-07T00:00:00.000Z',
+      visible: true
+    });
+
+    const previousCourse = courseService.getById(pastCourse.id);
+    expect(previousCourse.endDate).toBe('');
+    expect(previousCourse.effectiveEndDate).toBe('2000-01-07T00:00:00.000Z');
+    expect(previousCourse.lifecycle).toBe('previous');
+    expect(previousCourse.isPrevious).toBe(true);
+    expect(courseService.getAll(teacher, { lifecycle: 'previous' }).map(item => item.id)).toContain(pastCourse.id);
+    expect(courseService.getAll(teacher, { lifecycle: 'current' }).map(item => item.id)).not.toContain(pastCourse.id);
   });
 });
 

@@ -6,12 +6,15 @@ function list(user, filters = {}, validVisibility = []) {
     SELECT c.*,
       d.name as departmentName,
       d.code as departmentCode,
+      MIN(NULLIF(TRIM(w.startsAt), '')) as firstWeekStartsAt,
+      MAX(NULLIF(TRIM(w.endsAt), '')) as lastWeekEndsAt,
       COUNT(DISTINCT CASE WHEN e.role = 'student' THEN e.userId END) as studentCount,
       COUNT(DISTINCT CASE WHEN e.role = 'teacher' THEN e.userId END) as teacherCount,
       COUNT(DISTINCT q.id) as quizCount,
       COUNT(DISTINCT co.id) as offeringCount
     FROM courses c
     LEFT JOIN departments d ON d.id = c.departmentId
+    LEFT JOIN course_weeks w ON w.courseId = c.id
     LEFT JOIN enrollments e ON e.courseId = c.id AND e.status = 'active'
     LEFT JOIN quizzes q ON q.courseId = c.id
     LEFT JOIN course_offerings co ON co.courseId = c.id
@@ -48,12 +51,15 @@ function getById(id) {
     SELECT c.*,
       d.name as departmentName,
       d.code as departmentCode,
+      MIN(NULLIF(TRIM(w.startsAt), '')) as firstWeekStartsAt,
+      MAX(NULLIF(TRIM(w.endsAt), '')) as lastWeekEndsAt,
       COUNT(DISTINCT CASE WHEN e.role = 'student' THEN e.userId END) as studentCount,
       COUNT(DISTINCT CASE WHEN e.role = 'teacher' THEN e.userId END) as teacherCount,
       COUNT(DISTINCT q.id) as quizCount,
       COUNT(DISTINCT co.id) as offeringCount
     FROM courses c
     LEFT JOIN departments d ON d.id = c.departmentId
+    LEFT JOIN course_weeks w ON w.courseId = c.id
     LEFT JOIN enrollments e ON e.courseId = c.id AND e.status = 'active'
     LEFT JOIN quizzes q ON q.courseId = c.id
     LEFT JOIN course_offerings co ON co.courseId = c.id

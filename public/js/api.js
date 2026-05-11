@@ -86,6 +86,7 @@ export const API = {
     const params = new URLSearchParams();
     if (filters.search) params.set('search', filters.search);
     if (filters.visibility) params.set('visibility', filters.visibility);
+    if (filters.lifecycle) params.set('lifecycle', filters.lifecycle);
     return this.request(`/courses${params.toString() ? `?${params}` : ''}`);
   },
   getCourse(id) { return this.request(`/courses/${id}`); },

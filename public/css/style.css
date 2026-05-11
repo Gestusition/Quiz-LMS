@@ -220,6 +220,44 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   flex-wrap: wrap;
 }
 
+.view-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  margin: -8px 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+
+.view-tab:hover, .view-tab.active {
+  color: var(--text);
+  background: var(--surface-strong);
+}
+
+.view-tab strong {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.74rem;
+}
+
 .maintenance-banner {
   display: flex;
   align-items: center;
@@ -378,6 +416,14 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   justify-content: flex-start;
   flex-wrap: wrap;
   text-transform: none;
+}
+
+.course-card-statuses {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .list {
@@ -659,6 +705,29 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.form-grid.two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.danger-confirmation {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: var(--danger-soft);
+  color: #991b1b;
+}
+
+.danger-confirmation strong {
+  color: #7f1d1d;
+}
+
+.danger-confirmation p {
+  margin: 0;
+  font-size: 0.9rem;
 }
 
 .check-field, .option-field, .answer-option, .assign-row {
@@ -2351,7 +2420,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .stats-grid, .content-grid, .course-layout { grid-template-columns: 1fr; }
   .analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .course-side { grid-row: auto; }
-  .form-grid { grid-template-columns: 1fr; }
+  .form-grid, .form-grid.two-col { grid-template-columns: 1fr; }
   .attendance-row { grid-template-columns: 1fr; }
   .attempt-layout { grid-template-columns: 1fr; }
   .attempt-sidebar { position: static; }
@@ -2365,6 +2434,8 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .main-content { width: min(100% - 24px, 1280px); padding-top: 20px; }
   .page-header { align-items: flex-start; flex-direction: column; }
   .toolbar { flex-direction: column; }
+  .view-tabs { width: 100%; }
+  .view-tab { flex: 1; justify-content: center; }
   .maintenance-banner,
   .maintenance-status-row { align-items: flex-start; flex-direction: column; }
   .profile-row { grid-template-columns: 1fr; gap: 2px; }

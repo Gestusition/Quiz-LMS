@@ -2,35 +2,23 @@ import { API } from '../api.js';
 import { value } from '../components/form.js';
 
 export const CoursesPage = {
-  async renderCourses() {
+  async renderCourses(view = 'current') {
+    const activeView = view === 'previous' ? 'previous' : 'current';
     this.setApp(this.loading('Loading courses'));
     try {
-      const courses = await API.getCourses();
+      const allCourses = await API.getCourses();
+      const previousCourses = allCourses.filter(course => this.isPreviousCourse(course));
+      const currentCourses = allCourses.filter(course => !this.isPreviousCourse(course));
+      const courses = activeView === 'previous' ? previousCourses : currentCourses;
+      const viewLabel = activeView === 'previous' ? 'previous' : 'current';
       this.setApp(`
         <header class="page-header">
-          <div><h1>Courses</h1><p>${courses.length} course${courses.length === 1 ? '' : 's'}</p></div>
+          <div><h1>Courses</h1><p>${courses.length} ${viewLabel} course${courses.length === 1 ? '' : 's'}</p></div>
           ${this.canManageLearning() ? '<button class="btn btn-primary" id="btn-new-course">New Course</button>' : ''}
         </header>
+        ${this.courseViewTabs(activeView, currentCourses.length, previousCourses.length)}
         <section class="cards-grid">
-          ${courses.map(course => `
-            <article class="item-card">
-              <div class="card-topline"><span>${this.esc(course.code)}</span><span class="status ${course.visibility}">${this.esc(course.visibility)}</span></div>
-              <h2>${this.esc(course.title)}</h2>
-              <p>${this.esc(course.description || 'No description')}</p>
-              <div class="metric-strip">
-                <span>${this.esc(course.departmentCode || course.departmentName || 'No dept')}</span>
-                <span>${course.credits || 0} credits</span>
-                <span>${course.teacherCount} teachers</span>
-                <span>${course.studentCount} students</span>
-                <span>${course.quizCount} quizzes</span>
-                <span>${course.offeringCount || 0} offerings</span>
-              </div>
-              <div class="card-actions">
-                <a class="btn btn-primary btn-sm" href="#/courses/${course.id}">Open</a>
-                ${this.canManageLearning() ? `<button class="btn btn-ghost btn-sm" onclick="App.showCourseForm(${course.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="App.deleteCourse(${course.id})">Delete</button>` : ''}
-              </div>
-            </article>
-          `).join('') || this.emptyBlock('No courses found.')}
+          ${courses.map(course => this.courseCard(course)).join('') || this.emptyBlock(`No ${viewLabel} courses found.`)}
         </section>
       `);
 
@@ -39,6 +27,73 @@ export const CoursesPage = {
     } catch (err) {
       this.renderError(err);
     }
+  },
+
+  courseViewTabs(activeView, currentCount, previousCount) {
+    return `
+      <nav class="view-tabs" aria-label="Course views">
+        <a class="view-tab ${activeView === 'current' ? 'active' : ''}" href="#/courses">
+          <span>Current</span><strong>${currentCount}</strong>
+        </a>
+        <a class="view-tab ${activeView === 'previous' ? 'active' : ''}" href="#/courses/previous">
+          <span>Previous</span><strong>${previousCount}</strong>
+        </a>
+      </nav>
+    `;
+  },
+
+  courseCard(course) {
+    const isPrevious = this.isPreviousCourse(course);
+    const schedule = this.courseScheduleMetric(course, isPrevious);
+    return `
+      <article class="item-card">
+        <div class="card-topline">
+          <span>${this.esc(course.code)}</span>
+          <span class="course-card-statuses">
+            <span class="status ${this.esc(course.visibility)}">${this.esc(course.visibility)}</span>
+            ${isPrevious ? '<span class="status closed">Previous</span>' : ''}
+          </span>
+        </div>
+        <h2>${this.esc(course.title)}</h2>
+        <p>${this.esc(course.description || 'No description')}</p>
+        <div class="metric-strip">
+          <span>${this.esc(course.departmentCode || course.departmentName || 'No dept')}</span>
+          <span>${course.credits || 0} credits</span>
+          <span>${course.teacherCount} teachers</span>
+          <span>${course.studentCount} students</span>
+          <span>${course.quizCount} quizzes</span>
+          <span>${course.offeringCount || 0} offerings</span>
+          ${schedule ? `<span>${this.esc(schedule)}</span>` : ''}
+        </div>
+        <div class="card-actions">
+          <a class="btn btn-primary btn-sm" href="#/courses/${course.id}">Open</a>
+          ${this.canManageLearning() ? `<button class="btn btn-ghost btn-sm" onclick="App.showCourseForm(${course.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="App.deleteCourse(${course.id})">Delete</button>` : ''}
+        </div>
+      </article>
+    `;
+  },
+
+  isPreviousCourse(course) {
+    if (course?.lifecycle) return course.lifecycle === 'previous';
+    if (course?.isPrevious !== undefined) return Boolean(course.isPrevious);
+    const endDate = course?.effectiveEndDate || course?.endDate || course?.lastWeekEndsAt || '';
+    const endTime = this.courseEndTime(endDate);
+    return Number.isFinite(endTime) && endTime < Date.now();
+  },
+
+  courseScheduleMetric(course, isPrevious = this.isPreviousCourse(course)) {
+    const endDate = course?.effectiveEndDate || course?.endDate || course?.lastWeekEndsAt || '';
+    if (!Number.isFinite(this.courseEndTime(endDate))) return '';
+    return `${isPrevious ? 'Ended' : 'Ends'} ${this.formatDate(endDate)}`;
+  },
+
+  courseEndTime(value) {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    const time = /^\d{4}-\d{2}-\d{2}$/.test(text)
+      ? Date.parse(`${text}T23:59:59.999Z`)
+      : Date.parse(text);
+    return Number.isFinite(time) ? time : null;
   },
 
   async showCourseForm(id) {
@@ -62,6 +117,10 @@ export const CoursesPage = {
           </select></label>
           ${this.input('course-credits', 'Credits', course.credits || 3, 'number')}
         </div>
+        <div class="form-grid two-col">
+          ${this.input('course-start-date', 'Start date', this.dateInputValue(course.startDate), 'date')}
+          ${this.input('course-end-date', 'End date', this.dateInputValue(course.endDate), 'date')}
+        </div>
         <label class="form-field"><span>Visibility</span><select class="form-select" id="course-visibility">
           ${['private', 'published', 'archived'].map(option => `<option value="${option}" ${course.visibility === option ? 'selected' : ''}>${option}</option>`).join('')}
         </select></label>
@@ -80,7 +139,9 @@ export const CoursesPage = {
         description: value('course-description'),
         departmentId: value('course-department') ? Number(value('course-department')) : null,
         credits: Number(value('course-credits')),
-        visibility: value('course-visibility')
+        visibility: value('course-visibility'),
+        startDate: value('course-start-date'),
+        endDate: value('course-end-date')
       };
       try {
         if (isEdit) await API.updateCourse(id, data);
@@ -95,15 +156,50 @@ export const CoursesPage = {
   },
 
   async deleteCourse(id) {
-    if (!confirm('Delete this course and its enrollments, quizzes, resources, weeks, discussions, and offerings?')) return;
     try {
-      await API.deleteCourse(id);
-      this.toast('Course deleted.', 'success');
-      if ((location.hash || '').startsWith(`#/courses/${id}`)) {
-        location.hash = '#/courses';
-      } else {
-        this.renderCourses();
-      }
+      const course = await API.getCourse(id);
+      const expectedCode = String(course.code || '').trim();
+      this.openModal('Delete course', `
+        <form id="delete-course-form" class="stack">
+          <div class="danger-confirmation">
+            <strong>${this.esc(course.code)} - ${this.esc(course.title)}</strong>
+            <p>Deleting this course also removes enrollments, quizzes, resources, weeks, discussions, offerings, and grade settings.</p>
+          </div>
+          <label class="form-field">
+            <span>Type course code to delete</span>
+            <input class="form-input" id="delete-course-code" autocomplete="off" placeholder="${this.esc(expectedCode)}">
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-danger" id="delete-course-submit" disabled>Delete course</button>
+          </div>
+        </form>
+      `);
+
+      const codeInput = document.getElementById('delete-course-code');
+      const deleteButton = document.getElementById('delete-course-submit');
+      codeInput.addEventListener('input', () => {
+        deleteButton.disabled = codeInput.value.trim() !== expectedCode;
+      });
+      document.getElementById('delete-course-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        if (codeInput.value.trim() !== expectedCode) {
+          this.toast('Course code does not match.', 'error');
+          return;
+        }
+        try {
+          await API.deleteCourse(id);
+          this.closeModal();
+          this.toast('Course deleted.', 'success');
+          if ((location.hash || '').startsWith(`#/courses/${id}`)) {
+            location.hash = '#/courses';
+          } else {
+            this.route();
+          }
+        } catch (err) {
+          this.toast(err.message, 'error');
+        }
+      });
     } catch (err) {
       this.toast(err.message, 'error');
     }

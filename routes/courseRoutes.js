@@ -95,6 +95,12 @@ function sendProtectedDownload(res, fileInfo) {
  *           type: string
  *           enum: [private, published, archived]
  *         description: Filter by visibility
+ *       - in: query
+ *         name: lifecycle
+ *         schema:
+ *           type: string
+ *           enum: [current, previous]
+ *         description: Filter by effective course end date
  *     responses:
  *       200:
  *         description: List of courses
@@ -109,7 +115,8 @@ router.get('/', (req, res) => {
   try {
     res.json(courseService.getAll(req.user, {
       search: req.query.search,
-      visibility: req.query.visibility
+      visibility: req.query.visibility,
+      lifecycle: req.query.lifecycle
     }));
   } catch (err) {
     sendError(res, err, 500);

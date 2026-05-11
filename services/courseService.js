@@ -19,7 +19,7 @@ const { serializeParticipant } = require('../serializers/participantSerializer')
 
 class CourseService {
   getAll(user, filters = {}) {
-    return courseRepository.list(user, filters, courseVisibilityValues)
+    const courses = courseRepository.list(user, filters, courseVisibilityValues)
       .map(serializeCourse)
       .filter(course => user.role === 'admin' || !restrictionService.hasActiveRestriction({
         user,
@@ -27,6 +27,12 @@ class CourseService {
         scopeType: 'course',
         scopeId: course.id
       }));
+
+    if (['current', 'previous'].includes(filters.lifecycle)) {
+      return courses.filter(course => course.lifecycle === filters.lifecycle);
+    }
+
+    return courses;
   }
 
   getById(id) {

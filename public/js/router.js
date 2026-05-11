@@ -15,6 +15,7 @@ export function routeTo(app) {
 
   if (!root) return app.renderDashboard();
   if (root === 'profile') return app.renderProfile();
+  if (root === 'courses' && ['current', 'previous'].includes(parts[1])) return app.renderCourses(parts[1]);
   if (root === 'courses' && parts[1]) return app.renderCourseDetail(Number(parts[1]));
   if (root === 'courses') return app.renderCourses();
   if (root === 'academic' && app.user.role === 'student') return app.renderForbidden();
