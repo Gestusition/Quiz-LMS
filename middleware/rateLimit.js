@@ -16,11 +16,6 @@ function createRateLimiter({
     const bucketKey = key(req);
     const bucket = buckets.get(bucketKey) || { count: 0, resetAt: now + windowMs };
 
-    if (bucket.resetAt <= now) {
-      bucket.count = 0;
-      bucket.resetAt = now + windowMs;
-    }
-
     bucket.count += 1;
     buckets.set(bucketKey, bucket);
     trimOldestBuckets(buckets, maxBuckets);

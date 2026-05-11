@@ -269,6 +269,30 @@ router.delete('/:id', validateId, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/categories/{id}/share:
+ *   post:
+ *     summary: Share a category with another teacher
+ *     tags: [Categories]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ResourceAccessGrantRequest'
+ *     responses:
+ *       201:
+ *         description: Category access grant created
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.post('/:id/share', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
     res.status(201).json(categoryService.share(req.params.id, req.body, req.user));
@@ -277,6 +301,26 @@ router.post('/:id/share', requireRole(['admin', 'teacher']), validateId, (req, r
   }
 });
 
+/**
+ * @swagger
+ * /api/categories/{id}/access:
+ *   get:
+ *     summary: View category sharing access
+ *     tags: [Categories]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Category access summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessSummary'
+ */
 router.get('/:id/access', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
     res.json(categoryService.accessSummary(req.params.id, req.user));
@@ -285,6 +329,27 @@ router.get('/:id/access', requireRole(['admin', 'teacher']), validateId, (req, r
   }
 });
 
+/**
+ * @swagger
+ * /api/categories/{id}/access/{teacherId}:
+ *   delete:
+ *     summary: Remove a teacher's shared category access
+ *     tags: [Categories]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: teacherId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Updated category access summary
+ */
 router.delete('/:id/access/:teacherId', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
     const teacherId = parseRequiredPositiveInt(req.params.teacherId, 'teacherId');

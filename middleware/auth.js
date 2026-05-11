@@ -8,6 +8,10 @@ const settingsService = require('../services/settingsService');
 const SESSION_COOKIE_NAME = 'auth_token';
 const { MAINTENANCE_MODE_CODE, MAINTENANCE_MESSAGE } = settingsService;
 
+function useSecureCookies() {
+  return process.env.NODE_ENV === 'production';
+}
+
 function extractToken(req) {
   const cookieHeader = req.headers && req.headers.cookie;
   if (typeof cookieHeader === 'string') {
@@ -24,7 +28,7 @@ function extractToken(req) {
 function clearSessionCookie(res) {
   res.clearCookie(SESSION_COOKIE_NAME, {
     httpOnly: true,
-    secure: true,
+    secure: useSecureCookies(),
     sameSite: 'strict',
     path: '/'
   });

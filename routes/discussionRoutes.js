@@ -65,6 +65,26 @@ router.get('/courses/:courseId/threads', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/discussion/threads/{id}:
+ *   get:
+ *     summary: Get a discussion thread
+ *     tags: [Discussion]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Discussion thread
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.get('/threads/:id', (req, res) => {
   try {
     const threadId = parseRequiredPositiveInt(req.params.id, 'threadId');

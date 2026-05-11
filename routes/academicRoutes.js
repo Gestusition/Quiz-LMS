@@ -651,6 +651,26 @@ router.put('/submissions/:id/grade', requireRole(['admin', 'teacher']), requireV
   try { res.json(academicService.gradeSubmission(req.params.id, req.body, req.user)); } catch (err) { sendError(res, err); }
 });
 
+/**
+ * @swagger
+ * /api/academic/submissions/{id}/download:
+ *   get:
+ *     summary: Download an assignment submission file
+ *     tags: [Academic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Protected file download
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.get('/submissions/:id/download', requireValidId, (req, res) => {
   try {
     const fileInfo = academicService.getSubmissionDownload(req.params.id, req.user);
@@ -703,22 +723,133 @@ router.post('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']
   try { res.json(academicService.markAttendance(req.params.id, req.body.records, req.user)); } catch (err) { sendError(res, err); }
 });
 
+/**
+ * @swagger
+ * /api/academic/attendance/sessions/{id}/self:
+ *   post:
+ *     summary: Mark attendance for the current student
+ *     tags: [Academic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       201:
+ *         description: Self-attendance record created
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       409:
+ *         description: Attendance already marked
+ */
 router.post('/attendance/sessions/:id/self', requireRole('student'), requireValidId, (req, res) => {
   try { res.status(201).json(academicService.markSelfAttendance(req.params.id, req.user)); } catch (err) { sendError(res, err); }
 });
 
+/**
+ * @swagger
+ * /api/academic/attendance/sessions/{id}/close:
+ *   put:
+ *     summary: Close an attendance session
+ *     tags: [Academic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Attendance session closed
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.put('/attendance/sessions/:id/close', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
   try { res.json(academicService.closeAttendanceSession(req.params.id, req.user)); } catch (err) { sendError(res, err); }
 });
 
+/**
+ * @swagger
+ * /api/academic/attendance/records:
+ *   get:
+ *     summary: List detailed attendance records for instructors or admins
+ *     tags: [Academic]
+ *     parameters:
+ *       - in: query
+ *         name: courseOfferingId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: studentId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [present, absent, late, excused, removed]
+ *     responses:
+ *       200:
+ *         description: Attendance records
+ */
 router.get('/attendance/records', requireRole(['admin', 'teacher']), (req, res) => {
   try { res.json(academicService.listAttendanceRecordDetails(req.user, req.query)); } catch (err) { sendError(res, err); }
 });
 
+/**
+ * @swagger
+ * /api/academic/attendance/sessions/{id}/records:
+ *   get:
+ *     summary: List records for an attendance session
+ *     tags: [Academic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Attendance records for the session
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.get('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
   try { res.json(academicService.listAttendanceRecords(req.params.id, req.user)); } catch (err) { sendError(res, err); }
 });
 
+/**
+ * @swagger
+ * /api/academic/attendance/records/{id}/remove:
+ *   put:
+ *     summary: Remove an attendance record with an instructor note
+ *     tags: [Academic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               removalNote:
+ *                 type: string
+ *               note:
+ *                 type: string
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Attendance record marked as removed
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.put('/attendance/records/:id/remove', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
   try { res.json(academicService.removeAttendanceRecord(req.params.id, req.body, req.user)); } catch (err) { sendError(res, err); }
 });

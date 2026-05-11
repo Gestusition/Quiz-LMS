@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "jest --verbose --runInBand"
+    "test": "jest --verbose --runInBand",
+    "coverage": "jest --coverage --runInBand"
   },
   "keywords": [
     "quiz",
@@ -20,7 +21,7 @@
     "express"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.0",

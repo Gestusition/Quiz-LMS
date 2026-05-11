@@ -317,6 +317,26 @@ router.delete('/resources/:id', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/courses/resources/{id}/download:
+ *   get:
+ *     summary: Download a protected course resource file
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Protected file download
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.get('/resources/:id/download', (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid resource ID.' });

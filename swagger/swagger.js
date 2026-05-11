@@ -66,6 +66,41 @@ const options = {
             message: { type: 'string' }
           }
         },
+        MaintenanceMode: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            message: { type: 'string' },
+            updatedBy: { type: 'integer', nullable: true },
+            updatedAt: { type: 'string' },
+            revokedSessions: { type: 'integer', description: 'Present after updates' }
+          }
+        },
+        UpdateMaintenanceModeRequest: {
+          type: 'object',
+          required: ['enabled'],
+          properties: {
+            enabled: { type: 'boolean' }
+          }
+        },
+        ResourceAccessGrantRequest: {
+          type: 'object',
+          required: ['teacherId'],
+          properties: {
+            teacherId: { type: 'integer' },
+            accessLevel: { type: 'string', enum: ['read', 'write'], default: 'read' }
+          }
+        },
+        ResourceAccessSummary: {
+          type: 'object',
+          properties: {
+            grants: {
+              type: 'array',
+              items: { type: 'object' }
+            }
+          },
+          additionalProperties: true
+        },
         LoginRequest: {
           type: 'object',
           required: ['identifier', 'password'],
@@ -1074,7 +1109,8 @@ const options = {
       { name: 'Imports', description: 'Import batch and import error workflows' },
       { name: 'Discussion', description: 'Course discussion threads and replies' },
       { name: 'Weeks', description: 'Weekly course material and resources' },
-      { name: 'Audit', description: 'Audit log activity endpoints' }
+      { name: 'Audit', description: 'Audit log activity endpoints' },
+      { name: 'Settings', description: 'Admin system settings endpoints' }
     ]
   },
   apis: ['./routes/*.js']

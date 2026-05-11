@@ -86,4 +86,63 @@ describe('API route mounts', () => {
         expect(response.body.error).toBe('API route not found.');
       });
   });
+
+  test('server middleware sets browser security headers and CORS only for local origins', async () => {
+    await request(app)
+      .get('/api/health')
+      .set('Origin', 'http://localhost:3000')
+      .expect(200)
+      .expect(response => {
+        expect(response.headers['x-content-type-options']).toBe('nosniff');
+        expect(response.headers['x-frame-options']).toBe('DENY');
+        expect(response.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+        expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+      });
+
+    await request(app)
+      .get('/api/health')
+      .set('Origin', 'https://not-allowed.example.com')
+      .expect(200)
+      .expect(response => {
+        expect(response.headers['access-control-allow-origin']).toBeUndefined();
+      });
+  });
+
+  test('server protects uploaded course file roots and serves the SPA fallback', async () => {
+    await request(app)
+      .get('/uploads/resources/private.txt')
+      .expect(404)
+      .expect(response => {
+        expect(response.body.error).toMatch(/protected download endpoint/i);
+      });
+
+    await request(app)
+      .get('/uploads/submissions/private.txt')
+      .expect(404)
+      .expect(response => {
+        expect(response.body.error).toMatch(/protected download endpoint/i);
+      });
+
+    await request(app)
+      .get('/teacher/dashboard')
+      .expect(200)
+      .expect('Content-Type', /html/);
+  });
+
+  test('Swagger docs expose maintenance settings and maintenance login errors', async () => {
+    const session = createAdminSession();
+    const authCookie = `auth_token=${session.token}`;
+
+    await request(app)
+      .get('/api-docs.json')
+      .set('Cookie', authCookie)
+      .expect(200)
+      .expect(response => {
+        const paths = response.body.paths || {};
+        expect(paths['/api/settings/maintenance']?.get).toBeDefined();
+        expect(paths['/api/settings/maintenance']?.put).toBeDefined();
+        expect(paths['/api/auth/login']?.post?.responses?.['403']).toBeDefined();
+        expect(JSON.stringify(paths['/api/auth/login'].post.responses['403'])).toContain('MAINTENANCE_MODE');
+      });
+  });
 });

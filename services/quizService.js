@@ -621,9 +621,6 @@ class QuizService {
     const template = quizRepository.findExamTemplateById(templateId);
     if (!template) throw notFoundError('Template not found.');
     this.assertCanModifyTemplate(template, user);
-    if (template.isSystem && user.role !== 'admin') {
-      throw forbiddenError('Only admins can update system templates.');
-    }
     const courseId = data.courseId !== undefined
       ? parseOptionalPositiveInt(data.courseId, 'courseId')
       : (template.courseId || null);
@@ -719,9 +716,6 @@ class QuizService {
     this.assertCanAccessTemplate(template, user);
     if (template.isSystem && user.role !== 'admin') {
       throw forbiddenError('Only admins can manage system templates.');
-    }
-    if (!template.courseId && !template.isSystem && user.role !== 'admin' && Number(template.createdBy) !== Number(user.id)) {
-      throw forbiddenError('You can only manage your own templates.');
     }
   }
 

@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { initDatabase, seedDatabase } = require('./database/db');
+const database = require('./database/db');
 const { setupSwagger } = require('./swagger/swagger');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -22,8 +22,6 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const publicDir = path.join(__dirname, 'public');
-const resourceUploadRoot = path.join(publicDir, 'uploads', 'resources');
-const submissionUploadRoot = path.join(publicDir, 'uploads', 'submissions');
 
 // Middleware
 app.use((req, res, next) => {
@@ -58,20 +56,7 @@ app.use(['/uploads/resources', '/uploads/submissions'], (req, res) => {
   res.status(404).json({ error: 'Use the protected download endpoint for course files.' });
 });
 
-app.use(express.static(publicDir, {
-  setHeaders(res, filePath) {
-    const uploadRoots = [resourceUploadRoot, submissionUploadRoot];
-    const isUploadedFile = uploadRoots.some(root => {
-      const relative = path.relative(root, filePath);
-      return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
-    });
-    if (!isUploadedFile) return;
-
-    const safeName = path.basename(filePath).replace(/["\r\n]/g, '');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
-    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
-  }
-}));
+app.use(express.static(publicDir));
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -111,21 +96,29 @@ app.get('*', (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+function handleUnhandledError(err, req, res, next) {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error.' });
-});
+}
 
-// Initialize database and start server
-if (require.main === module) {
-  initDatabase();
-  seedDatabase();
-  app.listen(PORT, () => {
+app.use(handleUnhandledError);
+
+function startServer(port = PORT) {
+  database.initDatabase();
+  database.seedDatabase();
+  return app.listen(port, () => {
     console.log(`\n🚀 Quiz Manager is running!`);
-    console.log(`   App:     http://localhost:${PORT}`);
-    console.log(`   API:     http://localhost:${PORT}/api`);
-    console.log(`   Swagger: http://localhost:${PORT}/api-docs\n`);
+    console.log(`   App:     http://localhost:${port}`);
+    console.log(`   API:     http://localhost:${port}/api`);
+    console.log(`   Swagger: http://localhost:${port}/api-docs\n`);
   });
 }
 
+// Initialize database and start server
+if (require.main === module) {
+  startServer();
+}
+
 module.exports = app;
+module.exports.handleUnhandledError = handleUnhandledError;
+module.exports.startServer = startServer;

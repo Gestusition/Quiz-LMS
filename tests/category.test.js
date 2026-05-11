@@ -105,6 +105,13 @@ describe('CategoryService', () => {
     expect(() => categoryService.create({ courseId: courseAId, name: 'midterm' })).toThrow('already exists');
   });
 
+  test('should reject missing course references on create and update', () => {
+    expect(() => categoryService.create({ courseId: 99999, name: 'Missing Course Category' }))
+      .toThrow('Course not found');
+    expect(() => categoryService.update(createdId, { courseId: 99999 }))
+      .toThrow('Course not found');
+  });
+
   test('should throw when updating non-existent category', () => {
     expect(() => {
       categoryService.update(99999, { name: 'Ghost' });
@@ -112,6 +119,10 @@ describe('CategoryService', () => {
   });
 
   test('should delete a category', () => {
+    const owned = categoryService.create({ name: 'Teacher Owned Category' }, { id: 1234, role: 'teacher' });
+    expect(() => categoryService.delete(owned.id, { id: 5678, role: 'teacher' }))
+      .toThrow('category owner or an admin');
+
     const result = categoryService.delete(createdId);
     expect(result).toBe(true);
     const deleted = categoryService.getById(createdId);

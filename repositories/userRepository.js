@@ -288,7 +288,7 @@ function findResettableByIdentifier(identifier) {
 
 function findResettableById(userId) {
   return getDatabase().prepare(`
-    SELECT id, name, username, email, role, status
+    SELECT id, name, username, email, role, status, passwordHash, passwordSalt
     FROM users
     WHERE id = ?
   `).get(userId) || null;

@@ -191,7 +191,11 @@ describe('Auth and quiz attempt flow', () => {
     const sessionCookie = setCookie.find(item => item.startsWith('auth_token='));
     expect(sessionCookie).toBeDefined();
     expect(sessionCookie).toEqual(expect.stringContaining('HttpOnly'));
-    expect(sessionCookie).toEqual(expect.stringContaining('Secure'));
+    if (process.env.NODE_ENV === 'production') {
+      expect(sessionCookie).toEqual(expect.stringContaining('Secure'));
+    } else {
+      expect(sessionCookie).not.toEqual(expect.stringContaining('Secure'));
+    }
     expect(sessionCookie).toEqual(expect.stringContaining('SameSite=Strict'));
 
     const cookieHeader = sessionCookie.split(';')[0];
@@ -349,6 +353,29 @@ describe('Auth and quiz attempt flow', () => {
     expect(authService.login('primary-admin', 'BetterAdmin123!').user.role).toBe('admin');
   });
 
+  test('change-credentials route returns validation errors for bad current password', async () => {
+    const suffix = nextSuffix();
+    const teacher = authService.createUser({
+      name: `Credential Route Teacher ${suffix}`,
+      username: `credential-route-teacher-${uniqueUserSuffix}`,
+      email: `credential-route-teacher-${suffix}@example.com`,
+      role: 'teacher',
+      password: 'CredentialRoute123!',
+      staffNumber: `CRT-${uniqueUserSuffix}`
+    });
+    const session = authService.login(teacher.email, 'CredentialRoute123!');
+
+    await request(app)
+      .post('/api/auth/change-credentials')
+      .set('Cookie', cookie(session))
+      .send({
+        username: `credential-route-updated-${uniqueUserSuffix}`,
+        currentPassword: 'WrongCredential123!',
+        newPassword: 'CredentialRoute456!'
+      })
+      .expect(400);
+  });
+
   test('rejects invalid passwords', () => {
     expect(() => authService.login('STU-0003', 'wrong-password')).toThrow('Invalid credentials');
   });
@@ -394,6 +421,48 @@ describe('Auth and quiz attempt flow', () => {
       code: issued.code,
       newPassword: 'TeacherAgain123!'
     })).toThrow('Invalid or expired reset code');
+  });
+
+  test('public password reset API accepts requests and completes issued codes', async () => {
+    const suffix = nextSuffix();
+    const teacher = authService.createUser({
+      name: `Public Reset Teacher ${suffix}`,
+      username: `public-reset-teacher-${uniqueUserSuffix}`,
+      email: `public-reset-teacher-${suffix}@example.com`,
+      role: 'teacher',
+      password: 'PublicReset123!',
+      staffNumber: `PRT-${uniqueUserSuffix}`
+    });
+
+    await request(app)
+      .post('/api/auth/password-reset/request')
+      .send({ identifier: teacher.email })
+      .expect(200)
+      .expect(response => {
+        expect(response.body.message).toMatch(/admin reset request/i);
+      });
+
+    await request(app)
+      .post('/api/auth/password-reset/request')
+      .send({})
+      .expect(400);
+
+    const issued = authService.issuePasswordResetCode(teacher.id);
+
+    await request(app)
+      .post('/api/auth/password-reset/complete')
+      .send({ identifier: teacher.email, code: '00000000', newPassword: 'PublicReset456!' })
+      .expect(400);
+
+    await request(app)
+      .post('/api/auth/password-reset/complete')
+      .send({ identifier: teacher.email, code: issued.code, newPassword: 'PublicReset456!' })
+      .expect(200)
+      .expect(response => {
+        expect(response.body.message).toMatch(/Password updated/i);
+      });
+
+    expect(authService.login(teacher.email, 'PublicReset456!').user.id).toBe(teacher.id);
   });
 
   test('admin can list password reset requests through the API', async () => {
@@ -638,6 +707,14 @@ describe('Auth and quiz attempt flow', () => {
       expect(user.status).toBe('active');
     });
     expect(response.body.pagination.page).toBe(1);
+
+    await request(app)
+      .get('/api/users?departmentId=1&classYearId=1&sectionId=1&page=1&limit=5')
+      .set('Cookie', cookie(adminSession))
+      .expect(200)
+      .expect(filteredResponse => {
+        expect(Array.isArray(filteredResponse.body.items)).toBe(true);
+      });
   });
 
   test('login identifier is rejected when ambiguous across academic identifiers', () => {

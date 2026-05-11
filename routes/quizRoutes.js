@@ -268,6 +268,26 @@ router.post('/templates', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/templates/{templateId}:
+ *   get:
+ *     summary: Get a quiz setting template (Teacher/Admin)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: templateId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Quiz setting template
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.get('/templates/:templateId', (req, res) => {
   try {
     const templateId = parseRequiredPositiveInt(req.params.templateId, 'templateId');
@@ -277,6 +297,42 @@ router.get('/templates/:templateId', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/templates/{templateId}:
+ *   put:
+ *     summary: Update a quiz setting template (Owner/Admin)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: templateId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               courseId:
+ *                 type: integer
+ *                 nullable: true
+ *               defaults:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Quiz setting template updated
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.put('/templates/:templateId', (req, res) => {
   try {
     const templateId = parseRequiredPositiveInt(req.params.templateId, 'templateId');
@@ -364,6 +420,30 @@ router.post('/:id/release-results', loadQuiz, requireQuizManager, (req, res) => 
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/{id}/share:
+ *   post:
+ *     summary: Share a quiz with another teacher
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ResourceAccessGrantRequest'
+ *     responses:
+ *       201:
+ *         description: Quiz access grant created
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.post('/:id/share', loadQuiz, requireQuizManager, (req, res) => {
   try {
     res.status(201).json(quizService.share(req.quizId, req.body, req.user));
@@ -372,6 +452,26 @@ router.post('/:id/share', loadQuiz, requireQuizManager, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/{id}/access:
+ *   get:
+ *     summary: View quiz sharing access
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Quiz access summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessSummary'
+ */
 router.get('/:id/access', loadQuiz, requireQuizManager, (req, res) => {
   try {
     res.json(quizService.accessSummary(req.quizId, req.user));
@@ -380,6 +480,27 @@ router.get('/:id/access', loadQuiz, requireQuizManager, (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/{id}/access/{teacherId}:
+ *   delete:
+ *     summary: Remove a teacher's shared quiz access
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: teacherId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Updated quiz access summary
+ */
 router.delete('/:id/access/:teacherId', loadQuiz, requireQuizManager, (req, res) => {
   try {
     const teacherId = parseRequiredPositiveInt(req.params.teacherId, 'teacherId');
@@ -416,6 +537,26 @@ router.get('/grade-schemes', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/quizzes/grade-schemes/{id}:
+ *   get:
+ *     summary: Get a grade scheme by ID (Teacher/Admin)
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Grade scheme
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.get('/grade-schemes/:id', (req, res) => {
   try {
     if (req.user.role === 'student') {

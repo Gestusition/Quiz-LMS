@@ -40,10 +40,14 @@ const resetLimiter = createRateLimiter({
 
 const SESSION_COOKIE_NAME = 'auth_token';
 
+function useSecureCookies() {
+  return process.env.NODE_ENV === 'production';
+}
+
 function sessionCookieOptions(expiresAt) {
   return {
     httpOnly: true,
-    secure: true,
+    secure: useSecureCookies(),
     sameSite: 'strict',
     path: '/',
     expires: new Date(expiresAt)
@@ -53,7 +57,7 @@ function sessionCookieOptions(expiresAt) {
 function clearSessionCookie(res) {
   res.clearCookie(SESSION_COOKIE_NAME, {
     httpOnly: true,
-    secure: true,
+    secure: useSecureCookies(),
     sameSite: 'strict',
     path: '/'
   });
@@ -117,6 +121,19 @@ function loginFailureReason(err) {
  *               $ref: '#/components/schemas/AuthSession'
  *       401:
  *         $ref: '#/components/responses/401Unauthorized'
+ *       403:
+ *         description: Login blocked by maintenance mode or account restriction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               maintenance:
+ *                 summary: Maintenance mode blocks teacher/student login
+ *                 value:
+ *                   status: error
+ *                   code: MAINTENANCE_MODE
+ *                   message: Maintenance mode is active. Teachers and students cannot sign in right now.
  *       429:
  *         description: Too many login attempts (rate-limited or account locked)
  *         content:

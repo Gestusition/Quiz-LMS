@@ -1,4 +1,11 @@
-const { createRateLimiter, identifierKey } = require('../middleware/rateLimit');
+const {
+  createRateLimiter,
+  identifierKey,
+  accountLockoutGuard,
+  recordLoginFailure,
+  recordLoginSuccess,
+  _resetAllLockouts
+} = require('../middleware/rateLimit');
 
 function runLimiter(limiter, req = {}) {
   const response = {
@@ -80,5 +87,33 @@ describe('rate limiter middleware', () => {
     expect(keys[3]).toBe('127.0.0.1:stu-0003');
     expect(keys[4]).toBe('127.0.0.1:admin');
     keys.forEach(key => expect(key.endsWith(':none')).toBe(false));
+    expect(identifierKey({ body: {} })).toBe('unknown:none');
+  });
+
+  test('resets buckets after the window and handles account lockout helpers', () => {
+    let now = 1_000;
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+
+    try {
+      const limiter = createRateLimiter({ windowMs: 10, max: 1 });
+      expect(runLimiter(limiter).nextCalled).toBe(true);
+      now = 1_011;
+      expect(runLimiter(limiter).nextCalled).toBe(true);
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    _resetAllLockouts();
+    recordLoginFailure('');
+    expect(runLimiter(accountLockoutGuard, { body: {} }).nextCalled).toBe(true);
+
+    for (let index = 0; index < 5; index += 1) {
+      recordLoginFailure('locked@example.com');
+    }
+    const blocked = runLimiter(accountLockoutGuard, { body: { identifier: 'locked@example.com' } });
+    expect(blocked.response.statusCode).toBe(429);
+
+    recordLoginSuccess('locked@example.com');
+    expect(runLimiter(accountLockoutGuard, { body: { identifier: 'locked@example.com' } }).nextCalled).toBe(true);
   });
 });

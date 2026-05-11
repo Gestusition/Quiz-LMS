@@ -167,6 +167,12 @@ describe('QuestionService', () => {
     }).toThrow('not found');
   });
 
+  test('should reject updates that move a question to a missing category', () => {
+    expect(() => {
+      questionService.update(tfId, { categoryId: 99999 });
+    }).toThrow('Category not found');
+  });
+
   test('rejects multiple response correct indexes that do not match options', () => {
     expect(() => questionService.create({
       categoryId: testCategoryId,
@@ -237,6 +243,28 @@ describe('QuestionService', () => {
     })).toThrow('correct answer');
   });
 
+  test('multi-part enrichment falls back when validation rule JSON is malformed', () => {
+    const multi = questionService.create({
+      categoryId: testCategoryId,
+      text: 'Solve the malformed validation rule part.',
+      type: 'MP',
+      difficulty: 'MEDIUM',
+      points: 1,
+      parts: [
+        {
+          partLabel: '(a)',
+          partText: 'Compute $3+3$.',
+          answerType: 'numeric',
+          correctAnswer: '6',
+          validationRule: '{bad json',
+          points: 1
+        }
+      ]
+    });
+
+    expect(multi.parts[0].validationRule).toBe('');
+  });
+
   test('math table partial updates preserve tableConfig and reject invalid cell keys', () => {
     const table = questionService.create({
       categoryId: testCategoryId,
@@ -269,6 +297,11 @@ describe('QuestionService', () => {
     const result = questionService.delete(fbId);
     expect(result).toBe(true);
     expect(questionService.getById(fbId)).toBeNull();
+  });
+
+  test('should reject duplicating a missing question and deleting another teacher-owned question', () => {
+    expect(() => questionService.duplicate(99999)).toThrow('not found');
+    expect(() => questionService.delete(mcId, { id: 99999, role: 'teacher' })).toThrow('owner or an admin');
   });
 
   test('should delete related questions when a category is deleted', () => {

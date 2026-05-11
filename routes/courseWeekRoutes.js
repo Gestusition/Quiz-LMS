@@ -349,6 +349,26 @@ router.delete('/week-resources/:id', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/weeks/week-resources/{id}/download:
+ *   get:
+ *     summary: Download a protected weekly resource file
+ *     tags: [Weeks]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Protected file download
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
 router.get('/week-resources/:id/download', (req, res) => {
   try {
     const resourceId = parseRequiredPositiveInt(req.params.id, 'resourceId');

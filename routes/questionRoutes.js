@@ -325,7 +325,7 @@ router.delete('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) 
     if (err.message === 'Question not found.') {
       return res.status(404).json({ error: err.message });
     }
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -356,6 +356,30 @@ router.post('/:id/duplicate', requireRole(['admin', 'teacher']), validateId, (re
   }
 });
 
+/**
+ * @swagger
+ * /api/questions/{id}/share:
+ *   post:
+ *     summary: Share a question with another teacher
+ *     tags: [Questions]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ResourceAccessGrantRequest'
+ *     responses:
+ *       201:
+ *         description: Question access grant created
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ */
 router.post('/:id/share', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
     res.status(201).json(questionService.share(req.params.id, req.body, req.user));
@@ -364,6 +388,26 @@ router.post('/:id/share', requireRole(['admin', 'teacher']), validateId, (req, r
   }
 });
 
+/**
+ * @swagger
+ * /api/questions/{id}/access:
+ *   get:
+ *     summary: View question sharing access
+ *     tags: [Questions]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Question access summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessSummary'
+ */
 router.get('/:id/access', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
     res.json(questionService.accessSummary(req.params.id, req.user));
@@ -372,6 +416,27 @@ router.get('/:id/access', requireRole(['admin', 'teacher']), validateId, (req, r
   }
 });
 
+/**
+ * @swagger
+ * /api/questions/{id}/access/{teacherId}:
+ *   delete:
+ *     summary: Remove a teacher's shared question access
+ *     tags: [Questions]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: teacherId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Updated question access summary
+ */
 router.delete('/:id/access/:teacherId', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
     const teacherId = parseRequiredPositiveInt(req.params.teacherId, 'teacherId');

@@ -673,6 +673,10 @@ function createTables() {
 function migrateExistingTables() {
   ensureColumn('users', 'users', 'username', 'username TEXT');
   ensureColumn('users', 'users', 'mustChangeCredentials', 'mustChangeCredentials INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'users', 'passwordAlgorithm', 'passwordAlgorithm TEXT NOT NULL DEFAULT \'scrypt+salt+spice\'');
+  ensureColumn('users', 'users', 'status', 'status TEXT NOT NULL DEFAULT \'active\'');
+  ensureColumn('users', 'users', 'createdAt', 'createdAt TEXT DEFAULT \'\'');
+  ensureColumn('users', 'users', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
   const hadSessionTokenType = columnExists('users', 'sessions', 'tokenType');
   ensureColumn('users', 'sessions', 'tokenType', 'tokenType TEXT NOT NULL DEFAULT \'migrated\'');
   if (!hadSessionTokenType) {
@@ -686,6 +690,8 @@ function migrateExistingTables() {
   ensureColumn('admin', 'admin_profiles', 'adminTitle', 'adminTitle TEXT DEFAULT \'\'');
   ensureColumn('admin', 'admin_profiles', 'securityNotes', 'securityNotes TEXT DEFAULT \'\'');
   ensureColumn('admin', 'admin_profiles', 'lastCredentialRotationAt', 'lastCredentialRotationAt TEXT DEFAULT \'\'');
+  ensureColumn('admin', 'admin_profiles', 'createdAt', 'createdAt TEXT DEFAULT \'\'');
+  ensureColumn('admin', 'admin_profiles', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
   ensureColumn('teacher', 'teacher_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
   ensureColumn('teacher', 'teacher_profiles', 'department', 'department TEXT DEFAULT \'\'');
   ensureColumn('teacher', 'teacher_profiles', 'facultyId', 'facultyId INTEGER');
@@ -693,6 +699,8 @@ function migrateExistingTables() {
   ensureColumn('teacher', 'teacher_profiles', 'academicTitle', 'academicTitle TEXT DEFAULT \'\'');
   ensureColumn('teacher', 'teacher_profiles', 'staffNumber', 'staffNumber TEXT DEFAULT \'\'');
   ensureColumn('teacher', 'teacher_profiles', 'officeHours', 'officeHours TEXT DEFAULT \'\'');
+  ensureColumn('teacher', 'teacher_profiles', 'createdAt', 'createdAt TEXT DEFAULT \'\'');
+  ensureColumn('teacher', 'teacher_profiles', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
   ensureColumn('student', 'student_profiles', 'displayName', 'displayName TEXT DEFAULT \'\'');
   ensureColumn('student', 'student_profiles', 'studentNumber', 'studentNumber TEXT DEFAULT \'\'');
   ensureColumn('student', 'student_profiles', 'cohort', 'cohort TEXT DEFAULT \'\'');
@@ -700,6 +708,8 @@ function migrateExistingTables() {
   ensureColumn('student', 'student_profiles', 'departmentId', 'departmentId INTEGER');
   ensureColumn('student', 'student_profiles', 'classYearId', 'classYearId INTEGER');
   ensureColumn('student', 'student_profiles', 'sectionId', 'sectionId INTEGER');
+  ensureColumn('student', 'student_profiles', 'createdAt', 'createdAt TEXT DEFAULT \'\'');
+  ensureColumn('student', 'student_profiles', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
   ensureColumn('learning', 'courses', 'departmentId', 'departmentId INTEGER');
   ensureColumn('learning', 'courses', 'credits', 'credits INTEGER NOT NULL DEFAULT 3');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
