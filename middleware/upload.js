@@ -63,7 +63,12 @@ const resourceFileFilter = (req, file, cb) => {
     ['.html', ['text/html', 'application/xhtml+xml', 'text/plain', 'application/octet-stream']],
     ['.htm', ['text/html', 'application/xhtml+xml', 'text/plain', 'application/octet-stream']],
     ['.rtf', ['application/rtf', 'text/rtf']],
-    ['.zip', ['application/zip', 'application/x-zip-compressed', 'application/octet-stream']]
+    ['.zip', ['application/zip', 'application/x-zip-compressed', 'application/octet-stream']],
+    ['.jpg', ['image/jpeg']],
+    ['.jpeg', ['image/jpeg']],
+    ['.png', ['image/png']],
+    ['.gif', ['image/gif']],
+    ['.webp', ['image/webp']]
   ]);
   const ext = path.extname(file.originalname).toLowerCase();
   const mimeTypes = allowed.get(ext);
@@ -92,6 +97,21 @@ const submissionUpload = multer({
   storage: submissionStorage,
   fileFilter: resourceFileFilter,
   limits: { fileSize: LIMITS.assignments.submissionFileSizeMaxBytes }
+});
+
+const importFileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const mimeTypes = ['text/csv', 'application/csv', 'text/plain', 'application/vnd.ms-excel'];
+  if (ext !== '.csv' || !mimeTypes.includes(file.mimetype)) {
+    return cb(new Error('Unsupported import file type. Upload a CSV file.'));
+  }
+  cb(null, true);
+};
+
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: importFileFilter,
+  limits: { fileSize: LIMITS.imports.fileSizeMaxBytes }
 });
 
 function removeUploadedFile(file) {
@@ -181,6 +201,9 @@ function hasValidResourceSignature(filePath, ext) {
     return buffer.length >= 8 &&
       buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
   }
+  if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+    return hasValidImageSignature(filePath, ext);
+  }
   if (['.txt', '.csv', '.md', '.html', '.htm'].includes(ext)) {
     return !buffer.includes(0);
   }
@@ -211,6 +234,7 @@ module.exports = {
   upload,
   resourceUpload,
   submissionUpload,
+  importUpload,
   removeUploadedFile,
   removeUploadedResourceByUrl,
   removeUploadedSubmissionByUrl,

@@ -83,6 +83,22 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Public API index advertised by the startup banner.
+app.get('/api', (req, res) => {
+  res.json({
+    name: 'Quiz LMS API',
+    status: 'ok',
+    docs: '/api-docs',
+    health: '/api/health',
+    routes: {
+      auth: '/api/auth/login',
+      courses: '/api/courses',
+      users: '/api/users',
+      admin: '/api/admin'
+    }
+  });
+});
+
 // Unknown API routes should fail fast instead of leaving the request open.
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'API route not found.' });
@@ -107,7 +123,7 @@ function startServer(port = PORT) {
   database.initDatabase();
   database.seedDatabase();
   return app.listen(port, () => {
-    console.log(`\n🚀 Quiz Manager is running!`);
+    console.log(`\n🚀 Quiz LMS is running!`);
     console.log(`   App:     http://localhost:${port}`);
     console.log(`   API:     http://localhost:${port}/api`);
     console.log(`   Swagger: http://localhost:${port}/api-docs\n`);

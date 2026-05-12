@@ -1,5 +1,4 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 const courseService = require('../services/courseService');
@@ -10,6 +9,7 @@ const contentRepository = require('../repositories/contentRepository');
 const { requireAuth, requireRole, canAccessCourse, canManageCourse } = require('../middleware/auth');
 const { resourceUpload, removeUploadedFile, validateUploadedResource } = require('../middleware/upload');
 const { sendError } = require('../utils/appError');
+const { sendProtectedDownload: sendSafeDownload } = require('../utils/protectedDownload');
 const { parseOptionalPositiveInt, parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
@@ -66,15 +66,8 @@ function resourcePayload(req) {
 }
 
 function sendProtectedDownload(res, fileInfo) {
-  const fileName = path.basename(fileInfo.storageUrl || '');
-  const filePath = path.join(__dirname, '..', 'public', 'uploads', 'resources', fileName);
   const root = path.join(__dirname, '..', 'public', 'uploads', 'resources');
-  if (!fileName || !filePath.startsWith(root) || !fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'File not found.' });
-  }
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
-  return res.download(filePath, fileInfo.fileName || fileName);
+  return sendSafeDownload(res, fileInfo, root, 'resource-download');
 }
 
 /**
@@ -546,6 +539,22 @@ router.get('/:courseId/resources', requireCourseAccess, (req, res) => {
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CreateResourceRequest'
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [title, file]
+ *             properties:
+ *               title:
+ *                 type: string
+ *               type:
+ *                 type: string
+ *                 enum: [file]
+ *               description:
+ *                 type: string
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: pdf, txt, doc, docx, ppt, pptx, xls, xlsx, csv, png, jpg, jpeg, gif, webp, md, html, htm, rtf, or zip.
  *     responses:
  *       201:
  *         description: Resource created

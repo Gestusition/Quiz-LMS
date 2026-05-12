@@ -12,7 +12,7 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 - REST/JSON API: endpoints use standard HTTP methods and JSON request/response bodies.
 - Validation: backend validators and service checks protect academic identifiers, question formats, quiz settings, uploads, passwords, and scoped access rules.
 - Modular code quality: `routes -> services -> repositories`, plus `validators`, `serializers`, `constants`, and middleware.
-- Swagger: interactive API documentation is available at `/api-docs`.
+- Swagger: interactive API documentation is available at `http://localhost:3000/api-docs`.
 - Tests: Jest covers auth, maintenance mode, quiz attempts, academic workflows, validators, rate limiting, route mounts, and LMS regressions.
 
 ## Main Features
@@ -30,7 +30,8 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 - Assignment submission and grading workflows.
 - Attendance sessions, self-attendance, instructor records, record removal notes, and summaries.
 - Weekly course materials, protected resource downloads, and discussion threads.
-- User restrictions, scoped access blocking, audit logging, import batch/error workflow foundation, and admin analytics.
+- Teacher office hours: teachers set them from Profile or their course Participants card, and enrolled students see them on course participant lists.
+- User restrictions, scoped access blocking, audit logging, real CSV import batches, and admin analytics.
 
 ## First Run / Maintenance Mode
 
@@ -54,10 +55,11 @@ Requires Node.js `>=22.13.0` because the database layer uses `node:sqlite`.
 
 ```bash
 npm ci
-npm run dev
+npm start
 ```
 
 - App: `http://localhost:3000`
+- API index: `http://localhost:3000/api`
 - Swagger UI: `http://localhost:3000/api-docs`
 - Raw OpenAPI JSON: `http://localhost:3000/api-docs.json`
 - Health check: `http://localhost:3000/api/health`
@@ -103,6 +105,34 @@ The main suite includes backend unit/integration tests for auth, maintenance mod
 - `/api/audit`
 - `/api/settings`
 
+## Import Batches
+
+Admins can upload CSV files from Admin Analytics or `POST /api/imports/batches` as `multipart/form-data` with `type` and `file`. Supported import types are `users`, `courses`, and `enrollments`; files must be `.csv`, can be up to 100 MB, are parsed in memory, and are not stored in public upload folders.
+
+Each row is validated independently. Valid rows are inserted, duplicate users/courses/enrollments are skipped with row errors, and invalid rows are recorded under the batch. Batch status is `pending`, `processing`, `completed`, `completed_with_errors`, or `failed`, with `totalRows`, `successRows`, and `failedRows` counters.
+
+`users.csv`:
+
+```csv
+email,password,firstName,lastName,role
+student1@example.com,Password123,Student,One,student
+teacher1@example.com,Password123,Teacher,One,teacher
+```
+
+`courses.csv`:
+
+```csv
+code,title,description,visibility
+CS101,Introduction to Computer Science,Basic CS course,published
+```
+
+`enrollments.csv`:
+
+```csv
+userEmail,courseCode
+student1@example.com,CS101
+```
+
 ## Architecture
 
 ```text
@@ -128,7 +158,9 @@ quiz-web/
 - Session tokens are server-set cookies; the frontend does not store tokens in `localStorage`.
 - Query-string, Authorization header, and custom-header session tokens are rejected.
 - Maintenance mode blocks teacher/student login and revokes existing non-admin sessions when re-enabled.
-- Protected upload directories are not directly browsable; downloads go through authenticated endpoints.
+- Admins bypass maintenance mode so they can finish setup and turn it off.
+- Protected upload directories are not directly browsable; course, week, and submission downloads go through authenticated endpoints and are forced to download with `attachment`, `application/octet-stream`, `nosniff`, sandbox, and `noopen` headers.
+- Course resource and submission uploads allow educational files: `pdf`, `txt`, `doc`, `docx`, `ppt`, `pptx`, `xls`, `xlsx`, `csv`, `png`, `jpg`, `jpeg`, `gif`, `webp`, `md`, `html`, `htm`, `rtf`, and `zip`.
 - Production startup fails fast if required crypto secrets are missing.
 
 ## SEB Compatibility Note

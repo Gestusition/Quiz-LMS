@@ -1,4 +1,5 @@
 import { API } from '../api.js';
+import { value } from '../components/form.js';
 
 export const ProfilePage = {
   async renderProfile() {
@@ -27,20 +28,58 @@ export const ProfilePage = {
             </div>
           </div>
           <div class="panel">
-            <div class="panel-header"><h2>Academic Identity</h2><span>${this.esc(this.roleLabel(user.role))}</span></div>
+            <div class="panel-header">
+              <h2>Academic Identity</h2>
+              ${this.isTeacherUser(user)
+                ? '<button class="btn btn-primary btn-sm" id="btn-set-office-hours">Set office hours</button>'
+                : `<span>${this.esc(this.roleLabel(user.role))}</span>`}
+            </div>
             <div class="profile-list">
               ${academicRows || this.emptyLine('No academic profile fields are set yet.')}
             </div>
           </div>
         </section>
       `);
+      document.getElementById('btn-set-office-hours')?.addEventListener('click', () => this.showTeacherProfileForm(user));
     } catch (err) {
       this.renderError(err);
     }
   },
 
+  showTeacherProfileForm(user = this.user) {
+    this.openModal('Set office hours', `
+      <form id="teacher-profile-form" class="stack">
+        ${this.input('teacher-academic-title', 'Academic title', user.academicTitle || '', 'text', 'Instructor')}
+        ${this.input('teacher-department', 'Department label', user.department || user.departmentName || '')}
+        ${this.textarea('teacher-office-hours', 'Office hours students will see', user.officeHours || '')}
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    `);
+
+    document.getElementById('teacher-profile-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      try {
+        const updated = await API.updateOwnProfile({
+          academicTitle: value('teacher-academic-title'),
+          department: value('teacher-department'),
+          officeHours: value('teacher-office-hours')
+        });
+        this.user = updated;
+        this.renderShell();
+        this.closeModal();
+        this.toast('Office hours saved.', 'success');
+        this.route();
+      } catch (err) {
+        this.toast(err.message, 'error');
+      }
+    });
+  },
+
   profileAcademicRows(user) {
-    if (user.role === 'student') {
+    if (this.isStudentUser(user)) {
       return [
         this.profileRow('Student number', user.studentNumber),
         this.profileRow('Faculty', user.facultyName),
@@ -50,7 +89,7 @@ export const ProfilePage = {
         this.profileRow('Cohort', user.cohort)
       ].join('');
     }
-    if (user.role === 'teacher') {
+    if (this.isTeacherUser(user)) {
       return [
         this.profileRow('Academic title', user.academicTitle),
         this.profileRow('Staff number', user.staffNumber),
@@ -80,5 +119,22 @@ export const ProfilePage = {
   roleLabel(role) {
     const labels = { admin: 'Administrator', teacher: 'Instructor', student: 'Student' };
     return labels[role] || role || 'User';
+  },
+
+  normalizedRole(userOrRole) {
+    const raw = typeof userOrRole === 'string' ? userOrRole : userOrRole?.role;
+    const value = String(raw || '').trim().toLowerCase();
+    if (['teacher', 'instructor'].includes(value)) return 'teacher';
+    if (['student', 'learner'].includes(value)) return 'student';
+    if (['admin', 'administrator'].includes(value)) return 'admin';
+    return value;
+  },
+
+  isTeacherUser(user) {
+    return this.normalizedRole(user) === 'teacher';
+  },
+
+  isStudentUser(user) {
+    return this.normalizedRole(user) === 'student';
   }
 };

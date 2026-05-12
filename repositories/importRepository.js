@@ -1,6 +1,15 @@
 const { getDatabase } = require('../database/db');
 const { parsePagination } = require('../utils/validation');
 
+function normalizeBatch(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    successRows: Number(row.successCount || 0),
+    failedRows: Number(row.failedCount || 0)
+  };
+}
+
 function listBatches(filters = {}) {
   const paging = parsePagination(filters);
   const clauses = [];
@@ -26,7 +35,7 @@ function listBatches(filters = {}) {
   `).get(...params).count;
 
   const query = `SELECT * FROM import_batches ${where} ORDER BY createdAt DESC, id DESC LIMIT ? OFFSET ?`;
-  const items = getDatabase().prepare(query).all(...params, paging.limit, paging.offset);
+  const items = getDatabase().prepare(query).all(...params, paging.limit, paging.offset).map(normalizeBatch);
   return {
     items,
     pagination: {
@@ -46,10 +55,10 @@ function createBatch(payload) {
     payload.type,
     payload.uploadedBy || null,
     payload.fileName,
-    payload.status || 'processed',
+    payload.status || 'pending',
     payload.totalRows || 0,
-    payload.successCount || 0,
-    payload.failedCount || 0
+    payload.successRows ?? payload.successCount ?? 0,
+    payload.failedRows ?? payload.failedCount ?? 0
   );
 }
 
@@ -58,11 +67,17 @@ function updateBatch(id, payload) {
     UPDATE import_batches
     SET status = ?, totalRows = ?, successCount = ?, failedCount = ?
     WHERE id = ?
-  `).run(payload.status, payload.totalRows, payload.successCount, payload.failedCount, id);
+  `).run(
+    payload.status,
+    payload.totalRows,
+    payload.successRows ?? payload.successCount ?? 0,
+    payload.failedRows ?? payload.failedCount ?? 0,
+    id
+  );
 }
 
 function findBatchById(id) {
-  return getDatabase().prepare('SELECT * FROM import_batches WHERE id = ?').get(id) || null;
+  return normalizeBatch(getDatabase().prepare('SELECT * FROM import_batches WHERE id = ?').get(id));
 }
 
 function listErrors(batchId, filters = {}) {

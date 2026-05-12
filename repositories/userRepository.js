@@ -262,6 +262,14 @@ function findByUsername(username) {
   `).get(String(username || '').trim()) || null;
 }
 
+function findByEmail(email) {
+  return getDatabase().prepare(`
+    SELECT *
+    FROM users
+    WHERE LOWER(email) = LOWER(?)
+  `).get(String(email || '').trim()) || null;
+}
+
 function findActiveTeacherByEmail(email) {
   return getDatabase().prepare(`
     SELECT id, name, username, email, role, status
@@ -386,6 +394,7 @@ module.exports = {
   findActiveTeacherByEmail,
   findLoginCandidates,
   findByUsername,
+  findByEmail,
   findDuplicateEmail,
   findDuplicateUsername,
   findPublicById,

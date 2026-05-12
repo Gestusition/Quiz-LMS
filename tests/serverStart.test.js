@@ -47,7 +47,7 @@ describe('server startup and fallback handlers', () => {
     expect(initSpy).toHaveBeenCalled();
     expect(seedSpy).toHaveBeenCalled();
     expect(listenSpy).toHaveBeenCalledWith(4567, expect.any(Function));
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Quiz Manager is running'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Quiz LMS is running'));
     expect(server.close).toBe(close);
   });
 });

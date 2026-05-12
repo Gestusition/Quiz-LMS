@@ -342,6 +342,18 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .content-grid .wide { grid-column: span 1; }
 
+.admin-dashboard-column,
+.teacher-dashboard-column {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.admin-dashboard-column .panel + .panel,
+.teacher-dashboard-column .panel + .panel {
+  margin-top: 0;
+}
+
 .course-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -2418,6 +2430,13 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .nav-links { order: 3; width: 100%; overflow-x: auto; }
   .nav-user { margin-left: auto; }
   .stats-grid, .content-grid, .course-layout { grid-template-columns: 1fr; }
+  .admin-dashboard-column,
+  .teacher-dashboard-column { display: contents; }
+  .admin-dashboard-validation { order: 2; }
+  .admin-dashboard-imports { order: 3; }
+  .teacher-dashboard-activity { order: 1; }
+  .teacher-dashboard-quizzes { order: 2; }
+  .teacher-dashboard-issues { order: 3; }
   .analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .course-side { grid-row: auto; }
   .form-grid, .form-grid.two-col { grid-template-columns: 1fr; }

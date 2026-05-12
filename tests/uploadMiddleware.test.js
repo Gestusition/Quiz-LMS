@@ -128,9 +128,15 @@ describe('resource upload content validation', () => {
       ['archive.zip', Buffer.from([0x50, 0x4b, 0x03, 0x04, 1])],
       ['legacy.doc', Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])],
       ['grades.csv', Buffer.from('name,grade\nAda,100\n')],
+      ['notes.txt', Buffer.from('Plain notes\n')],
       ['notes.md', Buffer.from('# Notes\n')],
       ['page.html', Buffer.from('<!doctype html><p>ok</p>')],
-      ['rich.rtf', Buffer.from('{\\rtf1 hello}')]
+      ['rich.rtf', Buffer.from('{\\rtf1 hello}')],
+      ['image.png', Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.from([0, 0, 0, 0])
+      ])],
+      ['photo.jpg', Buffer.from([0xff, 0xd8, 1, 2, 3, 4, 5, 6, 7, 8, 0xff, 0xd9])]
     ];
 
     cases.forEach(([filename, contents]) => {

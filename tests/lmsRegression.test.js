@@ -25,6 +25,16 @@ function cookie(session) {
   return `auth_token=${session.token}`;
 }
 
+function expectSafeDownloadHeaders(response) {
+  expect(response.headers['content-disposition']).toMatch(/^attachment/i);
+  expect(response.headers['content-type']).toMatch(/application\/octet-stream/i);
+  expect(response.headers['x-content-type-options']).toBe('nosniff');
+  expect(response.headers['x-download-options']).toBe('noopen');
+  expect(response.headers['content-security-policy']).toContain('sandbox');
+  expect(response.headers['content-security-policy']).toContain("script-src 'none'");
+  expect(response.headers['cache-control']).toContain('no-store');
+}
+
 function thresholds(overrides = {}) {
   const base = { AA: 90, BA: 85, BB: 80, CB: 75, CC: 70, DC: 60, DD: 50, FD: 40, FF: 0, ...overrides };
   return ['AA', 'BA', 'BB', 'CB', 'CC', 'DC', 'DD', 'FD', 'FF']
@@ -321,9 +331,9 @@ describe('protected downloads and attendance self marking', () => {
       .set('Cookie', cookie(ctx.teacherASession))
       .field('title', 'Protected Notes')
       .field('type', 'file')
-      .attach('file', Buffer.from('safe text notes\n'), {
-        filename: 'notes.txt',
-        contentType: 'text/plain'
+      .attach('file', Buffer.from('<!doctype html><script>alert("x")</script><p>notes</p>\n'), {
+        filename: 'notes.html',
+        contentType: 'text/html'
       })
       .expect(201)).body;
 
@@ -334,7 +344,7 @@ describe('protected downloads and attendance self marking', () => {
     await request(app).get(resource.downloadUrl).expect(401);
     await request(app).get(resource.downloadUrl).set('Cookie', cookie(ctx.studentBSession)).expect(403);
     await request(app).get(resource.downloadUrl).set('Cookie', cookie(ctx.studentASession)).expect(200)
-      .expect(response => expect(response.headers['content-disposition']).toMatch(/attachment/));
+      .expect(expectSafeDownloadHeaders);
 
     const assignment = (await request(app)
       .post('/api/academic/assignments')
@@ -352,9 +362,9 @@ describe('protected downloads and attendance self marking', () => {
       .post(`/api/academic/assignments/${assignment.id}/submissions`)
       .set('Cookie', cookie(ctx.studentASession))
       .field('submissionText', 'Attached.')
-      .attach('file', Buffer.from('# answer\n'), {
-        filename: 'answer.md',
-        contentType: 'text/markdown'
+      .attach('file', Buffer.from('<!doctype html><script>alert("x")</script><p>answer</p>\n'), {
+        filename: 'answer.html',
+        contentType: 'text/html'
       })
       .expect(201)).body;
 
@@ -364,8 +374,10 @@ describe('protected downloads and attendance self marking', () => {
     await request(app).get(submission.downloadUrl).expect(401);
     await request(app).get(submission.downloadUrl).set('Cookie', cookie(ctx.studentBSession)).expect(403);
     await request(app).get(submission.downloadUrl).set('Cookie', cookie(ctx.teacherBSession)).expect(403);
-    await request(app).get(submission.downloadUrl).set('Cookie', cookie(ctx.teacherASession)).expect(200);
-    await request(app).get(submission.downloadUrl).set('Cookie', cookie(ctx.adminSession)).expect(200);
+    await request(app).get(submission.downloadUrl).set('Cookie', cookie(ctx.teacherASession)).expect(200)
+      .expect(expectSafeDownloadHeaders);
+    await request(app).get(submission.downloadUrl).set('Cookie', cookie(ctx.adminSession)).expect(200)
+      .expect(expectSafeDownloadHeaders);
   });
 
   test('student self-attendance is open-session scoped and removable with note', async () => {

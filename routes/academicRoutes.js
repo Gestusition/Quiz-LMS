@@ -1,10 +1,10 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 const academicService = require('../services/academicService');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { removeUploadedFile, submissionUpload, validateUploadedResource } = require('../middleware/upload');
+const { sendProtectedDownload } = require('../utils/protectedDownload');
 const { parseOptionalPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
@@ -48,15 +48,8 @@ function handleValidatedSubmissionUpload(req, res, next) {
 }
 
 function sendProtectedSubmissionDownload(res, fileInfo) {
-  const fileName = path.basename(fileInfo.storageUrl || '');
   const root = path.join(__dirname, '..', 'public', 'uploads', 'submissions');
-  const filePath = path.join(root, fileName);
-  if (!fileName || !filePath.startsWith(root) || !fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'File not found.' });
-  }
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
-  return res.download(filePath, fileInfo.fileName || fileName);
+  return sendProtectedDownload(res, fileInfo, root, 'submission-download');
 }
 
 /**
@@ -94,6 +87,25 @@ router.post('/faculties', requireRole('admin'), (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               submissionText:
+ *                 type: string
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: pdf, txt, doc, docx, ppt, pptx, xls, xlsx, csv, png, jpg, jpeg, gif, webp, md, html, htm, rtf, or zip.
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               submissionText:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Faculty updated

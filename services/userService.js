@@ -201,6 +201,43 @@ class UserService {
     return updated;
   }
 
+  updateOwnProfile(id, data, actorUserId = null) {
+    const existing = userRepository.findById(id);
+    if (!existing) {
+      throw notFoundError('User not found.');
+    }
+    if (existing.role !== 'teacher') {
+      throw conflictError('role', 'Only teacher profile fields can be updated here.');
+    }
+
+    const existingProfile = profileRepository.getForUser(id, existing.role);
+    const payload = validateUserPayload({
+      name: existing.name,
+      username: existing.username,
+      email: existing.email,
+      role: existing.role,
+      status: existing.status,
+      mustChangeCredentials: !!existing.mustChangeCredentials,
+      department: data.department !== undefined ? data.department : existingProfile.department,
+      officeHours: data.officeHours !== undefined ? data.officeHours : existingProfile.officeHours,
+      academicTitle: data.academicTitle !== undefined ? data.academicTitle : existingProfile.academicTitle,
+      staffNumber: existingProfile.staffNumber,
+      facultyId: existingProfile.facultyId,
+      departmentId: existingProfile.departmentId
+    }, false);
+
+    profileRepository.replaceForUser(id, payload);
+    const updated = this.getUserById(id);
+    auditService.log({
+      actorUserId,
+      action: 'USER_PROFILE_UPDATED',
+      entityType: 'user',
+      entityId: id,
+      details: { role: updated.role, selfService: true }
+    });
+    return updated;
+  }
+
   deleteUser(id) {
     const existing = userRepository.findById(id);
     if (!existing) {

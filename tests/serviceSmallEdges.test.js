@@ -200,7 +200,7 @@ describe('small service edge cases', () => {
     const batch = importService.createBatch({
       type: 'users',
       fileName: 'users.csv',
-      status: 'processed'
+      status: 'pending'
     }, ctx.admin.id);
     importRepository.updateBatch(batch.id, {
       status: 'failed',

@@ -65,6 +65,15 @@ export const AnalyticsPage = {
           </div>
           <div class="panel">
             <div class="panel-header"><h2>Import Batches</h2><span id="import-batch-total">${batches.length}</span></div>
+            <form class="toolbar compact-toolbar" id="import-upload-form">
+              <label class="form-field inline-field"><span>Type</span><select class="form-input" id="import-upload-type">
+                <option value="users">Users</option>
+                <option value="courses">Courses</option>
+                <option value="enrollments">Enrollments</option>
+              </select></label>
+              <label class="form-field inline-field"><span>CSV</span><input class="form-input" id="import-upload-file" type="file" accept=".csv,text/csv"></label>
+              <button class="btn btn-primary btn-sm" type="submit">Import</button>
+            </form>
             <div class="toolbar compact-toolbar">
               <label class="form-field inline-field"><span>Date</span><input class="form-input" id="import-batch-date" type="date"></label>
               <button class="btn btn-ghost btn-sm" id="import-batch-clear" type="button">Clear</button>
@@ -118,9 +127,11 @@ export const AnalyticsPage = {
 
   importBatchRow(batch) {
     const createdAt = batch.createdAt ? ` - ${this.esc(this.formatDate(batch.createdAt))}` : '';
+    const successRows = batch.successRows ?? batch.successCount ?? 0;
+    const failedRows = batch.failedRows ?? batch.failedCount ?? 0;
     return `
       <div class="list-row">
-        <div><strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong><small>${this.esc(batch.status)} | ${batch.successCount}/${batch.totalRows} success${createdAt}</small></div>
+        <div><strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong><small>${this.esc(batch.status)} | ${successRows}/${batch.totalRows} success | ${failedRows} failed${createdAt}</small></div>
         <button class="btn btn-ghost btn-sm" onclick="App.showImportBatchErrors(${batch.id})">Errors</button>
       </div>
     `;
@@ -175,6 +186,10 @@ export const AnalyticsPage = {
         if (dateInput) dateInput.value = '';
         this.renderImportBatches(batches);
       });
+    }
+    const uploadForm = document.getElementById('import-upload-form');
+    if (uploadForm) {
+      uploadForm.addEventListener('submit', event => this.submitImportBatch(event));
     }
   },
 
@@ -383,6 +398,23 @@ export const AnalyticsPage = {
           </div>
         </div>
       `);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  async submitImportBatch(event) {
+    event.preventDefault();
+    const type = document.getElementById('import-upload-type')?.value || 'users';
+    const file = document.getElementById('import-upload-file')?.files?.[0];
+    if (!file) {
+      this.toast('Choose a CSV file.', 'error');
+      return;
+    }
+    try {
+      await API.runImportBatch(type, file);
+      this.toast('Import completed.', 'success');
+      await this.renderAnalytics();
     } catch (err) {
       this.toast(err.message, 'error');
     }

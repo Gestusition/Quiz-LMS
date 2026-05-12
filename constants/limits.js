@@ -105,6 +105,7 @@ const LIMITS = Object.freeze({
   }),
   imports: Object.freeze({
     fileNameMax: 255,
+    fileSizeMaxBytes: 100 * 1024 * 1024,
     rowJsonMax: 20000,
     errorMessageMax: 1000
   }),

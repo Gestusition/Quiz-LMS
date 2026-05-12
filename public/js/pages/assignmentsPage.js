@@ -290,7 +290,7 @@ export const AssignmentsPage = {
   },
 
   submissionFileAccept() {
-    return this.resourceFileAccept ? this.resourceFileAccept() : '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.html,.htm,.rtf,.zip';
+    return this.resourceFileAccept ? this.resourceFileAccept() : '.pdf,.txt,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp,.md,.html,.htm,.rtf,.zip';
   },
 
   submissionInfoRow(label, html) {

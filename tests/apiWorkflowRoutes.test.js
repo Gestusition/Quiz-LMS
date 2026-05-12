@@ -99,17 +99,17 @@ describe('import routes', () => {
       .post('/api/imports/batches')
       .set('Cookie', cookie(ctx.adminSession))
       .send({
-        type: 'students',
-        fileName: 'students.csv',
-        status: 'partially_failed',
+        type: 'users',
+        fileName: 'users.csv',
+        status: 'completed_with_errors',
         totalRows: 2,
-        successCount: 1,
-        failedCount: 1
+        successRows: 1,
+        failedRows: 1
       })
       .expect(201)).body;
 
     await request(app)
-      .get('/api/imports/batches?type=students&status=partially_failed&date=2026-05-11&limit=5')
+      .get('/api/imports/batches?type=users&status=completed_with_errors&date=2026-05-11&limit=5')
       .set('Cookie', cookie(ctx.adminSession))
       .expect(200)
       .expect(response => {
@@ -166,6 +166,87 @@ describe('import routes', () => {
       .get('/api/imports/batches/not-number/errors')
       .set('Cookie', cookie(ctx.adminSession))
       .expect(400);
+  });
+
+  test('admin can upload a user CSV import and non-admins cannot run imports', async () => {
+    const stamp = String(Date.now()).slice(-8);
+    const csv = [
+      'email,password,firstName,lastName,role',
+      `route-import-${stamp}@example.com,Password123,Route,Import,student`
+    ].join('\n');
+
+    await request(app)
+      .post('/api/imports/batches')
+      .set('Cookie', cookie(ctx.teacherSession))
+      .field('type', 'users')
+      .attach('file', Buffer.from(csv), {
+        filename: 'users.csv',
+        contentType: 'text/csv'
+      })
+      .expect(403);
+
+    await request(app)
+      .post('/api/imports/batches')
+      .set('Cookie', cookie(ctx.adminSession))
+      .field('type', 'users')
+      .attach('file', Buffer.from(csv), {
+        filename: 'users.csv',
+        contentType: 'text/csv'
+      })
+      .expect(201)
+      .expect(response => {
+        expect(response.body.status).toBe('completed');
+        expect(response.body.successRows).toBe(1);
+        expect(response.body.failedRows).toBe(0);
+      });
+  });
+
+  test('import routes reject invalid file types', async () => {
+    await request(app)
+      .post('/api/imports/batches')
+      .set('Cookie', cookie(ctx.adminSession))
+      .field('type', 'users')
+      .attach('file', Buffer.from('email,password,firstName,lastName,role\n'), {
+        filename: 'users.txt',
+        contentType: 'text/plain'
+      })
+      .expect(400)
+      .expect(response => {
+        expect(response.body.error).toMatch(/csv|unsupported/i);
+      });
+  });
+
+  test('teacher can set office hours and enrolled students can see them', async () => {
+    const officeHours = `Mon 10:00-12:00 ${Date.now()}`;
+
+    await request(app)
+      .put('/api/auth/me/profile')
+      .set('Cookie', cookie(ctx.teacherSession))
+      .send({ officeHours })
+      .expect(200)
+      .expect(response => {
+        expect(response.body.officeHours).toBe(officeHours);
+      });
+
+    await request(app)
+      .get(`/api/courses/${ctx.course.id}/participants`)
+      .set('Cookie', cookie(ctx.studentSession))
+      .expect(200)
+      .expect(response => {
+        const teacher = response.body.find(item => item.id === ctx.teacher.id && item.courseRole === 'teacher');
+        expect(teacher.officeHours).toBe(officeHours);
+      });
+  });
+
+  test('teacher office hours controls are visible in profile and course participant UI', () => {
+    const profilePage = fs.readFileSync(path.join(__dirname, '..', 'public/js/pages/profilePage.js'), 'utf8');
+    const courseDetailPage = fs.readFileSync(path.join(__dirname, '..', 'public/js/pages/courseDetailPage.js'), 'utf8');
+
+    expect(profilePage).toContain('Set office hours');
+    expect(profilePage).toContain('btn-set-office-hours');
+    expect(courseDetailPage).not.toContain('Set office hours');
+    expect(courseDetailPage).not.toContain('showTeacherProfileForm(App.user)');
+    expect(courseDetailPage).toContain('Office hours:');
   });
 });
 

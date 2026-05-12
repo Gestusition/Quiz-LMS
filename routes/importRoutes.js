@@ -4,11 +4,20 @@ const importService = require('../services/importService');
 const auditService = require('../services/auditService');
 const validationIssueService = require('../services/validationIssueService');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { sendError } = require('../utils/appError');
+const { importUpload } = require('../middleware/upload');
+const { sendError, validationError } = require('../utils/appError');
 const { dateOnlyValue, parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
 router.use(requireRole('admin'));
+
+function parseImportUpload(req, res, next) {
+  if (!req.is('multipart/form-data')) return next();
+  importUpload.single('file')(req, res, err => {
+    if (err) return sendError(res, err, 400);
+    next();
+  });
+}
 
 /**
  * @swagger
@@ -21,12 +30,12 @@ router.use(requireRole('admin'));
  *         name: type
  *         schema:
  *           type: string
- *           enum: [users, students, teachers, questions, enrollments]
+ *           enum: [users, students, teachers, questions, courses, enrollments]
  *       - in: query
  *         name: status
  *         schema:
  *           type: string
- *           enum: [processed, partially_failed, failed, completed]
+ *           enum: [pending, processing, completed, completed_with_errors, failed]
  *       - in: query
  *         name: page
  *         schema:
@@ -83,6 +92,18 @@ router.get('/batches', (req, res) => {
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CreateImportBatchRequest'
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [type, file]
+ *             properties:
+ *               type:
+ *                 type: string
+ *                 enum: [users, courses, enrollments]
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: CSV file. Max size 100 MB.
  *     responses:
  *       201:
  *         description: Created import batch
@@ -95,15 +116,31 @@ router.get('/batches', (req, res) => {
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
-router.post('/batches', (req, res) => {
+router.post('/batches', parseImportUpload, (req, res) => {
   try {
-    const batch = importService.createBatch(req.body, req.user.id);
+    if (req.is('multipart/form-data') && !req.file) {
+      throw validationError('file', 'CSV file is required.');
+    }
+    const batch = req.file
+      ? importService.runCsvImport({
+        type: req.body.type,
+        fileName: req.file.originalname,
+        buffer: req.file.buffer
+      }, req.user)
+      : importService.createBatch(req.body, req.user.id);
     auditService.log({
       actorUserId: req.user.id,
-      action: 'IMPORT_BATCH_CREATED',
+      action: req.file ? 'IMPORT_BATCH_RUN' : 'IMPORT_BATCH_CREATED',
       entityType: 'import_batch',
       entityId: batch.id,
-      details: { type: batch.type, fileName: batch.fileName }
+      details: {
+        type: batch.type,
+        fileName: batch.fileName,
+        status: batch.status,
+        totalRows: batch.totalRows,
+        successRows: batch.successRows,
+        failedRows: batch.failedRows
+      }
     });
     res.status(201).json(batch);
   } catch (err) {

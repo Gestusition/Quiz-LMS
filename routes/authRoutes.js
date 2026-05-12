@@ -304,4 +304,43 @@ router.get('/me', authenticate, (req, res) => {
   res.json(req.user);
 });
 
+/**
+ * @swagger
+ * /api/auth/me/profile:
+ *   put:
+ *     summary: Update current teacher profile fields
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               officeHours:
+ *                 type: string
+ *               department:
+ *                 type: string
+ *               academicTitle:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated current user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CurrentUser'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/401Unauthorized'
+ */
+router.put('/me/profile', authenticate, (req, res) => {
+  try {
+    res.json(authService.updateOwnProfile(req.userId, req.body));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
 module.exports = router;

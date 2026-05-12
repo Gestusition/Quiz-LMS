@@ -358,15 +358,15 @@ describe('Academic management system', () => {
       .post(`/api/academic/assignments/${assignment.id}/submissions`)
       .set('Cookie', cookie(studentSession))
       .field('submissionText', 'My proof is attached.')
-      .attach('file', Buffer.from('# Proof\n\nSee the argument below.\n'), {
-        filename: 'proof.md',
-        contentType: 'text/markdown'
+      .attach('file', Buffer.from('Proof\n\nSee the argument below.\n'), {
+        filename: 'proof.txt',
+        contentType: 'text/plain'
       })
       .expect(201)).body;
 
-    expect(submission.fileName).toBe('proof.md');
+    expect(submission.fileName).toBe('proof.txt');
     expect(submission.fileSizeBytes).toBeGreaterThan(0);
-    expect(submission.submissionUrl).toMatch(/^\/uploads\/submissions\/.+\.md$/);
+    expect(submission.submissionUrl).toMatch(/^\/uploads\/submissions\/.+\.txt$/);
 
     await request(app)
       .get(`/api/academic/assignments/${assignment.id}/submissions`)
@@ -375,7 +375,7 @@ describe('Academic management system', () => {
       .expect(response => {
         expect(response.body).toHaveLength(1);
         expect(response.body[0].studentId).toBe(studentSession.user.id);
-        expect(response.body[0].fileName).toBe('proof.md');
+        expect(response.body[0].fileName).toBe('proof.txt');
       });
 
     await request(app)
@@ -592,11 +592,11 @@ describe('Academic management system', () => {
     db.prepare(`
       INSERT INTO import_batches (type, uploadedBy, fileName, status, totalRows, successCount, failedCount, createdAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('users', null, oldFileName, 'processed', 2, 2, 0, '2026-05-01 08:00:00');
+    `).run('users', null, oldFileName, 'completed', 2, 2, 0, '2026-05-01 08:00:00');
     db.prepare(`
       INSERT INTO import_batches (type, uploadedBy, fileName, status, totalRows, successCount, failedCount, createdAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('users', null, newFileName, 'processed', 2, 2, 0, '2026-05-02 08:00:00');
+    `).run('users', null, newFileName, 'completed', 2, 2, 0, '2026-05-02 08:00:00');
 
     await request(app)
       .get('/api/imports/batches?date=2026-05-01&limit=50')

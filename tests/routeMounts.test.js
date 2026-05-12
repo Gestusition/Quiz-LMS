@@ -41,6 +41,38 @@ afterAll(() => {
 });
 
 describe('API route mounts', () => {
+  test('public API index advertises docs, health, and top-level routes', async () => {
+    await request(app)
+      .get('/api')
+      .expect(200)
+      .expect('Content-Type', /json/)
+      .expect(response => {
+        expect(response.body).toEqual(expect.objectContaining({
+          name: 'Quiz LMS API',
+          status: 'ok',
+          docs: '/api-docs',
+          health: '/api/health'
+        }));
+        expect(response.body.routes).toEqual(expect.objectContaining({
+          auth: '/api/auth/login',
+          courses: '/api/courses',
+          users: '/api/users',
+          admin: '/api/admin'
+        }));
+      });
+  });
+
+  test('public API health endpoint returns JSON without authentication', async () => {
+    await request(app)
+      .get('/api/health')
+      .expect(200)
+      .expect('Content-Type', /json/)
+      .expect(response => {
+        expect(response.body.status).toBe('ok');
+        expect(new Date(response.body.timestamp).toString()).not.toBe('Invalid Date');
+      });
+  });
+
   test('every mounted API group has a reachable smoke endpoint', async () => {
     const db = getDatabase();
     const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');

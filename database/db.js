@@ -568,10 +568,10 @@ function createTables() {
 
     CREATE TABLE IF NOT EXISTS users.import_batches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL CHECK(type IN ('users', 'students', 'teachers', 'questions', 'enrollments')),
+      type TEXT NOT NULL CHECK(type IN ('users', 'students', 'teachers', 'questions', 'courses', 'enrollments')),
       uploadedBy INTEGER,
       fileName TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'processed' CHECK(status IN ('processed', 'partially_failed', 'failed', 'completed')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'completed_with_errors', 'failed')),
       totalRows INTEGER NOT NULL DEFAULT 0,
       successCount INTEGER NOT NULL DEFAULT 0,
       failedCount INTEGER NOT NULL DEFAULT 0,
@@ -710,6 +710,7 @@ function migrateExistingTables() {
   ensureColumn('student', 'student_profiles', 'sectionId', 'sectionId INTEGER');
   ensureColumn('student', 'student_profiles', 'createdAt', 'createdAt TEXT DEFAULT \'\'');
   ensureColumn('student', 'student_profiles', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
+  migrateImportBatchConstraint();
   ensureColumn('learning', 'courses', 'departmentId', 'departmentId INTEGER');
   ensureColumn('learning', 'courses', 'credits', 'credits INTEGER NOT NULL DEFAULT 3');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
@@ -973,6 +974,66 @@ function migrateAttendanceRecordStatusConstraint() {
 
       DROP TABLE learning.attendance_records;
       ALTER TABLE learning.attendance_records_new RENAME TO attendance_records;
+    `);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+function migrateImportBatchConstraint() {
+  const database = getDatabase();
+  const table = database.prepare(`
+    SELECT sql
+    FROM users.sqlite_master
+    WHERE type = 'table' AND name = 'import_batches'
+  `).get();
+
+  const sql = String((table && table.sql) || '');
+  if (!table || (sql.includes("'courses'") && sql.includes("'completed_with_errors'"))) return;
+
+  database.exec('PRAGMA foreign_keys = OFF');
+  database.exec('BEGIN TRANSACTION');
+  try {
+    database.exec(`
+      DROP TABLE IF EXISTS users.import_batches_new;
+
+      CREATE TABLE users.import_batches_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL CHECK(type IN ('users', 'students', 'teachers', 'questions', 'courses', 'enrollments')),
+        uploadedBy INTEGER,
+        fileName TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'completed_with_errors', 'failed')),
+        totalRows INTEGER NOT NULL DEFAULT 0,
+        successCount INTEGER NOT NULL DEFAULT 0,
+        failedCount INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO users.import_batches_new (
+        id, type, uploadedBy, fileName, status, totalRows, successCount, failedCount, createdAt
+      )
+      SELECT
+        id,
+        type,
+        uploadedBy,
+        fileName,
+        CASE status
+          WHEN 'processed' THEN 'completed'
+          WHEN 'partially_failed' THEN 'completed_with_errors'
+          ELSE status
+        END,
+        totalRows,
+        successCount,
+        failedCount,
+        createdAt
+      FROM users.import_batches;
+
+      DROP TABLE users.import_batches;
+      ALTER TABLE users.import_batches_new RENAME TO import_batches;
     `);
     database.exec('COMMIT');
   } catch (error) {

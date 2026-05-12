@@ -63,7 +63,7 @@ export const DashboardPage = {
         ${this.stat('Restricted users', systemHealth.restrictedUsers || 0)}
       </section>
 
-      <section class="content-grid">
+      <section class="content-grid admin-dashboard-grid">
         <div class="panel">
           <div class="panel-header"><h2>Recent Audit Logs</h2><a href="#/analytics">Open analytics</a></div>
           <div class="list compact scroll-list dashboard-scroll-list">
@@ -79,31 +79,33 @@ export const DashboardPage = {
           </div>
         </div>
 
-        <div class="panel">
-          <div class="panel-header"><h2>Open Validation Issues</h2><a href="#/analytics">System health</a></div>
-          <div class="list compact scroll-list dashboard-scroll-list">
-            ${openIssues.map(item => `
-              <div class="list-row">
-                <div>
-                  <strong>${this.esc(item.entityType)} #${this.esc(item.entityId || '-')}</strong>
-                  <small>${this.esc(item.severity)} - ${this.esc(item.message)}</small>
+        <div class="admin-dashboard-column">
+          <div class="panel admin-dashboard-validation">
+            <div class="panel-header"><h2>Open Validation Issues</h2><a href="#/analytics">System health</a></div>
+            <div class="list compact scroll-list dashboard-scroll-list">
+              ${openIssues.map(item => `
+                <div class="list-row">
+                  <div>
+                    <strong>${this.esc(item.entityType)} #${this.esc(item.entityId || '-')}</strong>
+                    <small>${this.esc(item.severity)} - ${this.esc(item.message)}</small>
+                  </div>
                 </div>
-              </div>
-            `).join('') || this.emptyLine('No open validation issues.')}
+              `).join('') || this.emptyLine('No open validation issues.')}
+            </div>
           </div>
-        </div>
 
-        <div class="panel">
-          <div class="panel-header"><h2>Import Batches</h2><a href="#/analytics">View reports</a></div>
-          <div class="list compact scroll-list dashboard-scroll-list">
-            ${importBatches.map(batch => `
-              <div class="list-row">
-                <div>
-                  <strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong>
-                  <small>${this.esc(batch.status)} | ${batch.successCount}/${batch.totalRows} success</small>
+          <div class="panel admin-dashboard-imports">
+            <div class="panel-header"><h2>Import Batches</h2><a href="#/analytics">View reports</a></div>
+            <div class="list compact scroll-list dashboard-scroll-list">
+              ${importBatches.map(batch => `
+                <div class="list-row">
+                  <div>
+                    <strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong>
+                    <small>${this.esc(batch.status)} | ${batch.successRows ?? batch.successCount ?? 0}/${batch.totalRows} success | ${batch.failedRows ?? batch.failedCount ?? 0} failed</small>
+                  </div>
                 </div>
-              </div>
-            `).join('') || this.emptyLine('No import batches yet.')}
+              `).join('') || this.emptyLine('No import batches yet.')}
+            </div>
           </div>
         </div>
       </section>
@@ -208,24 +210,26 @@ export const DashboardPage = {
         ${this.stat('Open issues', (issuesResult.items || []).length)}
       </section>
 
-      <section class="content-grid">
-        <div class="panel">
-          <div class="panel-header"><h2>Course Activity</h2><a href="#/courses">Open courses</a></div>
-          <div class="list">${courses.slice(0, 6).map(course => this.courseRow(course)).join('') || this.emptyLine('No courses assigned.')}</div>
+      <section class="content-grid teacher-dashboard-grid">
+        <div class="teacher-dashboard-column">
+          <div class="panel teacher-dashboard-activity">
+            <div class="panel-header"><h2>Course Activity</h2><a href="#/courses">Open courses</a></div>
+            <div class="list">${courses.slice(0, 6).map(course => this.courseRow(course)).join('') || this.emptyLine('No courses assigned.')}</div>
+          </div>
+          <div class="panel teacher-dashboard-issues">
+            <div class="panel-header"><h2>Course Issues</h2><span>${(issuesResult.items || []).length} open</span></div>
+            <div class="list compact">
+              ${(issuesResult.items || []).map(item => `
+                <div class="list-row">
+                  <div><strong>${this.esc(item.entityType)} #${this.esc(item.entityId || '-')}</strong><small>${this.esc(item.severity)} - ${this.esc(item.message)}</small></div>
+                </div>
+              `).join('') || this.emptyLine('No open course issues.')}
+            </div>
+          </div>
         </div>
-        <div class="panel">
+        <div class="panel teacher-dashboard-quizzes">
           <div class="panel-header"><h2>Upcoming/Active Quizzes</h2><a href="#/quizzes">Open quizzes</a></div>
           <div class="list">${activeQuizzes.slice(0, 6).map(quiz => this.quizRow(quiz)).join('') || this.emptyLine('No active quizzes.')}</div>
-        </div>
-        <div class="panel">
-          <div class="panel-header"><h2>Course Issues</h2><span>${(issuesResult.items || []).length} open</span></div>
-          <div class="list compact">
-            ${(issuesResult.items || []).map(item => `
-              <div class="list-row">
-                <div><strong>${this.esc(item.entityType)} #${this.esc(item.entityId || '-')}</strong><small>${this.esc(item.severity)} - ${this.esc(item.message)}</small></div>
-              </div>
-            `).join('') || this.emptyLine('No open course issues.')}
-          </div>
         </div>
       </section>
     `);

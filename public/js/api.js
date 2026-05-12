@@ -62,6 +62,7 @@ export const API = {
   completePasswordReset(data) { return this.request('/auth/password-reset/complete', { method: 'POST', body: data }); },
   logout() { return this.request('/auth/logout', { method: 'POST' }); },
   me() { return this.request('/auth/me'); },
+  updateOwnProfile(data) { return this.request('/auth/me/profile', { method: 'PUT', body: data }); },
 
   getUsers(filters = {}) {
     const params = new URLSearchParams();
@@ -243,6 +244,12 @@ export const API = {
     return this.request(`/imports/batches${params.toString() ? `?${params}` : ''}`);
   },
   createImportBatch(data) { return this.request('/imports/batches', { method: 'POST', body: data }); },
+  runImportBatch(type, file) {
+    const form = new FormData();
+    form.append('type', type);
+    form.append('file', file);
+    return this.request('/imports/batches', { method: 'POST', body: form });
+  },
   getImportErrors(batchId, filters = {}) {
     const params = new URLSearchParams();
     if (filters.status) params.set('status', filters.status);

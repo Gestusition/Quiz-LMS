@@ -141,7 +141,12 @@ export const CourseDetailPage = {
             </div>
 
             <div class="panel">
-              <div class="panel-header"><h2>Participants</h2><span>${participants.length}</span></div>
+              <div class="panel-header">
+                <h2>Participants</h2>
+                <div class="header-actions">
+                  <span>${participants.length}</span>
+                </div>
+              </div>
               <div class="list compact">${participants.map(item => this.participantRow(item, manager)).join('') || this.emptyLine('No participants.')}</div>
             </div>
           </aside>
@@ -482,13 +487,21 @@ export const CourseDetailPage = {
   },
 
   participantRow(item) {
+    const isTeacher = item.courseRole === 'teacher';
     const detail = item.courseRole === 'student'
       ? `${item.studentNumber || '-'} - ${item.email}`
-      : `${item.department || '-'} - ${item.email}`;
+      : `${item.department || item.departmentName || '-'} - ${item.email}`;
+    const officeHours = isTeacher ? (item.officeHours || 'Not set') : '';
     return `
       <div class="list-row">
-        <div><strong>${this.esc(item.name)}</strong><small>${this.esc(detail)}</small></div>
-        <span class="role-badge">${this.esc(item.courseRole)}</span>
+        <div>
+          <strong>${this.esc(item.name)}</strong>
+          <small>${this.esc(detail)}</small>
+          ${isTeacher ? `<small><strong>Office hours:</strong> ${this.esc(officeHours)}</small>` : ''}
+        </div>
+        <div class="table-actions">
+          <span class="role-badge">${this.esc(item.courseRole)}</span>
+        </div>
       </div>
     `;
   },
@@ -585,7 +598,7 @@ export const CourseDetailPage = {
   },
 
   resourceFileAccept() {
-    return '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.html,.htm,.rtf,.zip';
+    return '.pdf,.txt,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp,.md,.html,.htm,.rtf,.zip';
   },
 
   formatFileSize(bytes) {

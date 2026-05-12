@@ -6,11 +6,11 @@ const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Quiz Manager API',
+      title: 'Quiz LMS API',
       version: '1.0.0',
       description: 'RESTful API for a role-based quiz LMS. Supports secure auth, users, courses, enrollments, question bank CRUD, quiz publishing, attempts, grading, and course content.',
       contact: {
-        name: 'Quiz Manager'
+        name: 'Quiz LMS'
       }
     },
     servers: [
@@ -908,11 +908,13 @@ const options = {
           type: 'object',
           properties: {
             id: { type: 'integer' },
-            type: { type: 'string', enum: ['users', 'students', 'teachers', 'questions', 'enrollments'] },
+            type: { type: 'string', enum: ['users', 'students', 'teachers', 'questions', 'courses', 'enrollments'] },
             uploadedBy: { type: 'integer', nullable: true },
             fileName: { type: 'string' },
-            status: { type: 'string', enum: ['processed', 'partially_failed', 'failed', 'completed'] },
+            status: { type: 'string', enum: ['pending', 'processing', 'completed', 'completed_with_errors', 'failed'] },
             totalRows: { type: 'integer' },
+            successRows: { type: 'integer' },
+            failedRows: { type: 'integer' },
             successCount: { type: 'integer' },
             failedCount: { type: 'integer' },
             createdAt: { type: 'string', format: 'date-time' }
@@ -922,12 +924,22 @@ const options = {
           type: 'object',
           required: ['type', 'fileName'],
           properties: {
-            type: { type: 'string', enum: ['users', 'students', 'teachers', 'questions', 'enrollments'] },
+            type: { type: 'string', enum: ['users', 'students', 'teachers', 'questions', 'courses', 'enrollments'] },
             fileName: { type: 'string' },
-            status: { type: 'string', enum: ['processed', 'partially_failed', 'failed', 'completed'], default: 'processed' },
+            status: { type: 'string', enum: ['pending', 'processing', 'completed', 'completed_with_errors', 'failed'], default: 'pending' },
             totalRows: { type: 'integer' },
+            successRows: { type: 'integer' },
+            failedRows: { type: 'integer' },
             successCount: { type: 'integer' },
             failedCount: { type: 'integer' }
+          }
+        },
+        RunImportBatchRequest: {
+          type: 'object',
+          required: ['type', 'file'],
+          properties: {
+            type: { type: 'string', enum: ['users', 'courses', 'enrollments'] },
+            file: { type: 'string', format: 'binary' }
           }
         },
         ImportError: {
@@ -1131,7 +1143,7 @@ const swaggerSpec = swaggerJsdoc(options);
 function setupSwagger(app) {
   app.use('/api-docs', requireAuth, requireRole('admin'), swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     customCss: '.swagger-ui .topbar { display: none }',
-    customSiteTitle: 'Quiz Manager API Docs'
+    customSiteTitle: 'Quiz LMS API Docs'
   }));
 
   // Serve raw JSON spec

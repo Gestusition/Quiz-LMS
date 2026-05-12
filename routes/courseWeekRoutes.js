@@ -1,5 +1,4 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 const courseWeekService = require('../services/courseWeekService');
@@ -7,6 +6,7 @@ const auditService = require('../services/auditService');
 const { requireAuth } = require('../middleware/auth');
 const { resourceUpload, removeUploadedFile, validateUploadedResource } = require('../middleware/upload');
 const { sendError } = require('../utils/appError');
+const { sendProtectedDownload: sendSafeDownload } = require('../utils/protectedDownload');
 const { parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
@@ -31,15 +31,8 @@ function resourcePayload(req) {
 }
 
 function sendProtectedDownload(res, fileInfo) {
-  const fileName = path.basename(fileInfo.storageUrl || '');
   const root = path.join(__dirname, '..', 'public', 'uploads', 'resources');
-  const filePath = path.join(root, fileName);
-  if (!fileName || !filePath.startsWith(root) || !fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'File not found.' });
-  }
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
-  return res.download(filePath, fileInfo.fileName || fileName);
+  return sendSafeDownload(res, fileInfo, root, 'week-resource-download');
 }
 
 /**
@@ -288,6 +281,26 @@ router.get('/weeks/:id/resources', (req, res) => {
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CreateWeekResourceRequest'
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [title, file]
+ *             properties:
+ *               title:
+ *                 type: string
+ *               type:
+ *                 type: string
+ *                 enum: [file]
+ *               visibleFrom:
+ *                 type: string
+ *                 format: date-time
+ *               visibleUntil:
+ *                 type: string
+ *                 format: date-time
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: pdf, txt, doc, docx, ppt, pptx, xls, xlsx, csv, png, jpg, jpeg, gif, webp, md, html, htm, rtf, or zip.
  *     responses:
  *       201:
  *         description: Created week resource

@@ -771,6 +771,23 @@ describe('Advanced LMS controls', () => {
     expect(weekResource.content).toMatch(/^\/uploads\/resources\/.+\.csv$/);
     expect(weekResource.fileName).toBe('grades.csv');
 
+    const imageResource = (await request(app)
+      .post(`/api/courses/${course.id}/resources`)
+      .set('Cookie', cookie(teacherSession))
+      .field('title', 'Diagram Image')
+      .field('type', 'file')
+      .attach('file', Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.from([0, 0, 0, 0])
+      ]), {
+        filename: 'diagram.png',
+        contentType: 'image/png'
+      })
+      .expect(201)).body;
+
+    expect(imageResource.url).toMatch(/^\/uploads\/resources\/.+\.png$/);
+    expect(imageResource.fileName).toBe('diagram.png');
+
     const htmlResource = (await request(app)
       .post(`/api/courses/${course.id}/resources`)
       .set('Cookie', cookie(teacherSession))
@@ -811,6 +828,10 @@ describe('Advanced LMS controls', () => {
       .expect(200);
     await request(app)
       .delete(`/api/weeks/week-resources/${weekResource.id}`)
+      .set('Cookie', cookie(teacherSession))
+      .expect(200);
+    await request(app)
+      .delete(`/api/courses/resources/${imageResource.id}`)
       .set('Cookie', cookie(teacherSession))
       .expect(200);
     await request(app)

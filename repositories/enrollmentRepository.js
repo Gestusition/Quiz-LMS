@@ -56,7 +56,7 @@ function getParticipants(courseId) {
     SELECT e.id as enrollmentId, e.role as courseRole, e.status as enrollmentStatus,
       e.createdAt as enrolledAt, u.id, u.name, u.email, u.role, u.status,
       sp.studentNumber, sp.cohort, sp.classYearId, sp.sectionId,
-      tp.department, tp.academicTitle,
+      tp.department, tp.academicTitle, tp.officeHours,
       f.name as facultyName, d.name as departmentName,
       cy.name as classYearName, cy.yearNumber, sec.name as sectionName
     FROM enrollments e

@@ -279,6 +279,10 @@ class AuthService {
     return userService.setUserPassword(id, password);
   }
 
+  updateOwnProfile(id, data) {
+    return userService.updateOwnProfile(id, data, id);
+  }
+
   deleteUser(id) {
     return userService.deleteUser(id);
   }
