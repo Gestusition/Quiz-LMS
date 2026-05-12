@@ -57,7 +57,8 @@ describe('API route mounts', () => {
           auth: '/api/auth/login',
           courses: '/api/courses',
           users: '/api/users',
-          admin: '/api/admin'
+          analytics: '/api/analytics/admin',
+          settings: '/api/settings/maintenance'
         }));
       });
   });

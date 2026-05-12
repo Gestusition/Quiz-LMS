@@ -142,7 +142,18 @@ app.get('/api', (req, res) => {
       auth: '/api/auth/login',
       courses: '/api/courses',
       users: '/api/users',
-      admin: '/api/admin'
+      categories: '/api/categories',
+      questions: '/api/questions',
+      quizzes: '/api/quizzes',
+      academic: '/api/academic',
+      analytics: '/api/analytics/admin',
+      restrictions: '/api/restrictions',
+      issues: '/api/issues',
+      imports: '/api/imports/batches',
+      discussion: '/api/discussion',
+      weeks: '/api/weeks',
+      audit: '/api/audit',
+      settings: '/api/settings/maintenance'
     }
   });
 });

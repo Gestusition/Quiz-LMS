@@ -17,7 +17,7 @@ export const AuthPage = {
           <form id="login-form" class="stack">
             <label class="form-field">
               <span>Email or Academic ID</span>
-              <input class="form-input" id="login-identifier" type="text" autocomplete="username" placeholder="STU-0001 or teacher@example.edu" required>
+              <input class="form-input" id="login-identifier" type="text" autocomplete="username" placeholder="STU-0001 or email" required>
             </label>
             <label class="form-field">
               <span>Password</span>
