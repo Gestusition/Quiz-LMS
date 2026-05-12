@@ -129,6 +129,8 @@ describe('API route mounts', () => {
         expect(response.headers['x-content-type-options']).toBe('nosniff');
         expect(response.headers['x-frame-options']).toBe('DENY');
         expect(response.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+        expect(response.headers['content-security-policy']).toContain('font-src');
+        expect(response.headers['content-security-policy']).toContain('https://cdn.jsdelivr.net');
         expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
       });
 

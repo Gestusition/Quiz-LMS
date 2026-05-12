@@ -33,6 +33,16 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 - Teacher office hours: teachers set them from Profile or their course Participants card, and enrolled students see them on course participant lists.
 - User restrictions, scoped access blocking, audit logging, real CSV import batches, and admin analytics.
 
+## Screenshots
+
+| Admin dashboard | Course detail |
+| --- | --- |
+| ![Admin dashboard](docs/screenshots/dashboard.png) | ![Course detail](docs/screenshots/course-detail.png) |
+
+| Question bank | Mobile users page |
+| --- | --- |
+| ![Question bank](docs/screenshots/question-bank.png) | ![Mobile users page](docs/screenshots/users-mobile.png) |
+
 ## First Run / Maintenance Mode
 
 Fresh installs start in maintenance mode. Teachers and students cannot sign in until an admin disables maintenance mode.
