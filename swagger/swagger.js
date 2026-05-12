@@ -1128,10 +1128,11 @@ const options = {
       { name: 'Discussion', description: 'Course discussion threads and replies' },
       { name: 'Weeks', description: 'Weekly course material and resources' },
       { name: 'Audit', description: 'Audit log activity endpoints' },
-      { name: 'Settings', description: 'Admin system settings endpoints' }
+      { name: 'Settings', description: 'Admin system settings endpoints' },
+      { name: 'System', description: 'API index, health, and platform metadata endpoints' }
     ]
   },
-  apis: ['./routes/*.js']
+  apis: ['./server.js', './routes/*.js']
 };
 
 const swaggerSpec = swaggerJsdoc(options);
@@ -1153,4 +1154,4 @@ function setupSwagger(app) {
   });
 }
 
-module.exports = { setupSwagger };
+module.exports = { setupSwagger, swaggerSpec };

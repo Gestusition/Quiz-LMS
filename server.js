@@ -78,12 +78,60 @@ app.use('/api/settings', settingsRoutes);
 // Swagger API Documentation
 setupSwagger(app);
 
-// Health check endpoint
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Check API health
+ *     tags: [System]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: API status and current server timestamp
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Public API index advertised by the startup banner.
+/**
+ * @swagger
+ * /api:
+ *   get:
+ *     summary: List public API entry points
+ *     tags: [System]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: API index with links to docs, health, and common route groups
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 name:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                 docs:
+ *                   type: string
+ *                 health:
+ *                   type: string
+ *                 routes:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: string
+ */
 app.get('/api', (req, res) => {
   res.json({
     name: 'Quiz LMS API',
@@ -131,6 +179,7 @@ function startServer(port = PORT) {
 }
 
 // Initialize database and start server
+/* istanbul ignore next -- direct CLI startup is covered by startServer unit tests. */
 if (require.main === module) {
   startServer();
 }

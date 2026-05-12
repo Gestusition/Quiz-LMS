@@ -82,10 +82,13 @@ Session cookies are `HttpOnly` and `SameSite=Strict`. They use the `Secure` attr
 
 ```bash
 npm test
+npm run test:api-docs
 npm run coverage
 ```
 
 The main suite includes backend unit/integration tests for auth, maintenance mode, user identity rules, quiz attempts and grading, academic records, validators, route mounts, and API documentation coverage.
+
+`npm run test:api-docs` enforces 100% API documentation coverage for every Express API method in `server.js` and `routes/*.js`. It fails when a route is missing a Swagger operation, when Swagger documents a route that no longer exists, or when the generated OpenAPI operation is missing its summary, tag, or responses.
 
 ## Main API Groups
 

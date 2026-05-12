@@ -19,6 +19,8 @@ const ROUTE_PREFIXES = {
   'userRoutes.js': '/api/users'
 };
 
+const SERVER_API_ROUTES = new Set(['/api', '/api/health']);
+
 function expressPathToOpenApi(routePrefix, routePath) {
   const joined = routePath === '/' ? routePrefix : `${routePrefix}${routePath}`;
   return joined.replace(/\/+/g, '/').replace(/:([A-Za-z0-9_]+)/g, '{$1}');
@@ -40,13 +42,30 @@ function routeMethodsFor(fileName, source) {
   return methods;
 }
 
+function appMethodsFor(source) {
+  const methods = [];
+  const pattern = /app\.(get|post|put|delete|patch)\(\s*['"]([^'"]*)/g;
+  let match;
+
+  while ((match = pattern.exec(source)) !== null) {
+    if (SERVER_API_ROUTES.has(match[2])) {
+      methods.push({
+        method: match[1],
+        path: match[2]
+      });
+    }
+  }
+
+  return methods;
+}
+
 function swaggerMethodsFor(source) {
   const methods = new Set();
   const lines = source.split(/\r?\n/);
   let currentPath = null;
 
   lines.forEach(line => {
-    const pathMatch = line.match(/\*\s+(\/api\/[^:\s]+):\s*$/);
+    const pathMatch = line.match(/\*\s+(\/api(?:\/[^:\s]+)?):\s*$/);
     if (pathMatch) {
       currentPath = pathMatch[1];
       return;
@@ -61,21 +80,89 @@ function swaggerMethodsFor(source) {
   return methods;
 }
 
+function keyFor(route) {
+  return `${route.method.toUpperCase()} ${route.path}`;
+}
+
+function routeInventory() {
+  const routesDir = path.join(__dirname, '..', 'routes');
+  const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const routes = appMethodsFor(serverSource).map(route => ({ ...route, source: 'server.js' }));
+
+  Object.keys(ROUTE_PREFIXES).forEach(fileName => {
+    const source = fs.readFileSync(path.join(routesDir, fileName), 'utf8');
+    routeMethodsFor(fileName, source).forEach(route => {
+      routes.push({ ...route, source: fileName });
+    });
+  });
+
+  return routes;
+}
+
+function swaggerInventory() {
+  const routesDir = path.join(__dirname, '..', 'routes');
+  const sources = [
+    ['server.js', fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8')],
+    ...Object.keys(ROUTE_PREFIXES).map(fileName => [
+      fileName,
+      fs.readFileSync(path.join(routesDir, fileName), 'utf8')
+    ])
+  ];
+  const docs = [];
+
+  sources.forEach(([sourceName, source]) => {
+    swaggerMethodsFor(source).forEach(key => {
+      docs.push({ key, source: sourceName });
+    });
+  });
+
+  return docs;
+}
+
 describe('Swagger route coverage', () => {
-  test('every Express route method has a Swagger method block', () => {
-    const routesDir = path.join(__dirname, '..', 'routes');
+  test('every Express API route method has exactly one Swagger method block', () => {
+    const routes = routeInventory();
+    const docs = swaggerInventory();
+    const routeKeys = new Map(routes.map(route => [keyFor(route), route.source]));
+    const docCounts = docs.reduce((counts, doc) => {
+      counts.set(doc.key, (counts.get(doc.key) || 0) + 1);
+      return counts;
+    }, new Map());
+
+    const missing = routes
+      .map(route => ({ key: keyFor(route), source: route.source }))
+      .filter(route => !docCounts.has(route.key))
+      .map(route => `${route.source}: ${route.key}`);
+    const orphaned = docs
+      .filter(doc => !routeKeys.has(doc.key))
+      .map(doc => `${doc.source}: ${doc.key}`);
+    const duplicated = [...docCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([key, count]) => `${key} (${count} docs)`);
+
+    expect(missing).toEqual([]);
+    expect(orphaned).toEqual([]);
+    expect(duplicated).toEqual([]);
+  });
+
+  test('generated OpenAPI spec contains complete operation basics for every route', () => {
+    const { swaggerSpec } = require('../swagger/swagger');
     const missing = [];
 
-    Object.keys(ROUTE_PREFIXES).forEach(fileName => {
-      const source = fs.readFileSync(path.join(routesDir, fileName), 'utf8');
-      const documented = swaggerMethodsFor(source);
+    routeInventory().forEach(route => {
+      const operation = swaggerSpec.paths?.[route.path]?.[route.method];
+      if (!operation) {
+        missing.push(`${route.source}: ${keyFor(route)} missing from generated spec`);
+        return;
+      }
 
-      routeMethodsFor(fileName, source).forEach(route => {
-        const key = `${route.method.toUpperCase()} ${route.path}`;
-        if (!documented.has(key)) {
-          missing.push(`${fileName}: ${key}`);
-        }
-      });
+      if (!operation.summary) missing.push(`${route.source}: ${keyFor(route)} missing summary`);
+      if (!Array.isArray(operation.tags) || operation.tags.length === 0) {
+        missing.push(`${route.source}: ${keyFor(route)} missing tag`);
+      }
+      if (!operation.responses || Object.keys(operation.responses).length === 0) {
+        missing.push(`${route.source}: ${keyFor(route)} missing responses`);
+      }
     });
 
     expect(missing).toEqual([]);

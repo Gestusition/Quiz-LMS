@@ -17,6 +17,7 @@ const resourceAccessService = require('../services/resourceAccessService');
 const academicService = require('../services/academicService');
 const courseWeekService = require('../services/courseWeekService');
 const importService = require('../services/importService');
+const academicRepository = require('../repositories/academicRepository');
 const importRepository = require('../repositories/importRepository');
 const resourceAccessRepository = require('../repositories/resourceAccessRepository');
 const settingsRepository = require('../repositories/settingsRepository');
@@ -172,12 +173,31 @@ describe('small service edge cases', () => {
   });
 
   test('user service removes student-owned academic records when role changes', () => {
+    const submissionSpy = jest.spyOn(academicRepository, 'listSubmissionsByStudent')
+      .mockReturnValue([{ submissionUrl: null }]);
+
     const updated = userService.updateUser(ctx.student.id, {
       role: 'teacher',
       staffNumber: `ROLE-${stamp('r')}`
     }, ctx.admin.id);
 
     expect(updated.role).toBe('teacher');
+    expect(submissionSpy).toHaveBeenCalledWith(ctx.student.id);
+  });
+
+  test('user service self profile updates are teacher-only', () => {
+    expect(() => userService.updateOwnProfile(999999, {
+      officeHours: 'Friday 09:00-10:00'
+    }, ctx.admin.id)).toThrow('User not found');
+    expect(() => userService.updateOwnProfile(ctx.admin.id, {
+      officeHours: 'Friday 09:00-10:00'
+    }, ctx.admin.id)).toThrow('Only teacher profile fields');
+
+    const updated = userService.updateOwnProfile(ctx.teacher.id, {
+      officeHours: 'Friday 09:00-10:00'
+    }, ctx.teacher.id);
+
+    expect(updated.officeHours).toBe('Friday 09:00-10:00');
   });
 
   test('audit service tolerates malformed details JSON', () => {

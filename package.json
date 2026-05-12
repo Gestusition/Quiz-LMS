@@ -10,6 +10,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "jest --verbose --runInBand",
+    "test:api-docs": "jest tests/swaggerCoverage.test.js --runInBand",
     "coverage": "jest --coverage --runInBand"
   },
   "keywords": [
