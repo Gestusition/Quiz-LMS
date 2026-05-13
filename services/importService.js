@@ -14,6 +14,8 @@ const RUNNABLE_IMPORT_TYPES = ['users', 'courses', 'enrollments'];
 const IMPORT_TYPES = ['users', 'students', 'teachers', 'questions', 'courses', 'enrollments'];
 const BATCH_STATUS = ['pending', 'processing', 'completed', 'completed_with_errors', 'failed'];
 const ERROR_STATUS = ['unresolved', 'fixed', 'ignored'];
+const IMPORT_FILE_EXTENSIONS = ['.csv'];
+const IMPORT_FILE_MIME_TYPES = ['text/csv', 'application/csv', 'text/plain', 'application/vnd.ms-excel'];
 const LEGACY_STATUS_MAP = Object.freeze({
   processed: 'completed',
   partially_failed: 'completed_with_errors'
@@ -42,14 +44,17 @@ class ImportService {
     if (!BATCH_STATUS.includes(status)) {
       throw validationError('status', `status must be one of: ${BATCH_STATUS.join(', ')}.`);
     }
+    const counts = normalizeImportCounts(data);
     const result = importRepository.createBatch({
       type,
       uploadedBy: actorUserId,
       fileName,
+      fileType: normalizeFileType(data.fileType || fileName),
+      mimeType: optionalText(data.mimeType, 'mime_type', 160),
+      fileSizeBytes: nonNegativeInteger(data.fileSizeBytes, 'file_size_bytes'),
       status,
-      totalRows: Number(data.totalRows) || 0,
-      successRows: Number(data.successRows ?? data.successCount) || 0,
-      failedRows: Number(data.failedRows ?? data.failedCount) || 0
+      totalRows: nonNegativeInteger(data.totalRows, 'total_rows'),
+      ...counts
     });
     return importRepository.findBatchById(result.lastInsertRowid);
   }
@@ -63,10 +68,8 @@ class ImportService {
     }
 
     const fileName = requiredText(data.fileName, 'file_name', { min: 1, max: LIMITS.imports.fileNameMax });
-    if (!fileName.toLowerCase().endsWith('.csv')) {
-      throw validationError('file', 'Import files must be CSV files.');
-    }
     const fileBuffer = Buffer.isBuffer(data.buffer) ? data.buffer : Buffer.from(String(data.content || ''), 'utf8');
+    validateImportFile(fileName, data.mimeType || '', fileBuffer);
     if (!fileBuffer.length) {
       throw validationError('file', 'Import CSV file is required.');
     }
@@ -80,44 +83,66 @@ class ImportService {
     const batch = this.createBatch({
       type,
       fileName,
+      fileType: normalizeFileType(fileName),
+      mimeType: data.mimeType || '',
+      fileSizeBytes: fileBuffer.length,
       status: 'pending'
     }, actorUserId);
     this.updateBatchCounters(batch.id, {
       status: 'processing',
       totalRows: 0,
-      successRows: 0,
-      failedRows: 0
+      createdCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      validationErrorCount: 0
     });
 
     try {
       const parsed = this.parseCsvImport(fileBuffer.toString('utf8'), type);
-      let successRows = 0;
-      let failedRows = 0;
+      const counts = {
+        createdCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+        validationErrorCount: 0
+      };
 
       parsed.rows.forEach(row => {
         try {
-          this.importRow(type, row.data, actorUser);
-          successRows += 1;
+          const imported = this.importRow(type, row.data, actorUser);
+          if (imported && imported.importAction === 'updated') {
+            counts.updatedCount += 1;
+          } else {
+            counts.createdCount += 1;
+          }
         } catch (err) {
-          failedRows += 1;
+          counts.validationErrorCount += 1;
+          if (isSkippedImportError(err)) {
+            counts.skippedCount += 1;
+          } else {
+            counts.failedCount += 1;
+          }
           this.recordRowError(batch.id, row.rowNumber, row.data, err);
         }
       });
 
-      const status = failedRows > 0 ? 'completed_with_errors' : 'completed';
+      const status = counts.validationErrorCount > 0 ? 'completed_with_errors' : 'completed';
       this.updateBatchCounters(batch.id, {
         status,
         totalRows: parsed.rows.length,
-        successRows,
-        failedRows
+        ...counts
       });
     } catch (err) {
       this.recordRowError(batch.id, 1, {}, err, 'file');
       this.updateBatchCounters(batch.id, {
         status: 'failed',
         totalRows: 0,
-        successRows: 0,
-        failedRows: 1
+        createdCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        failedCount: 1,
+        validationErrorCount: 1
       });
     }
 
@@ -222,11 +247,11 @@ class ImportService {
   }
 
   updateBatchCounters(batchId, payload) {
+    const counts = normalizeImportCounts(payload);
     importRepository.updateBatch(batchId, {
       status: payload.status,
-      totalRows: Number(payload.totalRows) || 0,
-      successRows: Number(payload.successRows) || 0,
-      failedRows: Number(payload.failedRows) || 0
+      totalRows: nonNegativeInteger(payload.totalRows, 'total_rows'),
+      ...counts
     });
   }
 
@@ -245,6 +270,17 @@ class ImportService {
     const batch = importRepository.findBatchById(batchId);
     if (!batch) throw notFoundError('Import batch not found.');
     return importRepository.listErrors(batchId, filters);
+  }
+
+  getBatchDetail(batchId) {
+    const batch = importRepository.findBatchById(batchId);
+    if (!batch) throw notFoundError('Import batch not found.');
+    const errors = importRepository.listErrors(batchId, { limit: 100 });
+    return {
+      ...batch,
+      errors: errors.items,
+      errorPagination: errors.pagination
+    };
   }
 
   addError(batchId, data) {
@@ -306,6 +342,84 @@ class ImportService {
 function normalizeBatchStatus(status) {
   const value = String(status || '').trim();
   return LEGACY_STATUS_MAP[value] || value;
+}
+
+function firstDefined(data, fields) {
+  for (const field of fields) {
+    if (data[field] !== undefined && data[field] !== null && data[field] !== '') {
+      return data[field];
+    }
+  }
+  return undefined;
+}
+
+function nonNegativeInteger(value, field) {
+  if (value === undefined || value === null || value === '') return 0;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0) {
+    throw validationError(field, `${field} must be a non-negative integer.`);
+  }
+  return number;
+}
+
+function normalizeImportCounts(data = {}) {
+  const successRows = firstDefined(data, ['successRows', 'successCount']);
+  const failedRows = firstDefined(data, ['failedRows', 'failedCount']);
+  const createdRows = firstDefined(data, ['createdRows', 'createdCount']);
+  const updatedRows = firstDefined(data, ['updatedRows', 'updatedCount']);
+  const skippedRows = firstDefined(data, ['skippedRows', 'skippedCount']);
+  const validationErrors = firstDefined(data, ['validationErrors', 'validationErrorCount']);
+
+  const createdCount = createdRows === undefined
+    ? nonNegativeInteger(successRows, 'created_count')
+    : nonNegativeInteger(createdRows, 'created_count');
+  const updatedCount = nonNegativeInteger(updatedRows, 'updated_count');
+  const skippedCount = nonNegativeInteger(skippedRows, 'skipped_count');
+  const failedCount = nonNegativeInteger(failedRows, 'failed_count');
+  const successCount = successRows === undefined
+    ? createdCount + updatedCount
+    : nonNegativeInteger(successRows, 'success_count');
+  const validationErrorCount = validationErrors === undefined
+    ? failedCount + skippedCount
+    : nonNegativeInteger(validationErrors, 'validation_error_count');
+
+  return {
+    successCount,
+    failedCount,
+    createdCount,
+    updatedCount,
+    skippedCount,
+    validationErrorCount
+  };
+}
+
+function normalizeFileType(value) {
+  const text = String(value || '').trim().toLowerCase();
+  const ext = text.includes('.') ? text.slice(text.lastIndexOf('.')) : text;
+  return ext.replace(/^\./, '');
+}
+
+function validateImportFile(fileName, mimeType, fileBuffer) {
+  const lowerName = String(fileName || '').toLowerCase();
+  if (!IMPORT_FILE_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
+    throw validationError('file', 'Unsupported import file type. Upload a CSV file.');
+  }
+  const mime = String(mimeType || '').trim().toLowerCase();
+  if (mime && !IMPORT_FILE_MIME_TYPES.includes(mime)) {
+    throw validationError('file', 'Unsupported import file type. Upload a CSV file.');
+  }
+  if (!Buffer.isBuffer(fileBuffer)) return;
+  if (fileBuffer.includes(0)) {
+    throw validationError('file', 'Import CSV file must be plain text.');
+  }
+}
+
+function isSkippedImportError(err) {
+  const message = String((err && err.message) || '').toLowerCase();
+  return err?.status === 409 ||
+    message.includes('already exists') ||
+    message.includes('already enrolled') ||
+    message.includes('duplicate');
 }
 
 function parseCsv(text) {

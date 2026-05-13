@@ -243,6 +243,7 @@ export const API = {
     if (filters.limit) params.set('limit', filters.limit);
     return this.request(`/imports/batches${params.toString() ? `?${params}` : ''}`);
   },
+  getImportBatch(id) { return this.request(`/imports/batches/${id}`); },
   createImportBatch(data) { return this.request('/imports/batches', { method: 'POST', body: data }); },
   runImportBatch(type, file) {
     const form = new FormData();

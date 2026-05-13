@@ -83,6 +83,13 @@ describe('ImportService', () => {
     expect(batch.status).toBe('completed_with_errors');
     expect(batch.totalRows).toBe(3);
     expect(batch.successRows).toBe(2);
+    expect(batch.batchNumber).toBe(`Batch #${batch.id}`);
+    expect(batch.importBatchId).toBe(batch.id);
+    expect(batch.createdCount).toBe(2);
+    expect(batch.updatedCount).toBe(0);
+    expect(batch.skippedCount).toBe(0);
+    expect(batch.failedCount).toBe(1);
+    expect(batch.validationErrorCount).toBe(1);
 
     const listed = importService.listBatches({ type: 'users', limit: 5 });
     expect(listed.items.some(item => item.id === batch.id)).toBe(true);
@@ -165,6 +172,12 @@ describe('ImportService', () => {
     expect(batch.totalRows).toBe(2);
     expect(batch.successRows).toBe(2);
     expect(batch.failedRows).toBe(0);
+    expect(batch.createdCount).toBe(2);
+    expect(batch.updatedCount).toBe(0);
+    expect(batch.skippedCount).toBe(0);
+    expect(batch.validationErrorCount).toBe(0);
+    expect(batch.fileType).toBe('csv');
+    expect(batch.fileSizeBytes).toBeGreaterThan(0);
     expect(JSON.stringify(batch)).not.toContain('Password123');
   });
 
@@ -179,7 +192,9 @@ describe('ImportService', () => {
 
     expect(batch.status).toBe('completed_with_errors');
     expect(batch.successRows).toBe(1);
-    expect(batch.failedRows).toBe(1);
+    expect(batch.failedRows).toBe(0);
+    expect(batch.skippedCount).toBe(1);
+    expect(batch.validationErrorCount).toBe(1);
 
     const errors = importService.listErrors(batch.id, { limit: 10 });
     expect(errors.items).toHaveLength(1);
@@ -199,6 +214,8 @@ describe('ImportService', () => {
     expect(batch.status).toBe('completed_with_errors');
     expect(batch.successRows).toBe(0);
     expect(batch.failedRows).toBe(1);
+    expect(batch.skippedCount).toBe(0);
+    expect(batch.validationErrorCount).toBe(1);
     const errors = importService.listErrors(batch.id);
     expect(errors.items[0].errorField).toBe('role');
   });
@@ -225,7 +242,8 @@ describe('ImportService', () => {
 
     expect(batch.status).toBe('completed_with_errors');
     expect(batch.successRows).toBe(1);
-    expect(batch.failedRows).toBe(1);
+    expect(batch.failedRows).toBe(0);
+    expect(batch.skippedCount).toBe(1);
     expect(importService.listErrors(batch.id).items[0].errorField).toBe('code');
   });
 
@@ -264,8 +282,27 @@ describe('ImportService', () => {
 
     expect(batch.status).toBe('completed_with_errors');
     expect(batch.successRows).toBe(1);
-    expect(batch.failedRows).toBe(1);
+    expect(batch.failedRows).toBe(0);
+    expect(batch.skippedCount).toBe(1);
     expect(importService.listErrors(batch.id).items[0].errorMessage).toMatch(/already enrolled/i);
+  });
+
+  test('malformed CSV creates a failed batch with file-level row error', () => {
+    const batch = csvImport('users', 'users.csv', [
+      'email,password,firstName,lastName,role',
+      '"unterminated@example.com,Password123,Import,Bad,student'
+    ].join('\n'));
+
+    expect(batch.status).toBe('failed');
+    expect(batch.totalRows).toBe(0);
+    expect(batch.createdCount).toBe(0);
+    expect(batch.failedRows).toBe(1);
+    expect(batch.validationErrorCount).toBe(1);
+
+    const errors = importService.listErrors(batch.id);
+    expect(errors.items[0].rowNumber).toBe(1);
+    expect(errors.items[0].errorField).toBe('file');
+    expect(errors.items[0].errorMessage).toMatch(/unterminated/i);
   });
 
   test('row error recording and completed status values are persisted', () => {

@@ -1329,17 +1329,50 @@ const options = {
           type: 'object',
           properties: {
             id: { type: 'integer' },
+            importBatchId: { type: 'integer', description: 'Alias for id for audit displays.' },
+            batchNumber: { type: 'string', example: 'Batch #12' },
             type: { type: 'string', enum: ['users', 'students', 'teachers', 'questions', 'courses', 'enrollments'] },
             uploadedBy: { type: 'integer', nullable: true },
+            uploadedByName: { type: 'string' },
+            uploadedByEmail: { type: 'string' },
+            uploadedByRole: { type: 'string', enum: ['admin', 'teacher', 'student'] },
+            importerName: { type: 'string' },
+            importerEmail: { type: 'string' },
             fileName: { type: 'string' },
+            fileType: { type: 'string', description: 'Original import file extension without dot, currently csv.' },
+            mimeType: { type: 'string', description: 'Uploaded file MIME type when available.' },
+            fileSizeBytes: { type: 'integer' },
             status: { type: 'string', enum: ['pending', 'processing', 'completed', 'completed_with_errors', 'failed'] },
             totalRows: { type: 'integer' },
             successRows: { type: 'integer' },
             failedRows: { type: 'integer' },
             successCount: { type: 'integer' },
             failedCount: { type: 'integer' },
+            createdCount: { type: 'integer' },
+            updatedCount: { type: 'integer' },
+            skippedCount: { type: 'integer' },
+            validationErrorCount: { type: 'integer' },
+            createdRows: { type: 'integer' },
+            updatedRows: { type: 'integer' },
+            skippedRows: { type: 'integer' },
+            validationErrors: { type: 'integer' },
             createdAt: { type: 'string', format: 'date-time' }
           }
+        },
+        ImportBatchDetail: {
+          allOf: [
+            { $ref: '#/components/schemas/ImportBatch' },
+            {
+              type: 'object',
+              properties: {
+                errors: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/ImportError' }
+                },
+                errorPagination: { $ref: '#/components/schemas/Pagination' }
+              }
+            }
+          ]
         },
         CreateImportBatchRequest: {
           type: 'object',
@@ -1347,12 +1380,19 @@ const options = {
           properties: {
             type: { type: 'string', enum: ['users', 'students', 'teachers', 'questions', 'courses', 'enrollments'] },
             fileName: { type: 'string' },
+            fileType: { type: 'string', description: 'Original import file extension without dot, currently csv.' },
+            mimeType: { type: 'string' },
+            fileSizeBytes: { type: 'integer' },
             status: { type: 'string', enum: ['pending', 'processing', 'completed', 'completed_with_errors', 'failed'], default: 'pending' },
             totalRows: { type: 'integer' },
             successRows: { type: 'integer' },
             failedRows: { type: 'integer' },
             successCount: { type: 'integer' },
-            failedCount: { type: 'integer' }
+            failedCount: { type: 'integer' },
+            createdCount: { type: 'integer' },
+            updatedCount: { type: 'integer' },
+            skippedCount: { type: 'integer' },
+            validationErrorCount: { type: 'integer' }
           }
         },
         RunImportBatchRequest: {
@@ -1360,7 +1400,11 @@ const options = {
           required: ['type', 'file'],
           properties: {
             type: { type: 'string', enum: ['users', 'courses', 'enrollments'] },
-            file: { type: 'string', format: 'binary' }
+            file: {
+              type: 'string',
+              format: 'binary',
+              description: 'CSV file only (.csv with text/csv compatible MIME type).'
+            }
           }
         },
         ImportError: {
@@ -1370,10 +1414,12 @@ const options = {
             batchId: { type: 'integer' },
             rowNumber: { type: 'integer' },
             rawDataJson: { type: 'string' },
+            rawData: { type: 'object', nullable: true },
             errorField: { type: 'string' },
             errorMessage: { type: 'string' },
             status: { type: 'string', enum: ['unresolved', 'fixed', 'ignored'] },
             fixedDataJson: { type: 'string' },
+            fixedData: { type: 'object', nullable: true },
             resolvedBy: { type: 'integer', nullable: true },
             resolvedAt: { type: 'string', format: 'date-time', nullable: true },
             createdAt: { type: 'string', format: 'date-time' }

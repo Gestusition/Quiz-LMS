@@ -82,6 +82,41 @@ router.get('/batches', (req, res) => {
 
 /**
  * @swagger
+ * /api/imports/batches/{id}:
+ *   get:
+ *     summary: Get import batch details
+ *     tags: [Imports]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Import batch details with recent row errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ImportBatchDetail'
+ *       400:
+ *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ */
+router.get('/batches/:id', (req, res) => {
+  try {
+    const batchId = parseRequiredPositiveInt(req.params.id, 'batchId');
+    res.json(importService.getBatchDetail(batchId));
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+/**
+ * @swagger
  * /api/imports/batches:
  *   post:
  *     summary: Create an import batch
@@ -103,7 +138,10 @@ router.get('/batches', (req, res) => {
  *               file:
  *                 type: string
  *                 format: binary
- *                 description: CSV file. Max size 100 MB.
+ *                 description: CSV file only (.csv, text/csv compatible). Max size 100 MB.
+ *           encoding:
+ *             file:
+ *               contentType: text/csv
  *     responses:
  *       201:
  *         description: Created import batch
@@ -125,6 +163,8 @@ router.post('/batches', parseImportUpload, (req, res) => {
       ? importService.runCsvImport({
         type: req.body.type,
         fileName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        fileSizeBytes: req.file.size,
         buffer: req.file.buffer
       }, req.user)
       : importService.createBatch(req.body, req.user.id);
@@ -136,8 +176,15 @@ router.post('/batches', parseImportUpload, (req, res) => {
       details: {
         type: batch.type,
         fileName: batch.fileName,
+        fileType: batch.fileType,
+        mimeType: batch.mimeType,
+        fileSizeBytes: batch.fileSizeBytes,
         status: batch.status,
         totalRows: batch.totalRows,
+        createdCount: batch.createdCount,
+        updatedCount: batch.updatedCount,
+        skippedCount: batch.skippedCount,
+        validationErrorCount: batch.validationErrorCount,
         successRows: batch.successRows,
         failedRows: batch.failedRows
       }

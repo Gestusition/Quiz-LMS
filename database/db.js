@@ -571,10 +571,17 @@ function createTables() {
       type TEXT NOT NULL CHECK(type IN ('users', 'students', 'teachers', 'questions', 'courses', 'enrollments')),
       uploadedBy INTEGER,
       fileName TEXT NOT NULL,
+      fileType TEXT DEFAULT '',
+      mimeType TEXT DEFAULT '',
+      fileSizeBytes INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'completed_with_errors', 'failed')),
       totalRows INTEGER NOT NULL DEFAULT 0,
       successCount INTEGER NOT NULL DEFAULT 0,
       failedCount INTEGER NOT NULL DEFAULT 0,
+      createdCount INTEGER NOT NULL DEFAULT 0,
+      updatedCount INTEGER NOT NULL DEFAULT 0,
+      skippedCount INTEGER NOT NULL DEFAULT 0,
+      validationErrorCount INTEGER NOT NULL DEFAULT 0,
       createdAt TEXT DEFAULT (datetime('now'))
     );
 
@@ -711,6 +718,7 @@ function migrateExistingTables() {
   ensureColumn('student', 'student_profiles', 'createdAt', 'createdAt TEXT DEFAULT \'\'');
   ensureColumn('student', 'student_profiles', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
   migrateImportBatchConstraint();
+  ensureImportBatchAuditColumns();
   ensureColumn('learning', 'courses', 'departmentId', 'departmentId INTEGER');
   ensureColumn('learning', 'courses', 'credits', 'credits INTEGER NOT NULL DEFAULT 3');
   ensureColumn('learning', 'categories', 'courseId', 'courseId INTEGER');
@@ -1006,21 +1014,33 @@ function migrateImportBatchConstraint() {
         type TEXT NOT NULL CHECK(type IN ('users', 'students', 'teachers', 'questions', 'courses', 'enrollments')),
         uploadedBy INTEGER,
         fileName TEXT NOT NULL,
+        fileType TEXT DEFAULT '',
+        mimeType TEXT DEFAULT '',
+        fileSizeBytes INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'completed_with_errors', 'failed')),
         totalRows INTEGER NOT NULL DEFAULT 0,
         successCount INTEGER NOT NULL DEFAULT 0,
         failedCount INTEGER NOT NULL DEFAULT 0,
+        createdCount INTEGER NOT NULL DEFAULT 0,
+        updatedCount INTEGER NOT NULL DEFAULT 0,
+        skippedCount INTEGER NOT NULL DEFAULT 0,
+        validationErrorCount INTEGER NOT NULL DEFAULT 0,
         createdAt TEXT DEFAULT (datetime('now'))
       );
 
       INSERT INTO users.import_batches_new (
-        id, type, uploadedBy, fileName, status, totalRows, successCount, failedCount, createdAt
+        id, type, uploadedBy, fileName, fileType, mimeType, fileSizeBytes, status,
+        totalRows, successCount, failedCount, createdCount, updatedCount, skippedCount,
+        validationErrorCount, createdAt
       )
       SELECT
         id,
         type,
         uploadedBy,
         fileName,
+        '',
+        '',
+        0,
         CASE status
           WHEN 'processed' THEN 'completed'
           WHEN 'partially_failed' THEN 'completed_with_errors'
@@ -1028,6 +1048,10 @@ function migrateImportBatchConstraint() {
         END,
         totalRows,
         successCount,
+        failedCount,
+        successCount,
+        0,
+        0,
         failedCount,
         createdAt
       FROM users.import_batches;
@@ -1041,6 +1065,25 @@ function migrateImportBatchConstraint() {
     throw error;
   } finally {
     database.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+function ensureImportBatchAuditColumns() {
+  const hadCreatedCount = columnExists('users', 'import_batches', 'createdCount');
+  ensureColumn('users', 'import_batches', 'fileType', 'fileType TEXT DEFAULT \'\'');
+  ensureColumn('users', 'import_batches', 'mimeType', 'mimeType TEXT DEFAULT \'\'');
+  ensureColumn('users', 'import_batches', 'fileSizeBytes', 'fileSizeBytes INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'import_batches', 'createdCount', 'createdCount INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'import_batches', 'updatedCount', 'updatedCount INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'import_batches', 'skippedCount', 'skippedCount INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'import_batches', 'validationErrorCount', 'validationErrorCount INTEGER NOT NULL DEFAULT 0');
+
+  if (!hadCreatedCount) {
+    db.prepare(`
+      UPDATE users.import_batches
+      SET createdCount = successCount,
+          validationErrorCount = failedCount
+    `).run();
   }
 }
 

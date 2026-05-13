@@ -108,6 +108,11 @@ describe('import routes', () => {
       })
       .expect(201)).body;
 
+    expect(batch.batchNumber).toBe(`Batch #${batch.id}`);
+    expect(batch.createdCount).toBe(1);
+    expect(batch.failedCount).toBe(1);
+    expect(batch.validationErrorCount).toBe(1);
+
     await request(app)
       .get('/api/imports/batches?type=users&status=completed_with_errors&date=2026-05-11&limit=5')
       .set('Cookie', cookie(ctx.adminSession))
@@ -136,6 +141,17 @@ describe('import routes', () => {
       });
 
     await request(app)
+      .get(`/api/imports/batches/${batch.id}`)
+      .set('Cookie', cookie(ctx.adminSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.importBatchId).toBe(batch.id);
+        expect(response.body.batchNumber).toBe(`Batch #${batch.id}`);
+        expect(response.body.errors.map(item => item.id)).toContain(rowError.id);
+        expect(response.body.errors[0].rawData).toEqual({ studentNumber: 'RFS-1' });
+      });
+
+    await request(app)
       .put(`/api/imports/errors/${rowError.id}/resolve`)
       .set('Cookie', cookie(ctx.adminSession))
       .send({ status: 'ignored', fixedData: { note: 'Accepted manually' } })
@@ -149,6 +165,11 @@ describe('import routes', () => {
     await request(app)
       .get('/api/imports/batches')
       .set('Cookie', cookie(ctx.teacherSession))
+      .expect(403);
+
+    await request(app)
+      .get('/api/imports/batches')
+      .set('Cookie', cookie(ctx.studentSession))
       .expect(403);
 
     await request(app)
@@ -187,6 +208,16 @@ describe('import routes', () => {
 
     await request(app)
       .post('/api/imports/batches')
+      .set('Cookie', cookie(ctx.studentSession))
+      .field('type', 'users')
+      .attach('file', Buffer.from(csv), {
+        filename: 'users.csv',
+        contentType: 'text/csv'
+      })
+      .expect(403);
+
+    await request(app)
+      .post('/api/imports/batches')
       .set('Cookie', cookie(ctx.adminSession))
       .field('type', 'users')
       .attach('file', Buffer.from(csv), {
@@ -198,6 +229,12 @@ describe('import routes', () => {
         expect(response.body.status).toBe('completed');
         expect(response.body.successRows).toBe(1);
         expect(response.body.failedRows).toBe(0);
+        expect(response.body.createdCount).toBe(1);
+        expect(response.body.skippedCount).toBe(0);
+        expect(response.body.validationErrorCount).toBe(0);
+        expect(response.body.fileType).toBe('csv');
+        expect(response.body.mimeType).toBe('text/csv');
+        expect(response.body.importerName).toBeTruthy();
       });
   });
 
@@ -213,6 +250,46 @@ describe('import routes', () => {
       .expect(400)
       .expect(response => {
         expect(response.body.error).toMatch(/csv|unsupported/i);
+      });
+
+    await request(app)
+      .post('/api/imports/batches')
+      .set('Cookie', cookie(ctx.adminSession))
+      .field('type', 'users')
+      .attach('file', Buffer.from('not a spreadsheet'), {
+        filename: 'users.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      .expect(400)
+      .expect(response => {
+        expect(response.body.error).toMatch(/csv|unsupported/i);
+      });
+  });
+
+  test('malformed import file returns a failed batch with row-level file error', async () => {
+    const batch = (await request(app)
+      .post('/api/imports/batches')
+      .set('Cookie', cookie(ctx.adminSession))
+      .field('type', 'users')
+      .attach('file', Buffer.from('email,password,firstName,lastName,role\n"bad@example.com,Password123,Bad,Row,student'), {
+        filename: 'users.csv',
+        contentType: 'text/csv'
+      })
+      .expect(201)).body;
+
+    expect(batch.status).toBe('failed');
+    expect(batch.failedRows).toBe(1);
+    expect(batch.validationErrorCount).toBe(1);
+
+    await request(app)
+      .get(`/api/imports/batches/${batch.id}`)
+      .set('Cookie', cookie(ctx.adminSession))
+      .expect(200)
+      .expect(response => {
+        expect(response.body.errors).toHaveLength(1);
+        expect(response.body.errors[0].rowNumber).toBe(1);
+        expect(response.body.errors[0].errorField).toBe('file');
+        expect(response.body.errors[0].errorMessage).toMatch(/unterminated/i);
       });
   });
 

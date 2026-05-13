@@ -125,14 +125,38 @@ export const AnalyticsPage = {
     return batches.map(batch => this.importBatchRow(batch)).join('') || this.emptyLine('No import batches yet.');
   },
 
+  importBatchCounts(batch = {}) {
+    const created = batch.createdCount ?? batch.createdRows ?? batch.successRows ?? batch.successCount ?? 0;
+    const updated = batch.updatedCount ?? batch.updatedRows ?? 0;
+    const skipped = batch.skippedCount ?? batch.skippedRows ?? 0;
+    const failed = batch.failedCount ?? batch.failedRows ?? 0;
+    const validationErrors = batch.validationErrorCount ?? batch.validationErrors ?? (Number(failed) + Number(skipped));
+    return { created, updated, skipped, failed, validationErrors };
+  },
+
+  importBatchSummary(batch = {}) {
+    const counts = this.importBatchCounts(batch);
+    return [
+      `${counts.created} created`,
+      `${counts.updated} updated`,
+      `${counts.skipped} skipped`,
+      `${counts.failed} failed`,
+      `${counts.validationErrors} errors`
+    ].join(' | ');
+  },
+
   importBatchRow(batch) {
-    const createdAt = batch.createdAt ? ` - ${this.esc(this.formatDate(batch.createdAt))}` : '';
-    const successRows = batch.successRows ?? batch.successCount ?? 0;
-    const failedRows = batch.failedRows ?? batch.failedCount ?? 0;
+    const createdAt = batch.createdAt ? this.formatDate(batch.createdAt) : '';
+    const importer = batch.importerName || batch.uploadedByName || 'System';
+    const fileType = batch.fileType ? `.${batch.fileType}` : 'CSV';
     return `
       <div class="list-row">
-        <div><strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong><small>${this.esc(batch.status)} | ${successRows}/${batch.totalRows} success | ${failedRows} failed${createdAt}</small></div>
-        <button class="btn btn-ghost btn-sm" onclick="App.showImportBatchErrors(${batch.id})">Errors</button>
+        <div>
+          <strong>${this.esc(batch.batchNumber || `Batch #${batch.id}`)} - ${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong>
+          <small>${this.esc(batch.status)} | ${this.importBatchSummary(batch)} | ${this.esc(batch.totalRows || 0)} rows</small>
+          <small>${this.esc(importer)}${createdAt ? ` | ${this.esc(createdAt)}` : ''} | ${this.esc(fileType)}</small>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="App.showImportBatchErrors(${batch.id})">Details</button>
       </div>
     `;
   },
@@ -378,16 +402,33 @@ export const AnalyticsPage = {
 
   async showImportBatchErrors(batchId) {
     try {
-      const result = await API.getImportErrors(batchId, { limit: 100 });
-      const errors = result.items || [];
-      this.openModal(`Import batch #${batchId} errors`, `
+      const detail = await API.getImportBatch(batchId);
+      const errors = detail.errors || [];
+      const counts = this.importBatchCounts(detail);
+      this.openModal(`${detail.batchNumber || `Batch #${batchId}`} details`, `
         <div class="stack">
+          <div class="list compact">
+            <div class="list-row">
+              <div>
+                <strong>${this.esc(detail.type)} - ${this.esc(detail.fileName)}</strong>
+                <small>${this.esc(detail.status)} | ${this.esc(detail.totalRows || 0)} rows | ${this.esc(detail.importerName || detail.uploadedByName || 'System')}</small>
+                <small>${this.esc(detail.createdAt ? this.formatDate(detail.createdAt) : '')} | ${this.esc(detail.mimeType || detail.fileType || 'text/csv')}</small>
+              </div>
+            </div>
+            <div class="list-row">
+              <div>
+                <strong>${this.esc(counts.created)} created | ${this.esc(counts.updated)} updated | ${this.esc(counts.skipped)} skipped</strong>
+                <small>${this.esc(counts.failed)} failed | ${this.esc(counts.validationErrors)} validation errors</small>
+              </div>
+            </div>
+          </div>
           <div class="list compact">
             ${errors.map(item => `
               <div class="list-row">
                 <div>
                   <strong>Row ${item.rowNumber} - ${this.esc(item.errorField || 'general')}</strong>
                   <small>${this.esc(item.errorMessage)} | ${this.esc(item.status)}</small>
+                  ${this.importErrorRawData(item)}
                 </div>
                 ${item.status === 'unresolved' ? `<button class="btn btn-ghost btn-sm" onclick="App.resolveImportError(${item.id})">Mark fixed</button>` : ''}
               </div>
@@ -400,6 +441,20 @@ export const AnalyticsPage = {
       `);
     } catch (err) {
       this.toast(err.message, 'error');
+    }
+  },
+
+  importErrorRawData(item = {}) {
+    const raw = item.rawData || this.safeJsonParse(item.rawDataJson);
+    if (!raw || Object.keys(raw).length === 0) return '';
+    return `<small>${this.esc(JSON.stringify(raw))}</small>`;
+  },
+
+  safeJsonParse(value) {
+    try {
+      return value ? JSON.parse(value) : null;
+    } catch (err) {
+      return null;
     }
   },
 

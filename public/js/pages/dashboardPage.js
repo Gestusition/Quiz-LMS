@@ -100,8 +100,8 @@ export const DashboardPage = {
               ${importBatches.map(batch => `
                 <div class="list-row">
                   <div>
-                    <strong>${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong>
-                    <small>${this.esc(batch.status)} | ${batch.successRows ?? batch.successCount ?? 0}/${batch.totalRows} success | ${batch.failedRows ?? batch.failedCount ?? 0} failed</small>
+                    <strong>${this.esc(batch.batchNumber || `Batch #${batch.id}`)} - ${this.esc(batch.type)} - ${this.esc(batch.fileName)}</strong>
+                    <small>${this.esc(batch.status)} | ${batch.createdCount ?? batch.successRows ?? batch.successCount ?? 0} created | ${batch.skippedCount ?? 0} skipped | ${batch.failedCount ?? batch.failedRows ?? 0} failed</small>
                   </div>
                 </div>
               `).join('') || this.emptyLine('No import batches yet.')}
