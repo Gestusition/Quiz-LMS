@@ -171,7 +171,6 @@ describe('Swagger route coverage', () => {
   test('protected routes explicitly show cookie auth security in generated docs', () => {
     const { swaggerSpec } = require('../swagger/swagger');
     const publicRoutes = new Set([
-      'GET /api',
       'GET /api/health'
     ]);
     const missing = [];
@@ -196,5 +195,36 @@ describe('Swagger route coverage', () => {
     });
 
     expect(missing).toEqual([]);
+  });
+
+  test('system routes document consistent health and admin index responses', () => {
+    const { swaggerSpec } = require('../swagger/swagger');
+    const health = swaggerSpec.paths?.['/api/health']?.get;
+    const index = swaggerSpec.paths?.['/api']?.get;
+    const apiIndexSchema = swaggerSpec.components?.schemas?.ApiIndex;
+    const apiIndexFields = apiIndexSchema?.allOf?.[1];
+
+    expect(swaggerSpec.components?.schemas?.HealthStatus).toBeDefined();
+    expect(apiIndexSchema).toBeDefined();
+    expect(apiIndexFields?.required).toEqual(expect.arrayContaining(['docs', 'docsJson', 'health']));
+    expect(apiIndexFields?.properties?.docs?.description).toMatch(/Swagger UI/);
+    expect(apiIndexFields?.properties?.docsJson?.description).toMatch(/OpenAPI JSON/);
+    expect(apiIndexFields?.properties?.health?.description).toMatch(/health check/);
+    expect(health?.security).toEqual([]);
+    expect(health?.responses?.['200']?.content?.['application/json']?.schema).toEqual({
+      $ref: '#/components/schemas/HealthStatus'
+    });
+    expect(health?.responses?.['503']?.content?.['application/json']?.schema).toEqual({
+      $ref: '#/components/schemas/HealthStatus'
+    });
+    expect(index?.security).toEqual([{ cookieAuth: [] }]);
+    expect(index?.responses?.['200']?.content?.['application/json']?.schema).toEqual({
+      $ref: '#/components/schemas/ApiIndex'
+    });
+    expect(index?.responses?.['401']).toBeDefined();
+    expect(index?.responses?.['403']).toBeDefined();
+    expect(index?.responses?.['503']?.content?.['application/json']?.schema).toEqual({
+      $ref: '#/components/schemas/ApiIndex'
+    });
   });
 });

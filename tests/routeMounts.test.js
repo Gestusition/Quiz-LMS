@@ -2,7 +2,8 @@ const path = require('path');
 const fs = require('fs');
 const request = require('supertest');
 const app = require('../server');
-const { initDatabase, seedDatabase, closeDatabase, resolveDatabaseFiles, getDatabase } = require('../database/db');
+const database = require('../database/db');
+const { initDatabase, seedDatabase, closeDatabase, resolveDatabaseFiles, getDatabase } = database;
 const authService = require('../services/authService');
 
 const TEST_DB = path.join(__dirname, 'test_route_mounts.db');
@@ -41,18 +42,28 @@ afterAll(() => {
 });
 
 describe('API route mounts', () => {
-  test('public API index advertises docs, health, and top-level routes', async () => {
+  test('admin API index advertises docs, health, and top-level routes', async () => {
+    const session = createAdminSession();
+
     await request(app)
       .get('/api')
+      .expect(401);
+
+    await request(app)
+      .get('/api')
+      .set('Cookie', `auth_token=${session.token}`)
       .expect(200)
       .expect('Content-Type', /json/)
       .expect(response => {
         expect(response.body).toEqual(expect.objectContaining({
           name: 'Quiz LMS API',
           status: 'ok',
+          database: 'ok',
           docs: '/api-docs',
+          docsJson: '/api-docs.json',
           health: '/api/health'
         }));
+        expect(new Date(response.body.timestamp).toString()).not.toBe('Invalid Date');
         expect(response.body.routes).toEqual(expect.objectContaining({
           auth: '/api/auth/login',
           courses: '/api/courses',
@@ -63,6 +74,38 @@ describe('API route mounts', () => {
       });
   });
 
+  test('admin API index mirrors health status when the database check fails', async () => {
+    const session = createAdminSession();
+    const getDatabaseSpy = jest.spyOn(database, 'getDatabase').mockImplementation(() => {
+      throw new Error('database unavailable');
+    });
+
+    try {
+      await request(app)
+        .get('/api')
+        .set('Cookie', `auth_token=${session.token}`)
+        .expect(503)
+        .expect('Content-Type', /json/)
+        .expect(response => {
+          expect(response.body).toEqual(expect.objectContaining({
+            name: 'Quiz LMS API',
+            status: 'not_ok',
+            database: 'not_ok',
+            docs: '/api-docs',
+            docsJson: '/api-docs.json',
+            health: '/api/health'
+          }));
+          expect(new Date(response.body.timestamp).toString()).not.toBe('Invalid Date');
+          expect(response.body.routes).toEqual(expect.objectContaining({
+            auth: '/api/auth/login',
+            settings: '/api/settings/maintenance'
+          }));
+        });
+    } finally {
+      getDatabaseSpy.mockRestore();
+    }
+  });
+
   test('public API health endpoint returns JSON without authentication', async () => {
     await request(app)
       .get('/api/health')
@@ -70,8 +113,29 @@ describe('API route mounts', () => {
       .expect('Content-Type', /json/)
       .expect(response => {
         expect(response.body.status).toBe('ok');
+        expect(response.body.database).toBe('ok');
         expect(new Date(response.body.timestamp).toString()).not.toBe('Invalid Date');
       });
+  });
+
+  test('public API health endpoint returns not_ok when the database check fails', async () => {
+    const getDatabaseSpy = jest.spyOn(database, 'getDatabase').mockImplementation(() => {
+      throw new Error('database unavailable');
+    });
+
+    try {
+      await request(app)
+        .get('/api/health')
+        .expect(503)
+        .expect('Content-Type', /json/)
+        .expect(response => {
+          expect(response.body.status).toBe('not_ok');
+          expect(response.body.database).toBe('not_ok');
+          expect(new Date(response.body.timestamp).toString()).not.toBe('Invalid Date');
+        });
+    } finally {
+      getDatabaseSpy.mockRestore();
+    }
   });
 
   test('every mounted API group has a reachable smoke endpoint', async () => {
@@ -81,6 +145,7 @@ describe('API route mounts', () => {
     const authCookie = `auth_token=${session.token}`;
 
     const mountedRoutes = [
+      { name: 'index', path: '/api', auth: true },
       { name: 'health', path: '/api/health', auth: false },
       { name: 'auth', path: '/api/auth/me', auth: true },
       { name: 'users', path: '/api/users?limit=1', auth: true },
@@ -164,9 +229,23 @@ describe('API route mounts', () => {
       .expect('Content-Type', /html/);
   });
 
-  test('Swagger docs expose maintenance settings and maintenance login errors', async () => {
+  test('Swagger docs are admin-only and expose maintenance settings and maintenance login errors', async () => {
     const session = createAdminSession();
     const authCookie = `auth_token=${session.token}`;
+
+    await request(app)
+      .get('/api-docs')
+      .expect(401);
+
+    await request(app)
+      .get('/api-docs.json')
+      .expect(401);
+
+    await request(app)
+      .get('/api-docs/')
+      .set('Cookie', authCookie)
+      .expect(200)
+      .expect('Content-Type', /html/);
 
     await request(app)
       .get('/api-docs.json')
@@ -174,10 +253,32 @@ describe('API route mounts', () => {
       .expect(200)
       .expect(response => {
         const paths = response.body.paths || {};
+        expect(paths['/api']?.get).toBeDefined();
+        expect(paths['/api/health']?.get).toBeDefined();
         expect(paths['/api/settings/maintenance']?.get).toBeDefined();
         expect(paths['/api/settings/maintenance']?.put).toBeDefined();
         expect(paths['/api/auth/login']?.post?.responses?.['403']).toBeDefined();
         expect(JSON.stringify(paths['/api/auth/login'].post.responses['403'])).toContain('MAINTENANCE_MODE');
       });
+  });
+
+  test('frontend exposes admin API links and maintenance health status consistently', () => {
+    const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8');
+    const apiSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'api.js'), 'utf8');
+    const dashboardSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'pages', 'dashboardPage.js'), 'utf8');
+
+    expect(appSource.indexOf('Maintenance')).toBeLessThan(appSource.indexOf('href="/api"'));
+    expect(appSource.indexOf('href="/api"')).toBeLessThan(appSource.indexOf('href="/api-docs"'));
+    expect(apiSource).toContain('getHealth()');
+    expect(apiSource).toContain("`${this.BASE}/health`");
+    expect(apiSource).toContain("database: data.database || (data.status === 'ok' && response.ok ? 'ok' : 'not_ok')");
+    expect(dashboardSource).toContain('API.getHealth()');
+    expect(dashboardSource).toContain('API Health');
+    expect(dashboardSource).not.toContain('API is responding');
+    expect(dashboardSource).not.toContain('API health check needs attention');
+    expect(dashboardSource).toContain('Source: /api/health');
+    expect(dashboardSource).not.toContain('Database:');
+    expect(dashboardSource).not.toContain('href="/api" target="_blank">API</a>');
+    expect(dashboardSource).toContain("const database = apiHealth.database || (status === 'ok' ? 'ok' : 'not_ok')");
   });
 });

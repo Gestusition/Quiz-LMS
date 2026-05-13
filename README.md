@@ -12,7 +12,7 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 - REST/JSON API: endpoints use standard HTTP methods and JSON request/response bodies.
 - Validation: backend validators and service checks protect academic identifiers, question formats, quiz settings, uploads, passwords, and scoped access rules.
 - Modular code quality: `routes -> services -> repositories`, plus `validators`, `serializers`, `constants`, and middleware.
-- Swagger: interactive API documentation is available at `http://localhost:3000/api-docs`.
+- Swagger: admin-only interactive API documentation is available at `http://localhost:3000/api-docs`.
 - Tests: Jest covers auth, maintenance mode, quiz attempts, academic workflows, validators, rate limiting, route mounts, and LMS regressions.
 
 ## Main Features
@@ -69,12 +69,14 @@ npm start
 ```
 
 - App: `http://localhost:3000`
-- API index: `http://localhost:3000/api`
-- Swagger UI: `http://localhost:3000/api-docs`
-- Raw OpenAPI JSON: `http://localhost:3000/api-docs.json`
+- API index: `http://localhost:3000/api` (admin-only)
+- Swagger UI: `http://localhost:3000/api-docs` (admin-only)
+- Raw OpenAPI JSON: `http://localhost:3000/api-docs.json` (admin-only)
 - Health check: `http://localhost:3000/api/health`
 
-Swagger is admin-only, so sign in as an admin first.
+The API index and Swagger are admin-only, so sign in as an admin first.
+The public health check returns `status: "not_ok"` with HTTP `503` if the database check fails.
+Admins can open the API index and API docs from the navbar; the Maintenance page also shows the current `/api/health` result.
 
 ## Environment
 
@@ -102,6 +104,8 @@ The main suite includes backend unit/integration tests for auth, maintenance mod
 
 ## Main API Groups
 
+- `/api` (admin-only index)
+- `/api/health` (public health check)
 - `/api/auth`
 - `/api/users`
 - `/api/courses`

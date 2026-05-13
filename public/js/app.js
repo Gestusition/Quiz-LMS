@@ -95,9 +95,13 @@ const App = {
     if (this.canManageLearning()) items.push(['#/questions', 'Question Bank']);
     if (this.user.role === 'admin') items.push(['#/users', 'Users'], ['#/analytics', 'Analytics'], ['#/maintenance', 'Maintenance']);
 
+    const adminLinks = this.user.role === 'admin'
+      ? '<a class="nav-link" href="/api" target="_blank">API</a><a class="nav-link" href="/api-docs" target="_blank">API Docs</a>'
+      : '';
+
     links.innerHTML = items.map(([href, label]) =>
       `<a class="nav-link" href="${href}" data-href="${href}">${label}</a>`
-    ).join('') + (this.user.role === 'admin' ? '<a class="nav-link" href="/api-docs" target="_blank">API Docs</a>' : '');
+    ).join('') + adminLinks;
 
     navUser.innerHTML = `
       <div class="user-chip">
