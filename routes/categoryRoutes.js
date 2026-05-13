@@ -290,6 +290,10 @@ router.delete('/:id', validateId, (req, res) => {
  *     responses:
  *       201:
  *         description: Category access grant created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessGrant'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
@@ -349,6 +353,10 @@ router.get('/:id/access', requireRole(['admin', 'teacher']), validateId, (req, r
  *     responses:
  *       200:
  *         description: Updated category access summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessSummary'
  */
 router.delete('/:id/access/:teacherId', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {

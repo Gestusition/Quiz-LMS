@@ -30,7 +30,7 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 - Assignment submission and grading workflows.
 - Attendance sessions, self-attendance, instructor records, record removal notes, and summaries.
 - Weekly course materials, protected resource downloads, and discussion threads.
-- Teacher office hours: teachers set them from Profile or their course Participants card, and enrolled students see them on course participant lists.
+- Teacher office hours: teachers set them from Profile, and enrolled students see them on course participant lists.
 - User restrictions, scoped access blocking, audit logging, real CSV import batches, and admin analytics.
 
 ## Screenshots

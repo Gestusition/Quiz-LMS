@@ -14,6 +14,10 @@ router.use(requireAuth);
  *     responses:
  *       200:
  *         description: Admin analytics summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AdminAnalytics'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */

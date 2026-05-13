@@ -377,6 +377,11 @@ router.delete('/week-resources/:id', (req, res) => {
  *     responses:
  *       200:
  *         description: Protected file download
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  *       404:

@@ -479,6 +479,10 @@ router.post('/:id/release-results', loadQuiz, requireQuizManager, (req, res) => 
  *     responses:
  *       201:
  *         description: Quiz access grant created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessGrant'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
@@ -538,6 +542,10 @@ router.get('/:id/access', loadQuiz, requireQuizManager, (req, res) => {
  *     responses:
  *       200:
  *         description: Updated quiz access summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessSummary'
  */
 router.delete('/:id/access/:teacherId', loadQuiz, requireQuizManager, (req, res) => {
   try {

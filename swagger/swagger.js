@@ -101,6 +101,39 @@ const options = {
           },
           additionalProperties: true
         },
+        ResourceAccessGrant: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            resourceType: { type: 'string' },
+            resourceId: { type: 'integer' },
+            teacherId: { type: 'integer' },
+            accessLevel: { type: 'string', enum: ['read', 'write'] },
+            grantedBy: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        UploadResult: {
+          type: 'object',
+          properties: {
+            url: { type: 'string' },
+            filename: { type: 'string' },
+            originalName: { type: 'string' },
+            size: { type: 'integer' }
+          }
+        },
+        AdminAnalytics: {
+          type: 'object',
+          properties: {
+            totalUsers: { type: 'integer' },
+            totalCourses: { type: 'integer' },
+            totalQuizzes: { type: 'integer' },
+            totalAttempts: { type: 'integer' },
+            totalOfferings: { type: 'integer' },
+            totalEnrollments: { type: 'integer' }
+          },
+          additionalProperties: true
+        },
         LoginRequest: {
           type: 'object',
           required: ['identifier', 'password'],

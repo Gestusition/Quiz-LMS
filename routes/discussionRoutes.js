@@ -80,6 +80,10 @@ router.get('/courses/:courseId/threads', (req, res) => {
  *     responses:
  *       200:
  *         description: Discussion thread
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DiscussionThread'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  *       404:

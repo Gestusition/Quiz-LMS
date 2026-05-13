@@ -344,6 +344,10 @@ router.delete('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) 
  *     responses:
  *       201:
  *         description: Duplicated question
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Question'
  */
 router.post('/:id/duplicate', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
@@ -377,6 +381,10 @@ router.post('/:id/duplicate', requireRole(['admin', 'teacher']), validateId, (re
  *     responses:
  *       201:
  *         description: Question access grant created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessGrant'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
@@ -436,6 +444,10 @@ router.get('/:id/access', requireRole(['admin', 'teacher']), validateId, (req, r
  *     responses:
  *       200:
  *         description: Updated question access summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ResourceAccessSummary'
  */
 router.delete('/:id/access/:teacherId', requireRole(['admin', 'teacher']), validateId, (req, res) => {
   try {
@@ -467,6 +479,10 @@ const { upload, validateUploadedImage } = require('../middleware/upload');
  *     responses:
  *       200:
  *         description: Upload successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UploadResult'
  */
 router.post('/upload', requireRole(['admin', 'teacher']), upload.single('file'), validateUploadedImage, (req, res) => {
   if (!req.file) {

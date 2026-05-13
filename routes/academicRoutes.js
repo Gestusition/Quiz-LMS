@@ -61,6 +61,12 @@ function sendProtectedSubmissionDownload(res, fileInfo) {
  *     responses:
  *       200:
  *         description: Faculties
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Faculty'
  *   post:
  *     summary: Create a faculty (Admin only)
  *     tags: [Academic]
@@ -73,6 +79,10 @@ function sendProtectedSubmissionDownload(res, fileInfo) {
  *     responses:
  *       201:
  *         description: Faculty created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Faculty'
  */
 router.get('/faculties', (req, res) => {
   try { res.json(academicService.listFaculties()); } catch (err) { sendError(res, err); }
@@ -102,6 +112,10 @@ router.post('/faculties', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Faculty updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Faculty'
  *   delete:
  *     summary: Delete a faculty (Admin only)
  *     tags: [Academic]
@@ -114,6 +128,10 @@ router.post('/faculties', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Faculty deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.put('/faculties/:id', requireRole('admin'), requireValidId, (req, res) => {
   try { res.json(academicService.updateFaculty(req.params.id, req.body)); } catch (err) { sendError(res, err); }
@@ -136,6 +154,12 @@ router.delete('/faculties/:id', requireRole('admin'), requireValidId, (req, res)
  *     responses:
  *       200:
  *         description: Departments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Department'
  *   post:
  *     summary: Create a department (Admin only)
  *     tags: [Academic]
@@ -148,6 +172,10 @@ router.delete('/faculties/:id', requireRole('admin'), requireValidId, (req, res)
  *     responses:
  *       201:
  *         description: Department created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Department'
  */
 router.get('/departments', (req, res) => {
   try { res.json(academicService.listDepartments(req.query)); } catch (err) { sendError(res, err); }
@@ -177,6 +205,10 @@ router.post('/departments', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Department updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Department'
  *   delete:
  *     summary: Delete a department (Admin only)
  *     tags: [Academic]
@@ -189,6 +221,10 @@ router.post('/departments', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Department deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.put('/departments/:id', requireRole('admin'), requireValidId, (req, res) => {
   try { res.json(academicService.updateDepartment(req.params.id, req.body)); } catch (err) { sendError(res, err); }
@@ -211,6 +247,12 @@ router.delete('/departments/:id', requireRole('admin'), requireValidId, (req, re
  *     responses:
  *       200:
  *         description: Class years
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/ClassYear'
  *   post:
  *     summary: Create a class year (Admin only)
  *     tags: [Academic]
@@ -223,6 +265,10 @@ router.delete('/departments/:id', requireRole('admin'), requireValidId, (req, re
  *     responses:
  *       201:
  *         description: Class year created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ClassYear'
  */
 router.get('/class-years', (req, res) => {
   try { res.json(academicService.listClassYears(req.query)); } catch (err) { sendError(res, err); }
@@ -252,6 +298,10 @@ router.post('/class-years', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Class year updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ClassYear'
  *   delete:
  *     summary: Delete a class year (Admin only)
  *     tags: [Academic]
@@ -264,6 +314,10 @@ router.post('/class-years', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Class year deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.put('/class-years/:id', requireRole('admin'), requireValidId, (req, res) => {
   try { res.json(academicService.updateClassYear(req.params.id, req.body)); } catch (err) { sendError(res, err); }
@@ -286,6 +340,12 @@ router.delete('/class-years/:id', requireRole('admin'), requireValidId, (req, re
  *     responses:
  *       200:
  *         description: Sections
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Section'
  *   post:
  *     summary: Create a section (Admin only)
  *     tags: [Academic]
@@ -298,6 +358,10 @@ router.delete('/class-years/:id', requireRole('admin'), requireValidId, (req, re
  *     responses:
  *       201:
  *         description: Section created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Section'
  */
 router.get('/sections', (req, res) => {
   try { res.json(academicService.listSections(req.query)); } catch (err) { sendError(res, err); }
@@ -327,6 +391,10 @@ router.post('/sections', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Section updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Section'
  *   delete:
  *     summary: Delete a section (Admin only)
  *     tags: [Academic]
@@ -339,6 +407,10 @@ router.post('/sections', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Section deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.put('/sections/:id', requireRole('admin'), requireValidId, (req, res) => {
   try { res.json(academicService.updateSection(req.params.id, req.body)); } catch (err) { sendError(res, err); }
@@ -356,6 +428,12 @@ router.delete('/sections/:id', requireRole('admin'), requireValidId, (req, res) 
  *     responses:
  *       200:
  *         description: Terms
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/AcademicTerm'
  *   post:
  *     summary: Create an academic term (Admin only)
  *     tags: [Academic]
@@ -368,6 +446,10 @@ router.delete('/sections/:id', requireRole('admin'), requireValidId, (req, res) 
  *     responses:
  *       201:
  *         description: Term created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AcademicTerm'
  */
 router.get('/terms', (req, res) => {
   try { res.json(academicService.listTerms()); } catch (err) { sendError(res, err); }
@@ -391,6 +473,10 @@ router.post('/terms', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Active term updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AcademicTerm'
  */
 router.post('/terms/:id/active', requireRole('admin'), requireValidId, (req, res) => {
   try { res.json(academicService.setActiveTerm(req.params.id)); } catch (err) { sendError(res, err); }
@@ -417,6 +503,10 @@ router.post('/terms/:id/active', requireRole('admin'), requireValidId, (req, res
  *     responses:
  *       200:
  *         description: Term updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AcademicTerm'
  *   delete:
  *     summary: Delete an academic term (Admin only)
  *     tags: [Academic]
@@ -429,6 +519,10 @@ router.post('/terms/:id/active', requireRole('admin'), requireValidId, (req, res
  *     responses:
  *       200:
  *         description: Term deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.put('/terms/:id', requireRole('admin'), requireValidId, (req, res) => {
   try { res.json(academicService.updateTerm(req.params.id, req.body)); } catch (err) { sendError(res, err); }
@@ -459,6 +553,12 @@ router.delete('/terms/:id', requireRole('admin'), requireValidId, (req, res) => 
  *     responses:
  *       200:
  *         description: Course offerings
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/CourseOffering'
  *   post:
  *     summary: Create a course offering (Admin only)
  *     tags: [Academic]
@@ -471,6 +571,10 @@ router.delete('/terms/:id', requireRole('admin'), requireValidId, (req, res) => 
  *     responses:
  *       201:
  *         description: Course offering created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CourseOffering'
  */
 router.get('/offerings', (req, res) => {
   try { res.json(academicService.listCourseOfferings(req.user, req.query)); } catch (err) { sendError(res, err); }
@@ -494,6 +598,12 @@ router.post('/offerings', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Offering enrollments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/CourseOfferingEnrollment'
  */
 router.get('/offerings/:id/enrollments', requireValidId, (req, res) => {
   try { res.json(academicService.listOfferingEnrollments(req.params.id, req.user)); } catch (err) { sendError(res, err); }
@@ -514,6 +624,10 @@ router.get('/offerings/:id/enrollments', requireValidId, (req, res) => {
  *     responses:
  *       200:
  *         description: Course offering
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CourseOffering'
  *   put:
  *     summary: Update a course offering (Admin only)
  *     tags: [Academic]
@@ -532,6 +646,10 @@ router.get('/offerings/:id/enrollments', requireValidId, (req, res) => {
  *     responses:
  *       200:
  *         description: Course offering updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CourseOffering'
  *   delete:
  *     summary: Delete a course offering (Admin only)
  *     tags: [Academic]
@@ -544,6 +662,10 @@ router.get('/offerings/:id/enrollments', requireValidId, (req, res) => {
  *     responses:
  *       200:
  *         description: Course offering deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.get('/offerings/:id', requireValidId, (req, res) => {
   try { res.json(academicService.getCourseOffering(req.params.id, req.user)); } catch (err) { sendError(res, err); }
@@ -570,6 +692,10 @@ router.delete('/offerings/:id', requireRole('admin'), requireValidId, (req, res)
  *     responses:
  *       201:
  *         description: Enrollment created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CourseOfferingEnrollment'
  */
 router.post('/enrollments', requireRole('admin'), (req, res) => {
   try { res.status(201).json(academicService.enrollInOffering(req.body)); } catch (err) { sendError(res, err); }
@@ -596,6 +722,10 @@ router.post('/enrollments', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Enrollment updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CourseOfferingEnrollment'
  *   delete:
  *     summary: Delete a course-offering enrollment (Admin only)
  *     tags: [Academic]
@@ -608,6 +738,10 @@ router.post('/enrollments', requireRole('admin'), (req, res) => {
  *     responses:
  *       200:
  *         description: Enrollment deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.put('/enrollments/:id', requireRole('admin'), requireValidId, (req, res) => {
   try { res.json(academicService.updateOfferingEnrollment(req.params.id, req.body)); } catch (err) { sendError(res, err); }
@@ -634,6 +768,12 @@ router.delete('/enrollments/:id', requireRole('admin'), requireValidId, (req, re
  *     responses:
  *       200:
  *         description: Assignments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Assignment'
  *   post:
  *     summary: Create an assignment for a course offering
  *     tags: [Academic]
@@ -646,6 +786,10 @@ router.delete('/enrollments/:id', requireRole('admin'), requireValidId, (req, re
  *     responses:
  *       201:
  *         description: Assignment created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Assignment'
  */
 router.get('/assignments', (req, res) => {
   try { res.json(academicService.listAssignments(req.user, req.query)); } catch (err) { sendError(res, err); }
@@ -669,6 +813,12 @@ router.post('/assignments', requireRole(['admin', 'teacher']), (req, res) => {
  *     responses:
  *       200:
  *         description: Submissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/AssignmentSubmission'
  *   post:
  *     summary: Submit assignment work as a student
  *     tags: [Academic]
@@ -699,6 +849,10 @@ router.post('/assignments', requireRole(['admin', 'teacher']), (req, res) => {
  *     responses:
  *       201:
  *         description: Submission saved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AssignmentSubmission'
  */
 router.get('/assignments/:id/submissions', requireValidId, (req, res) => {
   try { res.json(academicService.listSubmissions(req.params.id, req.user)); } catch (err) { sendError(res, err); }
@@ -734,6 +888,10 @@ router.post('/assignments/:id/submissions', requireValidId, handleValidatedSubmi
  *     responses:
  *       200:
  *         description: Assignment
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Assignment'
  *   put:
  *     summary: Update an assignment
  *     tags: [Academic]
@@ -752,6 +910,10 @@ router.post('/assignments/:id/submissions', requireValidId, handleValidatedSubmi
  *     responses:
  *       200:
  *         description: Assignment updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Assignment'
  *   delete:
  *     summary: Delete an assignment
  *     tags: [Academic]
@@ -764,6 +926,10 @@ router.post('/assignments/:id/submissions', requireValidId, handleValidatedSubmi
  *     responses:
  *       200:
  *         description: Assignment deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.get('/assignments/:id', requireValidId, (req, res) => {
   try { res.json(academicService.getAssignment(req.params.id, req.user)); } catch (err) { sendError(res, err); }
@@ -796,6 +962,10 @@ router.delete('/assignments/:id', requireRole(['admin', 'teacher']), requireVali
  *     responses:
  *       200:
  *         description: Submission graded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AssignmentSubmission'
  */
 router.put('/submissions/:id/grade', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
   try { res.json(academicService.gradeSubmission(req.params.id, req.body, req.user)); } catch (err) { sendError(res, err); }
@@ -816,6 +986,11 @@ router.put('/submissions/:id/grade', requireRole(['admin', 'teacher']), requireV
  *     responses:
  *       200:
  *         description: Protected file download
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  *       404:
@@ -844,6 +1019,12 @@ router.get('/submissions/:id/download', requireValidId, (req, res) => {
  *     responses:
  *       200:
  *         description: Attendance sessions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/AttendanceSession'
  *   post:
  *     summary: Create an attendance session
  *     tags: [Academic]
@@ -856,6 +1037,10 @@ router.get('/submissions/:id/download', requireValidId, (req, res) => {
  *     responses:
  *       201:
  *         description: Attendance session created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AttendanceSession'
  */
 router.get('/attendance/sessions', (req, res) => {
   try { res.json(academicService.listAttendanceSessions(req.user, req.query)); } catch (err) { sendError(res, err); }
@@ -885,6 +1070,10 @@ router.post('/attendance/sessions', requireRole(['admin', 'teacher']), (req, res
  *     responses:
  *       200:
  *         description: Attendance records saved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.post('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
   try { res.json(academicService.markAttendance(req.params.id, req.body.records, req.user)); } catch (err) { sendError(res, err); }
@@ -905,6 +1094,10 @@ router.post('/attendance/sessions/:id/records', requireRole(['admin', 'teacher']
  *     responses:
  *       201:
  *         description: Self-attendance record created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AttendanceRecord'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  *       409:
@@ -929,6 +1122,10 @@ router.post('/attendance/sessions/:id/self', requireRole('student'), requireVali
  *     responses:
  *       200:
  *         description: Attendance session closed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AttendanceSession'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
@@ -959,6 +1156,12 @@ router.put('/attendance/sessions/:id/close', requireRole(['admin', 'teacher']), 
  *     responses:
  *       200:
  *         description: Attendance records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/AttendanceRecord'
  */
 router.get('/attendance/records', requireRole(['admin', 'teacher']), (req, res) => {
   try { res.json(academicService.listAttendanceRecordDetails(req.user, req.query)); } catch (err) { sendError(res, err); }
@@ -979,6 +1182,12 @@ router.get('/attendance/records', requireRole(['admin', 'teacher']), (req, res) 
  *     responses:
  *       200:
  *         description: Attendance records for the session
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/AttendanceRecord'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
@@ -1007,6 +1216,10 @@ router.get('/attendance/sessions/:id/records', requireRole(['admin', 'teacher'])
  *     responses:
  *       200:
  *         description: Attendance record marked as removed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AttendanceRecord'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  */
@@ -1023,6 +1236,12 @@ router.put('/attendance/records/:id/remove', requireRole(['admin', 'teacher']), 
  *     responses:
  *       200:
  *         description: Student attendance records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/AttendanceRecord'
  */
 router.get('/attendance/my', requireRole('student'), (req, res) => {
   try { res.json(academicService.getAttendanceForStudent(req.user)); } catch (err) { sendError(res, err); }
@@ -1043,6 +1262,19 @@ router.get('/attendance/my', requireRole('student'), (req, res) => {
  *     responses:
  *       200:
  *         description: Attendance summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 students:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 sessions:
+ *                   type: array
+ *                   items:
+ *                     type: object
  */
 router.get('/attendance/offerings/:id/summary', requireRole(['admin', 'teacher']), requireValidId, (req, res) => {
   try { res.json(academicService.attendanceSummary(req.params.id, req.user)); } catch (err) { sendError(res, err); }

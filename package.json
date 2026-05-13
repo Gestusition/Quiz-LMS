@@ -9,9 +9,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "jest --verbose --runInBand",
-    "test:api-docs": "jest tests/swaggerCoverage.test.js --runInBand",
-    "coverage": "jest --coverage --runInBand"
+    "test": "jest --verbose --runInBand --forceExit",
+    "test:api-docs": "jest tests/swaggerCoverage.test.js --runInBand --forceExit",
+    "coverage": "jest --coverage --runInBand --forceExit"
   },
   "keywords": [
     "quiz",
