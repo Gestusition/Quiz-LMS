@@ -204,6 +204,21 @@ export const API = {
   },
   getMaintenanceMode() { return this.request('/settings/maintenance'); },
   updateMaintenanceMode(enabled) { return this.request('/settings/maintenance', { method: 'PUT', body: { enabled } }); },
+  async getHealth() {
+    const response = await fetch(`${this.BASE}/health`, { credentials: 'same-origin' });
+    const contentType = response.headers.get('content-type') || '';
+    const data = contentType.includes('application/json') ? await response.json() : {};
+    if (!response.ok && response.status !== 503) {
+      const error = new Error(data.message || data.error || `Request failed with status ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return {
+      ...data,
+      database: data.database || (data.status === 'ok' && response.ok ? 'ok' : 'not_ok'),
+      httpStatus: response.status
+    };
+  },
 
   getValidationIssues(filters = {}) {
     const params = new URLSearchParams();

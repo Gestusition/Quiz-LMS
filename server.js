@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const database = require('./database/db');
 const { setupSwagger } = require('./swagger/swagger');
+const { requireAuth, requireRole } = require('./middleware/auth');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const courseRoutes = require('./routes/courseRoutes');
@@ -78,6 +79,24 @@ app.use('/api/settings', settingsRoutes);
 // Swagger API Documentation
 setupSwagger(app);
 
+function checkApiHealth() {
+  const timestamp = new Date().toISOString();
+
+  try {
+    const usersTable = database.getDatabase()
+      .prepare("SELECT name FROM users.sqlite_master WHERE type = 'table' AND name = 'users'")
+      .get();
+    if (!usersTable) throw new Error('users table missing');
+    return { status: 'ok', database: 'ok', timestamp };
+  } catch (err) {
+    return { status: 'not_ok', database: 'not_ok', timestamp };
+  }
+}
+
+function healthStatusCode(health) {
+  return health.status === 'ok' ? 200 : 503;
+}
+
 /**
  * @swagger
  * /api/health:
@@ -91,52 +110,54 @@ setupSwagger(app);
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: ok
- *                 timestamp:
- *                   type: string
- *                   format: date-time
+ *               $ref: '#/components/schemas/HealthStatus'
+ *       503:
+ *         description: API is running but a dependency health check failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/HealthStatus'
  */
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  const health = checkApiHealth();
+  res.status(healthStatusCode(health)).json(health);
 });
 
 /**
  * @swagger
  * /api:
  *   get:
- *     summary: List public API entry points
+ *     summary: List admin API entry points
  *     tags: [System]
- *     security: []
+ *     security:
+ *       - cookieAuth: []
  *     responses:
  *       200:
- *         description: API index with links to docs, health, and common route groups
+ *         description: Admin API index with links to docs, health, and common route groups
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 name:
- *                   type: string
- *                 status:
- *                   type: string
- *                 docs:
- *                   type: string
- *                 health:
- *                   type: string
- *                 routes:
- *                   type: object
- *                   additionalProperties:
- *                     type: string
+ *               $ref: '#/components/schemas/ApiIndex'
+ *       401:
+ *         $ref: '#/components/responses/401Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
+ *       503:
+ *         description: Admin API index returned with failing dependency status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiIndex'
  */
-app.get('/api', (req, res) => {
-  res.json({
+app.get('/api', requireAuth, requireRole('admin'), (req, res) => {
+  const health = checkApiHealth();
+  res.status(healthStatusCode(health)).json({
     name: 'Quiz LMS API',
-    status: 'ok',
+    status: health.status,
+    database: health.database,
+    timestamp: health.timestamp,
     docs: '/api-docs',
+    docsJson: '/api-docs.json',
     health: '/api/health',
     routes: {
       auth: '/api/auth/login',

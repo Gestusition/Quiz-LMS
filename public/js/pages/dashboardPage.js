@@ -117,7 +117,15 @@ export const DashboardPage = {
     this.setApp(this.loading('Loading maintenance mode'));
 
     try {
-      const maintenance = await API.getMaintenanceMode();
+      const [maintenance, apiHealth] = await Promise.all([
+        API.getMaintenanceMode(),
+        API.getHealth().catch(err => ({
+          status: 'not_ok',
+          database: 'not_ok',
+          httpStatus: err.status || 0,
+          timestamp: ''
+        }))
+      ]);
       const statusLabel = maintenance.enabled ? 'On' : 'Off';
       const actionLabel = maintenance.enabled ? 'Turn off maintenance mode' : 'Turn on maintenance mode';
       const actionEnabled = maintenance.enabled ? 'false' : 'true';
@@ -149,6 +157,8 @@ export const DashboardPage = {
             <span>Last updated: ${this.esc(maintenance.updatedAt ? this.formatDate(maintenance.updatedAt) : 'Never')}</span>
           </div>
         </section>
+
+        ${this.apiHealthPanel(apiHealth)}
       `);
 
       document.getElementById('btn-toggle-maintenance').addEventListener('click', event => {
@@ -158,6 +168,33 @@ export const DashboardPage = {
     } catch (err) {
       this.renderError(err);
     }
+  },
+
+  apiHealthPanel(apiHealth = {}) {
+    const status = apiHealth.status || (Number(apiHealth.httpStatus) === 200 ? 'ok' : 'not_ok');
+    const database = apiHealth.database || (status === 'ok' ? 'ok' : 'not_ok');
+    const apiOk = status === 'ok' && database === 'ok';
+    const statusLabel = apiOk ? 'OK' : 'Not OK';
+    const chipClass = apiOk ? 'active' : 'restricted';
+    const httpStatus = apiHealth.httpStatus || (apiOk ? 200 : 503);
+
+    return `
+      <section class="panel maintenance-panel api-health-panel">
+        <div class="maintenance-status-row">
+          <div>
+            <span class="status-chip ${chipClass}">API Health ${statusLabel}</span>
+          </div>
+          <div class="header-actions">
+            <a class="btn btn-ghost" href="/api/health" target="_blank">Health</a>
+          </div>
+        </div>
+        <div class="maintenance-meta">
+          <span>Source: /api/health</span>
+          <span>HTTP status: ${this.esc(String(httpStatus))}</span>
+          <span>Last checked: ${this.esc(apiHealth.timestamp ? this.formatDate(apiHealth.timestamp) : 'Unavailable')}</span>
+        </div>
+      </section>
+    `;
   },
 
   async toggleMaintenanceMode(enabled) {

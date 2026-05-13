@@ -66,6 +66,43 @@ const options = {
             message: { type: 'string' }
           }
         },
+        HealthStatus: {
+          type: 'object',
+          required: ['status', 'database', 'timestamp'],
+          properties: {
+            status: {
+              type: 'string',
+              enum: ['ok', 'not_ok']
+            },
+            database: {
+              type: 'string',
+              enum: ['ok', 'not_ok']
+            },
+            timestamp: {
+              type: 'string',
+              format: 'date-time'
+            }
+          }
+        },
+        ApiIndex: {
+          allOf: [
+            { $ref: '#/components/schemas/HealthStatus' },
+            {
+              type: 'object',
+              required: ['name', 'docs', 'docsJson', 'health', 'routes'],
+              properties: {
+                name: { type: 'string' },
+                docs: { type: 'string', description: 'Admin-only Swagger UI path' },
+                docsJson: { type: 'string', description: 'Admin-only raw OpenAPI JSON path' },
+                health: { type: 'string', description: 'Public API health check path' },
+                routes: {
+                  type: 'object',
+                  additionalProperties: { type: 'string' }
+                }
+              }
+            }
+          ]
+        },
         MaintenanceMode: {
           type: 'object',
           properties: {
