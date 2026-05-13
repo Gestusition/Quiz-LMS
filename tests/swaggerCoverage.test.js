@@ -167,4 +167,34 @@ describe('Swagger route coverage', () => {
 
     expect(missing).toEqual([]);
   });
+
+  test('protected routes explicitly show cookie auth security in generated docs', () => {
+    const { swaggerSpec } = require('../swagger/swagger');
+    const publicRoutes = new Set([
+      'GET /api',
+      'GET /api/health'
+    ]);
+    const missing = [];
+
+    routeInventory().forEach(route => {
+      const key = keyFor(route);
+      const operation = swaggerSpec.paths?.[route.path]?.[route.method];
+      if (!operation) return;
+
+      if (publicRoutes.has(key)) {
+        if (JSON.stringify(operation.security) !== '[]') {
+          missing.push(`${route.source}: ${key} should remain public`);
+        }
+        return;
+      }
+
+      const hasCookieAuth = Array.isArray(operation.security) &&
+        operation.security.some(item => Object.prototype.hasOwnProperty.call(item, 'cookieAuth'));
+      if (!hasCookieAuth) {
+        missing.push(`${route.source}: ${key} missing explicit cookieAuth security`);
+      }
+    });
+
+    expect(missing).toEqual([]);
+  });
 });

@@ -64,6 +64,12 @@ function sendProtectedSubmissionDownload(res, fileInfo) {
  *   post:
  *     summary: Create a faculty (Admin only)
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateFacultyRequest'
  *     responses:
  *       201:
  *         description: Faculty created
@@ -90,22 +96,9 @@ router.post('/faculties', requireRole('admin'), (req, res) => {
  *     requestBody:
  *       required: false
  *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               submissionText:
- *                 type: string
- *               file:
- *                 type: string
- *                 format: binary
- *                 description: pdf, txt, doc, docx, ppt, pptx, xls, xlsx, csv, png, jpg, jpeg, gif, webp, md, html, htm, rtf, or zip.
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               submissionText:
- *                 type: string
+ *             $ref: '#/components/schemas/UpdateFacultyRequest'
  *     responses:
  *       200:
  *         description: Faculty updated
@@ -135,12 +128,23 @@ router.delete('/faculties/:id', requireRole('admin'), requireValidId, (req, res)
  *   get:
  *     summary: List departments
  *     tags: [Academic]
+ *     parameters:
+ *       - in: query
+ *         name: facultyId
+ *         schema:
+ *           type: integer
  *     responses:
  *       200:
  *         description: Departments
  *   post:
  *     summary: Create a department (Admin only)
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateDepartmentRequest'
  *     responses:
  *       201:
  *         description: Department created
@@ -164,6 +168,12 @@ router.post('/departments', requireRole('admin'), (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateDepartmentRequest'
  *     responses:
  *       200:
  *         description: Department updated
@@ -193,12 +203,23 @@ router.delete('/departments/:id', requireRole('admin'), requireValidId, (req, re
  *   get:
  *     summary: List class years
  *     tags: [Academic]
+ *     parameters:
+ *       - in: query
+ *         name: departmentId
+ *         schema:
+ *           type: integer
  *     responses:
  *       200:
  *         description: Class years
  *   post:
  *     summary: Create a class year (Admin only)
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateClassYearRequest'
  *     responses:
  *       201:
  *         description: Class year created
@@ -222,6 +243,12 @@ router.post('/class-years', requireRole('admin'), (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateClassYearRequest'
  *     responses:
  *       200:
  *         description: Class year updated
@@ -251,12 +278,23 @@ router.delete('/class-years/:id', requireRole('admin'), requireValidId, (req, re
  *   get:
  *     summary: List sections
  *     tags: [Academic]
+ *     parameters:
+ *       - in: query
+ *         name: classYearId
+ *         schema:
+ *           type: integer
  *     responses:
  *       200:
  *         description: Sections
  *   post:
  *     summary: Create a section (Admin only)
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateSectionRequest'
  *     responses:
  *       201:
  *         description: Section created
@@ -280,6 +318,12 @@ router.post('/sections', requireRole('admin'), (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateSectionRequest'
  *     responses:
  *       200:
  *         description: Section updated
@@ -315,6 +359,12 @@ router.delete('/sections/:id', requireRole('admin'), requireValidId, (req, res) 
  *   post:
  *     summary: Create an academic term (Admin only)
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateAcademicTermRequest'
  *     responses:
  *       201:
  *         description: Term created
@@ -358,6 +408,12 @@ router.post('/terms/:id/active', requireRole('admin'), requireValidId, (req, res
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateAcademicTermRequest'
  *     responses:
  *       200:
  *         description: Term updated
@@ -387,12 +443,31 @@ router.delete('/terms/:id', requireRole('admin'), requireValidId, (req, res) => 
  *   get:
  *     summary: List course offerings visible to the current user
  *     tags: [Academic]
+ *     parameters:
+ *       - in: query
+ *         name: termId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: courseId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: activeTerm
+ *         schema:
+ *           type: boolean
  *     responses:
  *       200:
  *         description: Course offerings
  *   post:
  *     summary: Create a course offering (Admin only)
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateCourseOfferingRequest'
  *     responses:
  *       201:
  *         description: Course offering created
@@ -448,6 +523,12 @@ router.get('/offerings/:id/enrollments', requireValidId, (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateCourseOfferingRequest'
  *     responses:
  *       200:
  *         description: Course offering updated
@@ -480,6 +561,12 @@ router.delete('/offerings/:id', requireRole('admin'), requireValidId, (req, res)
  *   post:
  *     summary: Enroll a student in a course offering (Admin only)
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateOfferingEnrollmentRequest'
  *     responses:
  *       201:
  *         description: Enrollment created
@@ -500,6 +587,12 @@ router.post('/enrollments', requireRole('admin'), (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateOfferingEnrollmentRequest'
  *     responses:
  *       200:
  *         description: Enrollment updated
@@ -529,12 +622,27 @@ router.delete('/enrollments/:id', requireRole('admin'), requireValidId, (req, re
  *   get:
  *     summary: List assignments visible to the current user
  *     tags: [Academic]
+ *     parameters:
+ *       - in: query
+ *         name: courseOfferingId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: termId
+ *         schema:
+ *           type: integer
  *     responses:
  *       200:
  *         description: Assignments
  *   post:
  *     summary: Create an assignment for a course offering
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateAssignmentRequest'
  *     responses:
  *       201:
  *         description: Assignment created
@@ -570,6 +678,24 @@ router.post('/assignments', requireRole(['admin', 'teacher']), (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateAssignmentSubmissionRequest'
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               submissionText:
+ *                 type: string
+ *               submissionUrl:
+ *                 type: string
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: pdf, txt, doc, docx, ppt, pptx, xls, xlsx, csv, png, jpg, jpeg, gif, webp, md, html, htm, rtf, or zip.
  *     responses:
  *       201:
  *         description: Submission saved
@@ -617,6 +743,12 @@ router.post('/assignments/:id/submissions', requireValidId, handleValidatedSubmi
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateAssignmentRequest'
  *     responses:
  *       200:
  *         description: Assignment updated
@@ -655,6 +787,12 @@ router.delete('/assignments/:id', requireRole(['admin', 'teacher']), requireVali
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/GradeSubmissionRequest'
  *     responses:
  *       200:
  *         description: Submission graded
@@ -698,12 +836,23 @@ router.get('/submissions/:id/download', requireValidId, (req, res) => {
  *   get:
  *     summary: List attendance sessions visible to the current user
  *     tags: [Academic]
+ *     parameters:
+ *       - in: query
+ *         name: courseOfferingId
+ *         schema:
+ *           type: integer
  *     responses:
  *       200:
  *         description: Attendance sessions
  *   post:
  *     summary: Create an attendance session
  *     tags: [Academic]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateAttendanceSessionRequest'
  *     responses:
  *       201:
  *         description: Attendance session created
@@ -727,6 +876,12 @@ router.post('/attendance/sessions', requireRole(['admin', 'teacher']), (req, res
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/MarkAttendanceRequest'
  *     responses:
  *       200:
  *         description: Attendance records saved
@@ -848,14 +1003,7 @@ router.get('/attendance/sessions/:id/records', requireRole(['admin', 'teacher'])
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               removalNote:
- *                 type: string
- *               note:
- *                 type: string
- *               reason:
- *                 type: string
+ *             $ref: '#/components/schemas/RemoveAttendanceRecordRequest'
  *     responses:
  *       200:
  *         description: Attendance record marked as removed

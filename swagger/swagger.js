@@ -230,9 +230,15 @@ const options = {
         },
         PasswordResetRequest: {
           type: 'object',
-          required: ['identifier'],
+          anyOf: [
+            { required: ['identifier'] },
+            { required: ['login'] },
+            { required: ['username'] }
+          ],
           properties: {
-            identifier: { type: 'string', description: 'Email or academic identifier' }
+            identifier: { type: 'string', description: 'Email or academic identifier' },
+            login: { type: 'string', description: 'Alias accepted by the API for identifier' },
+            username: { type: 'string', description: 'Alias accepted by the API for identifier' }
           }
         },
         PasswordResetCompleteRequest: {
@@ -736,12 +742,110 @@ const options = {
             pointsAwarded: { type: 'number' }
           }
         },
+        QuizTemplate: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string' },
+            description: { type: 'string' },
+            defaults: { type: 'object' },
+            courseId: { type: 'integer', nullable: true },
+            createdBy: { type: 'integer', nullable: true },
+            isSystem: { type: 'integer', enum: [0, 1] },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CreateQuizTemplateRequest: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string' },
+            courseId: { type: 'integer', nullable: true },
+            defaults: {
+              type: 'object',
+              description: 'Default quiz settings such as durationMinutes, maxAttempts, shuffleQuestions, shuffleOptions, showResultPolicy, gradingMode, penaltyEnabled, penaltyPerWrong, requiresSeb, and showCorrectAnswers'
+            }
+          }
+        },
+        UpdateQuizTemplateRequest: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string' },
+            courseId: { type: 'integer', nullable: true },
+            defaults: { type: 'object' }
+          }
+        },
+        SaveQuizTemplateRequest: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string' }
+          }
+        },
+        GradeSchemeThreshold: {
+          type: 'object',
+          required: ['letterGrade', 'minScore'],
+          properties: {
+            letterGrade: { type: 'string', enum: ['AA', 'BA', 'BB', 'CB', 'CC', 'DC', 'DD', 'FD', 'FF'] },
+            minScore: { type: 'number', minimum: 0, maximum: 100 },
+            maxScore: { type: 'number', minimum: 0, maximum: 100 },
+            position: { type: 'integer' }
+          }
+        },
+        GradeScheme: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            courseId: { type: 'integer', nullable: true },
+            name: { type: 'string' },
+            status: { type: 'string', enum: ['active', 'invalid'] },
+            isDefault: { type: 'integer', enum: [0, 1] },
+            createdBy: { type: 'integer', nullable: true },
+            thresholds: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/GradeSchemeThreshold' }
+            }
+          }
+        },
+        UpdateGradeSchemeThresholdsRequest: {
+          type: 'object',
+          required: ['thresholds'],
+          properties: {
+            thresholds: {
+              type: 'array',
+              minItems: 9,
+              maxItems: 9,
+              items: { $ref: '#/components/schemas/GradeSchemeThreshold' }
+            }
+          }
+        },
         Faculty: {
           type: 'object',
           properties: {
             id: { type: 'integer' },
             name: { type: 'string' },
-            code: { type: 'string' }
+            code: { type: 'string' },
+            departmentCount: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CreateFacultyRequest: {
+          type: 'object',
+          required: ['name', 'code'],
+          properties: {
+            name: { type: 'string' },
+            code: { type: 'string', description: 'Letters, numbers, underscores, or hyphens; stored uppercase' }
+          }
+        },
+        UpdateFacultyRequest: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            code: { type: 'string', description: 'Letters, numbers, underscores, or hyphens; stored uppercase' }
           }
         },
         Department: {
@@ -750,7 +854,91 @@ const options = {
             id: { type: 'integer' },
             facultyId: { type: 'integer' },
             name: { type: 'string' },
-            code: { type: 'string' }
+            code: { type: 'string' },
+            facultyName: { type: 'string' },
+            facultyCode: { type: 'string' },
+            classYearCount: { type: 'integer' },
+            courseCount: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CreateDepartmentRequest: {
+          type: 'object',
+          required: ['facultyId', 'name', 'code'],
+          properties: {
+            facultyId: { type: 'integer' },
+            name: { type: 'string' },
+            code: { type: 'string', description: 'Letters, numbers, underscores, or hyphens; stored uppercase' }
+          }
+        },
+        UpdateDepartmentRequest: {
+          type: 'object',
+          properties: {
+            facultyId: { type: 'integer' },
+            name: { type: 'string' },
+            code: { type: 'string', description: 'Letters, numbers, underscores, or hyphens; stored uppercase' }
+          }
+        },
+        ClassYear: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            departmentId: { type: 'integer' },
+            yearNumber: { type: 'integer', minimum: 1, maximum: 8 },
+            name: { type: 'string' },
+            departmentName: { type: 'string' },
+            departmentCode: { type: 'string' },
+            facultyName: { type: 'string' },
+            sectionCount: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CreateClassYearRequest: {
+          type: 'object',
+          required: ['departmentId', 'yearNumber'],
+          properties: {
+            departmentId: { type: 'integer' },
+            yearNumber: { type: 'integer', minimum: 1, maximum: 8 },
+            name: { type: 'string', description: 'Defaults to Year {yearNumber} when omitted' }
+          }
+        },
+        UpdateClassYearRequest: {
+          type: 'object',
+          properties: {
+            departmentId: { type: 'integer' },
+            yearNumber: { type: 'integer', minimum: 1, maximum: 8 },
+            name: { type: 'string' }
+          }
+        },
+        Section: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            classYearId: { type: 'integer' },
+            name: { type: 'string' },
+            classYearName: { type: 'string' },
+            yearNumber: { type: 'integer' },
+            departmentName: { type: 'string' },
+            departmentCode: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        CreateSectionRequest: {
+          type: 'object',
+          required: ['classYearId', 'name'],
+          properties: {
+            classYearId: { type: 'integer' },
+            name: { type: 'string' }
+          }
+        },
+        UpdateSectionRequest: {
+          type: 'object',
+          properties: {
+            classYearId: { type: 'integer' },
+            name: { type: 'string' }
           }
         },
         AcademicTerm: {
@@ -759,10 +947,35 @@ const options = {
             id: { type: 'integer' },
             name: { type: 'string' },
             academicYear: { type: 'string' },
-            semesterType: { type: 'string' },
-            startDate: { type: 'string' },
-            endDate: { type: 'string' },
-            isActive: { type: 'integer' }
+            semesterType: { type: 'string', enum: ['fall', 'spring', 'summer', 'winter', 'full-year', 'other'] },
+            startDate: { type: 'string', format: 'date-time' },
+            endDate: { type: 'string', format: 'date-time' },
+            isActive: { type: 'integer', enum: [0, 1] },
+            offeringCount: { type: 'integer' },
+            assignmentCount: { type: 'integer' }
+          }
+        },
+        CreateAcademicTermRequest: {
+          type: 'object',
+          required: ['name', 'academicYear'],
+          properties: {
+            name: { type: 'string' },
+            academicYear: { type: 'string' },
+            semesterType: { type: 'string', enum: ['fall', 'spring', 'summer', 'winter', 'full-year', 'other'], default: 'fall' },
+            startDate: { type: 'string', format: 'date-time' },
+            endDate: { type: 'string', format: 'date-time' },
+            isActive: { type: 'boolean' }
+          }
+        },
+        UpdateAcademicTermRequest: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            academicYear: { type: 'string' },
+            semesterType: { type: 'string', enum: ['fall', 'spring', 'summer', 'winter', 'full-year', 'other'] },
+            startDate: { type: 'string', format: 'date-time' },
+            endDate: { type: 'string', format: 'date-time' },
+            isActive: { type: 'boolean' }
           }
         },
         CourseOffering: {
@@ -772,12 +985,88 @@ const options = {
             courseId: { type: 'integer' },
             termId: { type: 'integer' },
             instructorId: { type: 'integer', nullable: true },
-            status: { type: 'string' },
+            departmentId: { type: 'integer', nullable: true },
+            classYearId: { type: 'integer', nullable: true },
+            sectionId: { type: 'integer', nullable: true },
+            capacity: { type: 'integer' },
+            status: { type: 'string', enum: ['planned', 'active', 'completed', 'cancelled'] },
             courseCode: { type: 'string' },
             courseTitle: { type: 'string' },
+            credits: { type: 'integer' },
             termName: { type: 'string' },
+            academicYear: { type: 'string' },
+            semesterType: { type: 'string' },
+            termIsActive: { type: 'integer', enum: [0, 1] },
             instructorName: { type: 'string' },
-            studentCount: { type: 'integer' }
+            departmentName: { type: 'string' },
+            departmentCode: { type: 'string' },
+            classYearName: { type: 'string' },
+            yearNumber: { type: 'integer' },
+            sectionName: { type: 'string' },
+            studentCount: { type: 'integer' },
+            assignmentCount: { type: 'integer' },
+            attendanceSessionCount: { type: 'integer' }
+          }
+        },
+        CreateCourseOfferingRequest: {
+          type: 'object',
+          required: ['courseId', 'termId'],
+          properties: {
+            courseId: { type: 'integer' },
+            termId: { type: 'integer' },
+            instructorId: { type: 'integer', nullable: true },
+            departmentId: { type: 'integer', nullable: true },
+            classYearId: { type: 'integer', nullable: true },
+            sectionId: { type: 'integer', nullable: true },
+            capacity: { type: 'integer', minimum: 0 },
+            status: { type: 'string', enum: ['planned', 'active', 'completed', 'cancelled'], default: 'planned' }
+          }
+        },
+        UpdateCourseOfferingRequest: {
+          type: 'object',
+          properties: {
+            courseId: { type: 'integer' },
+            termId: { type: 'integer' },
+            instructorId: { type: 'integer', nullable: true },
+            departmentId: { type: 'integer', nullable: true },
+            classYearId: { type: 'integer', nullable: true },
+            sectionId: { type: 'integer', nullable: true },
+            capacity: { type: 'integer', minimum: 0 },
+            status: { type: 'string', enum: ['planned', 'active', 'completed', 'cancelled'] }
+          }
+        },
+        CourseOfferingEnrollment: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            courseOfferingId: { type: 'integer' },
+            studentId: { type: 'integer' },
+            status: { type: 'string', enum: ['active', 'dropped', 'completed'] },
+            finalGrade: { type: 'string' },
+            studentName: { type: 'string' },
+            studentEmail: { type: 'string' },
+            studentNumber: { type: 'string' },
+            cohort: { type: 'string' },
+            departmentName: { type: 'string' },
+            classYearName: { type: 'string' },
+            sectionName: { type: 'string' }
+          }
+        },
+        CreateOfferingEnrollmentRequest: {
+          type: 'object',
+          required: ['courseOfferingId', 'studentId'],
+          properties: {
+            courseOfferingId: { type: 'integer' },
+            studentId: { type: 'integer' },
+            status: { type: 'string', enum: ['active', 'dropped', 'completed'], default: 'active' },
+            finalGrade: { type: 'string' }
+          }
+        },
+        UpdateOfferingEnrollmentRequest: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['active', 'dropped', 'completed'] },
+            finalGrade: { type: 'string' }
           }
         },
         Assignment: {
@@ -788,8 +1077,39 @@ const options = {
             termId: { type: 'integer' },
             title: { type: 'string' },
             description: { type: 'string' },
-            dueDate: { type: 'string' },
-            status: { type: 'string' }
+            dueDate: { type: 'string', format: 'date-time' },
+            status: { type: 'string', enum: ['draft', 'published', 'closed'] },
+            courseId: { type: 'integer' },
+            courseCode: { type: 'string' },
+            courseTitle: { type: 'string' },
+            termName: { type: 'string' },
+            termIsActive: { type: 'integer', enum: [0, 1] },
+            instructorName: { type: 'string' },
+            submissionCount: { type: 'integer' },
+            ownSubmissionId: { type: 'integer' },
+            ownSubmissionStatus: { type: 'string' },
+            ownSubmissionDownloadUrl: { type: 'string' }
+          }
+        },
+        CreateAssignmentRequest: {
+          type: 'object',
+          required: ['courseOfferingId', 'title'],
+          properties: {
+            courseOfferingId: { type: 'integer' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            dueDate: { type: 'string', format: 'date-time' },
+            status: { type: 'string', enum: ['draft', 'published', 'closed'], default: 'draft' }
+          }
+        },
+        UpdateAssignmentRequest: {
+          type: 'object',
+          properties: {
+            courseOfferingId: { type: 'integer' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            dueDate: { type: 'string', format: 'date-time' },
+            status: { type: 'string', enum: ['draft', 'published', 'closed'] }
           }
         },
         AssignmentSubmission: {
@@ -800,9 +1120,35 @@ const options = {
             studentId: { type: 'integer' },
             submissionText: { type: 'string' },
             submissionUrl: { type: 'string' },
+            fileName: { type: 'string' },
+            fileSizeBytes: { type: 'integer' },
+            mimeType: { type: 'string' },
             grade: { type: 'string' },
             feedback: { type: 'string' },
-            status: { type: 'string' }
+            status: { type: 'string', enum: ['submitted', 'graded', 'returned'] },
+            late: { type: 'integer', enum: [0, 1] },
+            downloadUrl: { type: 'string' },
+            submittedAt: { type: 'string', format: 'date-time' },
+            gradedAt: { type: 'string', format: 'date-time' },
+            gradedBy: { type: 'integer', nullable: true },
+            studentName: { type: 'string' },
+            studentEmail: { type: 'string' }
+          }
+        },
+        CreateAssignmentSubmissionRequest: {
+          type: 'object',
+          properties: {
+            submissionText: { type: 'string' },
+            submissionUrl: { type: 'string', description: 'Optional URL or /uploads/submissions/... path' },
+            file: { type: 'string', format: 'binary', description: 'multipart/form-data only' }
+          }
+        },
+        GradeSubmissionRequest: {
+          type: 'object',
+          properties: {
+            grade: { type: 'string' },
+            feedback: { type: 'string' },
+            status: { type: 'string', enum: ['submitted', 'graded', 'returned'], default: 'graded' }
           }
         },
         AttendanceSession: {
@@ -811,8 +1157,83 @@ const options = {
             id: { type: 'integer' },
             courseOfferingId: { type: 'integer' },
             termId: { type: 'integer' },
-            sessionDate: { type: 'string' },
-            topic: { type: 'string' }
+            sessionDate: { type: 'string', format: 'date-time' },
+            topic: { type: 'string' },
+            status: { type: 'string', enum: ['open', 'closed'] },
+            openedAt: { type: 'string', format: 'date-time' },
+            closedAt: { type: 'string', format: 'date-time' },
+            expiresAt: { type: 'string', format: 'date-time' },
+            courseId: { type: 'integer' },
+            courseCode: { type: 'string' },
+            courseTitle: { type: 'string' },
+            termName: { type: 'string' },
+            recordCount: { type: 'integer' },
+            ownAttendanceStatus: { type: 'string' }
+          }
+        },
+        CreateAttendanceSessionRequest: {
+          type: 'object',
+          required: ['courseOfferingId', 'sessionDate'],
+          properties: {
+            courseOfferingId: { type: 'integer' },
+            sessionDate: { type: 'string', format: 'date-time' },
+            topic: { type: 'string' },
+            title: { type: 'string', description: 'Alias accepted by the API for topic' },
+            status: { type: 'string', enum: ['open', 'closed'], default: 'open' },
+            expiresAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        AttendanceRecord: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            sessionId: { type: 'integer' },
+            studentId: { type: 'integer' },
+            status: { type: 'string', enum: ['present', 'absent', 'late', 'excused', 'removed', 'invalidated'] },
+            note: { type: 'string' },
+            markedBy: { type: 'integer', nullable: true },
+            markedByName: { type: 'string' },
+            markedByRole: { type: 'string' },
+            removedBy: { type: 'integer', nullable: true },
+            removedAt: { type: 'string', format: 'date-time' },
+            removalNote: { type: 'string' },
+            studentName: { type: 'string' },
+            studentEmail: { type: 'string' },
+            studentNumber: { type: 'string' },
+            sessionDate: { type: 'string', format: 'date-time' },
+            topic: { type: 'string' },
+            courseOfferingId: { type: 'integer' },
+            courseId: { type: 'integer' },
+            courseCode: { type: 'string' },
+            courseTitle: { type: 'string' },
+            termName: { type: 'string' }
+          }
+        },
+        AttendanceRecordInput: {
+          type: 'object',
+          required: ['studentId', 'status'],
+          properties: {
+            studentId: { type: 'integer' },
+            status: { type: 'string', enum: ['present', 'absent', 'late', 'excused', 'removed', 'invalidated'] },
+            note: { type: 'string' }
+          }
+        },
+        MarkAttendanceRequest: {
+          type: 'object',
+          required: ['records'],
+          properties: {
+            records: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AttendanceRecordInput' }
+            }
+          }
+        },
+        RemoveAttendanceRecordRequest: {
+          type: 'object',
+          properties: {
+            removalNote: { type: 'string' },
+            note: { type: 'string', description: 'Alias accepted by the API for removalNote' },
+            reason: { type: 'string', description: 'Alias accepted by the API for removalNote' }
           }
         },
         Pagination: {
@@ -1137,13 +1558,27 @@ const options = {
 
 const swaggerSpec = swaggerJsdoc(options);
 
+function applyExplicitOperationSecurity(spec) {
+  const protectedSecurity = [{ cookieAuth: [] }];
+  const methods = new Set(['get', 'post', 'put', 'delete', 'patch']);
+
+  Object.values(spec.paths || {}).forEach(pathItem => {
+    Object.entries(pathItem || {}).forEach(([method, operation]) => {
+      if (!methods.has(method) || !operation || operation.security !== undefined) return;
+      operation.security = protectedSecurity;
+    });
+  });
+}
+
+applyExplicitOperationSecurity(swaggerSpec);
+
 /**
  * Setup Swagger UI middleware on the given Express app.
  * @param {import('express').Application} app - The Express application.
  */
 function setupSwagger(app) {
   app.use('/api-docs', requireAuth, requireRole('admin'), swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-    customCss: '.swagger-ui .topbar { display: none }',
+    customCss: '.swagger-ui .topbar { display: none } .swagger-ui .response-col_links { display: none }',
     customSiteTitle: 'Quiz LMS API Docs'
   }));
 

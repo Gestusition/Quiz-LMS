@@ -234,6 +234,12 @@ router.post('/attempts/:id/submit', (req, res) => {
  *     responses:
  *       200:
  *         description: Templates available to the current manager
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/QuizTemplate'
  */
 router.get('/templates', (req, res) => {
   try {
@@ -253,9 +259,19 @@ router.get('/templates', (req, res) => {
  *   post:
  *     summary: Create a quiz setting template (Teacher/Admin)
  *     tags: [Quizzes]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateQuizTemplateRequest'
  *     responses:
  *       201:
  *         description: Template created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuizTemplate'
  */
 router.post('/templates', (req, res) => {
   try {
@@ -283,6 +299,10 @@ router.post('/templates', (req, res) => {
  *     responses:
  *       200:
  *         description: Quiz setting template
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuizTemplate'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  *       404:
@@ -328,6 +348,10 @@ router.get('/templates/:templateId', (req, res) => {
  *     responses:
  *       200:
  *         description: Quiz setting template updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuizTemplate'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  *       404:
@@ -357,6 +381,10 @@ router.put('/templates/:templateId', (req, res) => {
  *     responses:
  *       200:
  *         description: Template deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
  */
 router.delete('/templates/:templateId', (req, res) => {
   try {
@@ -380,9 +408,19 @@ router.delete('/templates/:templateId', (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SaveQuizTemplateRequest'
  *     responses:
  *       201:
  *         description: Template created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuizTemplate'
  */
 router.post('/:id/save-as-template', loadQuiz, requireQuizManager, (req, res) => {
   try {
@@ -524,6 +562,12 @@ router.delete('/:id/access/:teacherId', loadQuiz, requireQuizManager, (req, res)
  *     responses:
  *       200:
  *         description: Grade schemes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/GradeScheme'
  */
 router.get('/grade-schemes', (req, res) => {
   try {
@@ -552,6 +596,10 @@ router.get('/grade-schemes', (req, res) => {
  *     responses:
  *       200:
  *         description: Grade scheme
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/GradeScheme'
  *       403:
  *         $ref: '#/components/responses/403Forbidden'
  *       404:
@@ -581,9 +629,19 @@ router.get('/grade-schemes/:id', (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateGradeSchemeThresholdsRequest'
  *     responses:
  *       200:
  *         description: Grade scheme updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/GradeScheme'
  */
 router.put('/grade-schemes/:id/thresholds', (req, res) => {
   try {

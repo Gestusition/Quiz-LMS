@@ -105,7 +105,6 @@ function loginFailureReason(err) {
  *   post:
  *     summary: Login with role-specific academic identifier and password
  *     tags: [Auth]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -171,7 +170,6 @@ router.post('/login',
  *   post:
  *     summary: Request a password reset code
  *     tags: [Auth]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -203,7 +201,6 @@ router.post('/password-reset/request', resetLimiter, (req, res) => {
  *   post:
  *     summary: Complete password reset using a code
  *     tags: [Auth]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
