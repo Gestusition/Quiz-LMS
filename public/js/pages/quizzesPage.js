@@ -132,12 +132,12 @@ export const QuizzesPage = {
       : '';
 
     return `
-      <div class="list-row">
-        <div>
+      <div class="list-row quiz-list-row">
+        <div class="quiz-row-main">
           <strong>${this.esc(quiz.title)}</strong>
           <small>${detail}</small>
         </div>
-        <div class="row-actions">
+        <div class="row-actions quiz-row-actions">
           <span class="status ${this.esc(statusClass)}">${this.esc(quiz.status || 'draft')}</span>
           ${studentActions}${managerActions}
         </div>

@@ -266,43 +266,47 @@ export const DashboardPage = {
         ${this.stat('Attendance records', attendance.length)}
       </section>
 
-      <section class="content-grid">
-        <div class="panel">
-          <div class="panel-header"><h2>Courses</h2><a href="#/courses">View all</a></div>
-          <div class="list">${courses.map(course => this.courseRow(course)).join('') || this.emptyLine('No courses enrolled yet.')}</div>
-        </div>
+      <section class="content-grid student-dashboard-grid">
+        <div class="student-dashboard-column">
+          <div class="panel student-dashboard-courses">
+            <div class="panel-header"><h2>Courses</h2><a href="#/courses">View all</a></div>
+            <div class="list">${courses.map(course => this.courseRow(course)).join('') || this.emptyLine('No courses enrolled yet.')}</div>
+          </div>
 
-        <div class="panel">
-          <div class="panel-header"><h2>Upcoming quizzes/exams</h2><a href="#/quizzes">View all</a></div>
-          <div class="list">${upcomingQuizzes.map(quiz => this.quizRow(quiz)).join('') || this.emptyLine('No quizzes available.')}</div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header"><h2>Assignments due</h2><a href="#/assignments">View all</a></div>
-          <div class="list compact">
-            ${dueAssignments.map(item => `
-              <div class="list-row">
-                <div>
-                  <strong>${this.esc(item.title)}</strong>
-                  <small>${this.esc(item.courseCode || '')} - due ${this.esc(item.dueDate ? this.formatDate(item.dueDate) : 'N/A')}</small>
+          <div class="panel student-dashboard-assignments">
+            <div class="panel-header"><h2>Assignments due</h2><a href="#/assignments">View all</a></div>
+            <div class="list compact">
+              ${dueAssignments.map(item => `
+                <div class="list-row">
+                  <div>
+                    <strong>${this.esc(item.title)}</strong>
+                    <small>${this.esc(item.courseCode || '')} - due ${this.esc(item.dueDate ? this.formatDate(item.dueDate) : 'N/A')}</small>
+                  </div>
+                  <span class="status-chip ${this.esc(item.ownSubmissionStatus || 'pending')}">${this.esc(item.ownSubmissionStatus || 'not submitted')}</span>
                 </div>
-                <span class="status-chip ${this.esc(item.ownSubmissionStatus || 'pending')}">${this.esc(item.ownSubmissionStatus || 'not submitted')}</span>
-              </div>
-            `).join('') || this.emptyLine('No assignments due.')}
+              `).join('') || this.emptyLine('No assignments due.')}
+            </div>
+          </div>
+
+          <div class="panel student-dashboard-attendance">
+            <div class="panel-header"><h2>Attendance summary</h2><a href="#/attendance">View all</a></div>
+            <div class="list compact">
+              ${recentAttendance.map(item => `
+                <div class="list-row">
+                  <div>
+                    <strong>${this.esc(item.courseCode)}</strong>
+                    <small>${this.esc(item.status)} - ${this.esc(this.formatDate(item.sessionDate))}</small>
+                  </div>
+                </div>
+              `).join('') || this.emptyLine('No attendance records yet.')}
+            </div>
           </div>
         </div>
 
-        <div class="panel">
-          <div class="panel-header"><h2>Attendance summary</h2><a href="#/attendance">View all</a></div>
-          <div class="list compact">
-            ${recentAttendance.map(item => `
-              <div class="list-row">
-                <div>
-                  <strong>${this.esc(item.courseCode)}</strong>
-                  <small>${this.esc(item.status)} - ${this.esc(this.formatDate(item.sessionDate))}</small>
-                </div>
-              </div>
-            `).join('') || this.emptyLine('No attendance records yet.')}
+        <div class="student-dashboard-column">
+          <div class="panel student-dashboard-quizzes">
+            <div class="panel-header"><h2>Upcoming quizzes/exams</h2><a href="#/quizzes">View all</a></div>
+            <div class="list">${upcomingQuizzes.map(quiz => this.quizRow(quiz)).join('') || this.emptyLine('No quizzes available.')}</div>
           </div>
         </div>
       </section>

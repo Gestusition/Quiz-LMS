@@ -16,8 +16,8 @@ export const ProfilePage = {
             <p>${this.esc(user.name)} - ${this.roleLabel(user.role)}</p>
           </div>
         </header>
-        <section class="content-grid">
-          <div class="panel">
+        <section class="content-grid profile-grid">
+          <div class="panel profile-panel">
             <div class="panel-header"><h2>Account</h2><span>${this.esc(user.status || 'active')}</span></div>
             <div class="profile-list">
               ${this.profileRow('Name', user.name)}
@@ -27,7 +27,7 @@ export const ProfilePage = {
               ${this.profileRow('Created', this.formatDate(user.createdAt))}
             </div>
           </div>
-          <div class="panel">
+          <div class="panel profile-panel">
             <div class="panel-header">
               <h2>Academic Identity</h2>
               ${this.isTeacherUser(user)
