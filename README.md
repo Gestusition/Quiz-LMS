@@ -171,7 +171,7 @@ quiz-web/
 
 ## Security Notes
 
-- Passwords are stored as salted and spiced `scrypt` hashes, never plaintext.
+- Passwords are stored as salted and peppered `scrypt` hashes, never plaintext.
 - Session tokens are server-set cookies; the frontend does not store tokens in `localStorage`.
 - Query-string, Authorization header, and custom-header session tokens are rejected.
 - Maintenance mode blocks teacher/student login and revokes existing non-admin sessions when re-enabled.
