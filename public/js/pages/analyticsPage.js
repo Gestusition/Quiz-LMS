@@ -37,51 +37,58 @@ export const AnalyticsPage = {
           ${this.stat('Import Errors', health.openImportErrors || 0)}
           ${this.stat('Restricted Users', health.restrictedUsers || 0)}
         </section>
-        <section class="content-grid">
-          <div class="panel">
-            <div class="panel-header"><h2>Course Enrollment Summary</h2><span>${data.courseEnrollmentSummary.length}</span></div>
-            <div class="list compact scroll-list course-enrollment-scroll-list">${data.courseEnrollmentSummary.map(item => `
-              <div class="list-row">
-                <div><strong>${this.esc(item.courseCode)} - ${this.esc(item.courseTitle)}</strong><small>${this.esc(item.termName)}</small></div>
-                <span class="role-badge">${item.enrollmentCount} students</span>
+        <section class="content-grid analytics-dashboard-grid">
+          <div class="analytics-dashboard-column">
+            <div class="panel analytics-enrollment-panel">
+              <div class="panel-header"><h2>Course Enrollment Summary</h2><span>${data.courseEnrollmentSummary.length}</span></div>
+              <div class="list compact scroll-list course-enrollment-scroll-list">${data.courseEnrollmentSummary.map(item => `
+                <div class="list-row">
+                  <div><strong>${this.esc(item.courseCode)} - ${this.esc(item.courseTitle)}</strong><small>${this.esc(item.termName)}</small></div>
+                  <span class="role-badge">${item.enrollmentCount} students</span>
+                </div>
+              `).join('') || this.emptyLine('No course offering enrollments yet.')}</div>
+            </div>
+
+            <div class="panel analytics-audit-panel">
+              <div class="panel-header"><h2>Recent Audit Logs</h2><span id="audit-log-total">${recentAudit.length}</span></div>
+              <div class="toolbar compact-toolbar analytics-filter-toolbar">
+                <label class="form-field inline-field"><span>Date</span><input class="form-input" id="audit-log-date" type="date"></label>
+                <button class="btn btn-ghost btn-sm" id="audit-log-clear" type="button">Clear</button>
               </div>
-            `).join('') || this.emptyLine('No course offering enrollments yet.')}</div>
-          </div>
-          <div class="panel">
-            <div class="panel-header"><h2>Attendance Summary</h2><span id="attendance-summary-total">${totals.attendanceRecords || 0} records</span></div>
-            <div class="toolbar compact-toolbar">
-              <label class="form-field inline-field"><span>Date</span><input class="form-input" id="attendance-summary-date" type="date"></label>
-              <button class="btn btn-ghost btn-sm" id="attendance-summary-clear" type="button">Clear</button>
+              <div class="list compact scroll-list analytics-scroll-list" id="audit-log-list">${this.auditLogRows(recentAudit)}</div>
             </div>
-            <div class="list compact" id="attendance-summary-list">${this.attendanceSummaryRows(data.attendanceSummary || [])}</div>
           </div>
-          <div class="panel">
-            <div class="panel-header"><h2>Recent Audit Logs</h2><span id="audit-log-total">${recentAudit.length}</span></div>
-            <div class="toolbar compact-toolbar">
-              <label class="form-field inline-field"><span>Date</span><input class="form-input" id="audit-log-date" type="date"></label>
-              <button class="btn btn-ghost btn-sm" id="audit-log-clear" type="button">Clear</button>
+
+          <div class="analytics-dashboard-column">
+            <div class="panel analytics-attendance-panel">
+              <div class="panel-header"><h2>Attendance Summary</h2><span id="attendance-summary-total">${totals.attendanceRecords || 0} records</span></div>
+              <div class="toolbar compact-toolbar analytics-filter-toolbar">
+                <label class="form-field inline-field"><span>Date</span><input class="form-input" id="attendance-summary-date" type="date"></label>
+                <button class="btn btn-ghost btn-sm" id="attendance-summary-clear" type="button">Clear</button>
+              </div>
+              <div class="list compact" id="attendance-summary-list">${this.attendanceSummaryRows(data.attendanceSummary || [])}</div>
             </div>
-            <div class="list compact scroll-list analytics-scroll-list" id="audit-log-list">${this.auditLogRows(recentAudit)}</div>
-          </div>
-          <div class="panel">
-            <div class="panel-header"><h2>Import Batches</h2><span id="import-batch-total">${batches.length}</span></div>
-            <form class="toolbar compact-toolbar" id="import-upload-form">
-              <label class="form-field inline-field"><span>Type</span><select class="form-input" id="import-upload-type">
-                <option value="users">Users</option>
-                <option value="courses">Courses</option>
-                <option value="enrollments">Enrollments</option>
-              </select></label>
-              <label class="form-field inline-field"><span>CSV</span><input class="form-input" id="import-upload-file" type="file" accept=".csv,text/csv"></label>
-              <button class="btn btn-primary btn-sm" type="submit">Import</button>
-            </form>
-            <div class="toolbar compact-toolbar">
-              <label class="form-field inline-field"><span>Date</span><input class="form-input" id="import-batch-date" type="date"></label>
-              <button class="btn btn-ghost btn-sm" id="import-batch-clear" type="button">Clear</button>
+
+            <div class="panel analytics-import-panel">
+              <div class="panel-header"><h2>Import Batches</h2><span id="import-batch-total">${batches.length}</span></div>
+              <form class="toolbar compact-toolbar analytics-import-upload-form" id="import-upload-form">
+                <label class="form-field inline-field"><span>Type</span><select class="form-input" id="import-upload-type">
+                  <option value="users">Users</option>
+                  <option value="courses">Courses</option>
+                  <option value="enrollments">Enrollments</option>
+                </select></label>
+                <label class="form-field inline-field"><span>CSV</span><input class="form-input" id="import-upload-file" type="file" accept=".csv,text/csv"></label>
+                <button class="btn btn-primary btn-sm" type="submit">Import</button>
+              </form>
+              <div class="toolbar compact-toolbar analytics-filter-toolbar">
+                <label class="form-field inline-field"><span>Date</span><input class="form-input" id="import-batch-date" type="date"></label>
+                <button class="btn btn-ghost btn-sm" id="import-batch-clear" type="button">Clear</button>
+              </div>
+              <div class="list compact scroll-list analytics-scroll-list" id="import-batch-list">${this.importBatchRows(batches)}</div>
             </div>
-            <div class="list compact scroll-list analytics-scroll-list" id="import-batch-list">${this.importBatchRows(batches)}</div>
           </div>
         </section>
-        <section class="panel">
+        <section class="panel analytics-department-panel">
           <div class="panel-header"><h2>Department Summaries</h2><span>${data.departmentSummary.length}</span></div>
           <div class="table-wrap scroll-table analytics-table-scroll">
             <table class="table">

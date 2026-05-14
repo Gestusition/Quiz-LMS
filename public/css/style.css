@@ -365,6 +365,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 .admin-dashboard-column,
+.analytics-dashboard-column,
 .teacher-dashboard-column,
 .student-dashboard-column {
   display: grid;
@@ -373,6 +374,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 .admin-dashboard-column .panel + .panel,
+.analytics-dashboard-column .panel + .panel,
 .teacher-dashboard-column .panel + .panel,
 .student-dashboard-column .panel + .panel {
   margin-top: 0;
@@ -896,7 +898,55 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 .compact-stats { margin-bottom: 0; }
-.analytics-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+
+.analytics-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.analytics-dashboard-grid {
+  align-items: start;
+}
+
+.analytics-dashboard-grid > * {
+  min-width: 0;
+}
+
+.analytics-department-panel {
+  margin-top: 18px;
+}
+
+.analytics-filter-toolbar {
+  gap: 8px;
+}
+
+.analytics-filter-toolbar .inline-field {
+  width: min(190px, 100%);
+}
+
+.analytics-import-upload-form {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.7fr) minmax(190px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.analytics-import-upload-form .inline-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.analytics-import-upload-form .form-input {
+  max-width: none;
+  min-width: 0;
+}
+
+.analytics-import-upload-form input[type="file"] {
+  padding: 7px 10px;
+}
+
+.analytics-import-upload-form .btn {
+  align-self: end;
+}
 
 .attempt-question {
   padding: 18px;
@@ -2492,10 +2542,15 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 
   .stats-grid, .content-grid, .course-layout { grid-template-columns: 1fr; }
   .admin-dashboard-column,
+  .analytics-dashboard-column,
   .teacher-dashboard-column,
   .student-dashboard-column { display: contents; }
   .admin-dashboard-validation { order: 2; }
   .admin-dashboard-imports { order: 3; }
+  .analytics-enrollment-panel { order: 1; }
+  .analytics-attendance-panel { order: 2; }
+  .analytics-audit-panel { order: 3; }
+  .analytics-import-panel { order: 4; }
   .teacher-dashboard-activity { order: 1; }
   .teacher-dashboard-quizzes { order: 2; }
   .teacher-dashboard-issues { order: 3; }
@@ -2519,6 +2574,8 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .main-content { width: min(100% - 24px, 1280px); padding-top: 20px; }
   .page-header { align-items: flex-start; flex-direction: column; }
   .toolbar { flex-direction: column; }
+  .analytics-grid { grid-template-columns: 1fr; }
+  .analytics-import-upload-form { grid-template-columns: 1fr; }
   .view-tabs { width: 100%; }
   .view-tab { flex: 1; justify-content: center; }
   .maintenance-banner,
