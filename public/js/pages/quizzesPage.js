@@ -328,9 +328,11 @@ export const QuizzesPage = {
       for (const [catId, catQuestions] of grouped) {
         const catName = (categoryMap.get(catId) || {}).name || 'Uncategorized';
         const totalPts = Math.round(catQuestions.reduce((sum, q) => sum + (q.points || 0), 0) * 100) / 100;
+        const categoryKey = String(catId);
+        const collapsedClass = this._collapsedAvailableCategories?.has(categoryKey) ? ' collapsed' : '';
         html += `
-          <div class="category-group" data-category-id="${catId}">
-            <div class="category-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+          <div class="category-group${collapsedClass}" data-category-id="${catId}">
+            <div class="category-group-header">
               <span class="category-group-toggle">▾</span>
               <strong>${this.esc(catName)}</strong>
               <span class="category-group-meta">${catQuestions.length} question${catQuestions.length !== 1 ? 's' : ''} · ${totalPts} pts</span>
@@ -357,6 +359,7 @@ export const QuizzesPage = {
     this._quizId = quizId;
     this._allQuestions = allQuestions;
     this._categories = categories;
+    this._collapsedAvailableCategories = new Set();
 
     this.openModal('Assign questions to ' + quiz.title, `
       <div class="assign-questions-panel">
@@ -455,6 +458,20 @@ export const QuizzesPage = {
     document.getElementById('assign-category-filter')?.addEventListener('change', refreshAvailable);
     document.getElementById('assign-difficulty-filter')?.addEventListener('change', refreshAvailable);
     document.getElementById('assign-search')?.addEventListener('input', refreshAvailable);
+    document.getElementById('available-list')?.addEventListener('click', event => {
+      const header = event.target.closest('.category-group-header');
+      if (!header || !event.currentTarget.contains(header)) return;
+      const group = header.closest('.category-group');
+      if (!group) return;
+
+      const categoryKey = String(group.dataset.categoryId || '');
+      group.classList.toggle('collapsed');
+      if (group.classList.contains('collapsed')) {
+        this._collapsedAvailableCategories.add(categoryKey);
+      } else {
+        this._collapsedAvailableCategories.delete(categoryKey);
+      }
+    });
 
     // Total updating
     const updateAssignTotal = () => {
