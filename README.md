@@ -51,9 +51,9 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 | --- | --- |
 | ![Quiz attempt review](docs/screenshots/quiz-attempt-review.png) | ![Gradebook](docs/screenshots/gradebook.png) |
 
-| Mobile users page |
-| --- |
-| ![Mobile users page](docs/screenshots/users-mobile.png) |
+| Quiz taking experience | Mobile users page |
+| --- | --- |
+| ![Quiz taking experience](docs/screenshots/quiz-taking-ui.png) | ![Mobile users page](docs/screenshots/users-mobile.png) |
 
 ## First Run / Maintenance Mode
 
