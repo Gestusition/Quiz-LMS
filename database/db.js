@@ -1471,6 +1471,7 @@ function seedDatabase() {
 
   ensureDemoQuiz(database);
   repairMissingQuizQuestionLinks(database);
+  ensureAdvancedDemoSeed(database);
 }
 
 function seedUsers(database) {
@@ -1799,6 +1800,381 @@ function attachLegacyDataToDemoCourse(database) {
   if (!course) return;
 
   database.prepare('UPDATE categories SET courseId = ? WHERE courseId IS NULL').run(course.id);
+}
+
+function ensureAdvancedDemoSeed(database) {
+  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+  if (!course) return;
+
+  const teacher = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('teacher');
+  const teacherId = teacher ? teacher.id : null;
+  const categoryName = 'Advanced Demo';
+  const quizTitle = 'Numerical Methods - Full Demo Exam';
+  const quizDescription = 'A comprehensive demo exam showcasing all question types: Multiple Choice with LaTeX, True/False, Fill-in-the-Blank, Short Answer Numeric, Multiple Response, Ordering, Essay, Math Table, and Multi-Part problems.';
+  const questionSeeds = getAdvancedDemoQuestionSeeds();
+
+  const selectCategory = database.prepare(`
+    SELECT id
+    FROM categories
+    WHERE courseId = ? AND LOWER(name) = LOWER(?)
+    LIMIT 1
+  `);
+  const insertCategory = database.prepare(`
+    INSERT INTO categories (courseId, name, description, createdBy)
+    VALUES (?, ?, ?, ?)
+  `);
+  const selectQuestion = database.prepare(`
+    SELECT id
+    FROM questions
+    WHERE categoryId = ? AND type = ? AND text = ?
+    ORDER BY id ASC
+    LIMIT 1
+  `);
+  const insertQuestion = database.prepare(`
+    INSERT INTO questions (
+      categoryId, text, type, options, correctAnswer, difficulty, points,
+      richText, explanationText, hintText, mediaUrl, acceptedAnswers,
+      caseSensitive, gradingType, createdBy
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const selectTableConfig = database.prepare(`
+    SELECT id FROM question_table_config WHERE questionId = ? LIMIT 1
+  `);
+  const insertTableConfig = database.prepare(`
+    INSERT INTO question_table_config (
+      questionId, columnsJson, rowCount, prefillJson, correctDataJson, validationJson
+    )
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const countParts = database.prepare(`
+    SELECT COUNT(*) as count FROM question_parts WHERE questionId = ?
+  `);
+  const insertPart = database.prepare(`
+    INSERT INTO question_parts (
+      questionId, partLabel, partText, answerType, correctAnswer,
+      acceptedAnswers, placeholder, validationRule, position, points
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const selectQuiz = database.prepare(`
+    SELECT id
+    FROM quizzes
+    WHERE courseId = ? AND LOWER(title) LIKE 'numerical methods%full demo exam'
+    ORDER BY id ASC
+    LIMIT 1
+  `);
+  const insertQuiz = database.prepare(`
+    INSERT INTO quizzes (
+      courseId, title, description, status, openAt, closeAt, timeLimitMinutes,
+      attemptsAllowed, shuffleQuestions, showCorrectAnswers, createdBy, startAt,
+      endAt, durationMinutes, maxAttempts, shuffleOptions, showResultPolicy,
+      gradingMode, penaltyEnabled, penaltyPerWrong, penaltyRatio, requiresSeb,
+      sebConfigName, sebConfigUrl, templateName
+    )
+    VALUES (?, ?, ?, 'published', '', '', 120, 99, 1, 1, ?, '', '', 120, 99, 0,
+      'immediately', 'standard', 0, 0, 0, 0, '', '', '')
+  `);
+  const selectQuizQuestion = database.prepare(`
+    SELECT qq.questionId
+    FROM quiz_questions qq
+    JOIN questions q ON q.id = qq.questionId
+    WHERE qq.quizId = ? AND q.type = ? AND q.text = ?
+    LIMIT 1
+  `);
+  const insertQuizQuestion = database.prepare(`
+    INSERT OR IGNORE INTO quiz_questions (quizId, questionId, points, position)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  database.exec('BEGIN TRANSACTION');
+  try {
+    let category = selectCategory.get(course.id, categoryName);
+    if (!category) {
+      category = {
+        id: Number(insertCategory.run(
+          course.id,
+          categoryName,
+          'Advanced demo questions covering every supported quiz question type.',
+          teacherId
+        ).lastInsertRowid)
+      };
+    }
+
+    const questionIds = new Map();
+    questionSeeds.forEach(seed => {
+      const existingQuestion = selectQuestion.get(category.id, seed.type, seed.text);
+      const questionId = existingQuestion
+        ? Number(existingQuestion.id)
+        : Number(insertQuestion.run(
+          category.id,
+          seed.text,
+          seed.type,
+          JSON.stringify(seed.options || []),
+          seed.correctAnswer || '',
+          seed.difficulty || 'MEDIUM',
+          seed.points || 1,
+          seed.richText || '',
+          seed.explanationText || '',
+          seed.hintText || '',
+          seed.mediaUrl || '',
+          JSON.stringify(seed.acceptedAnswers || []),
+          seed.caseSensitive ? 1 : 0,
+          seed.gradingType || 'standard',
+          teacherId
+        ).lastInsertRowid);
+
+      questionIds.set(seed.key, questionId);
+
+      if (seed.type === 'MT' && seed.tableConfig && !selectTableConfig.get(questionId)) {
+        insertTableConfig.run(
+          questionId,
+          JSON.stringify(seed.tableConfig.columns || []),
+          seed.tableConfig.rowCount || 1,
+          JSON.stringify(seed.tableConfig.prefill || {}),
+          JSON.stringify(seed.tableConfig.correctData || {}),
+          JSON.stringify(seed.tableConfig.validation || {})
+        );
+      }
+
+      if (seed.type === 'MP' && Array.isArray(seed.parts) && countParts.get(questionId).count === 0) {
+        seed.parts.forEach((part, index) => {
+          insertPart.run(
+            questionId,
+            part.partLabel || '',
+            part.partText || '',
+            part.answerType || 'text',
+            part.correctAnswer || '',
+            JSON.stringify(part.acceptedAnswers || []),
+            part.placeholder || '',
+            part.validationRule || '',
+            part.position !== undefined ? part.position : index,
+            part.points || 1
+          );
+        });
+      }
+    });
+
+    let quiz = selectQuiz.get(course.id);
+    if (!quiz) {
+      quiz = {
+        id: Number(insertQuiz.run(course.id, quizTitle, quizDescription, teacherId).lastInsertRowid)
+      };
+    }
+
+    questionSeeds.forEach((seed, index) => {
+      if (selectQuizQuestion.get(quiz.id, seed.type, seed.text)) return;
+      insertQuizQuestion.run(quiz.id, questionIds.get(seed.key), seed.quizPoints || seed.points || 1, index + 1);
+    });
+
+    database.exec('COMMIT');
+  } catch (e) {
+    database.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+function getAdvancedDemoQuestionSeeds() {
+  return [
+    {
+      key: 'taylor_mc',
+      type: 'MC',
+      text: 'Given the Taylor series expansion $e^x = \\sum_{n=0}^{\\infty} \\frac{x^n}{n!}$, what is the 3rd-degree Maclaurin polynomial $P_3(x)$?',
+      options: [
+        '$1 + x + \\frac{x^2}{2} + \\frac{x^3}{6}$',
+        '$1 + x + x^2 + x^3$',
+        '$x + \\frac{x^2}{2} + \\frac{x^3}{3}$',
+        '$1 + x + \\frac{x^2}{2!} + \\frac{x^3}{3}$'
+      ],
+      correctAnswer: '0',
+      difficulty: 'MEDIUM',
+      points: 2,
+      quizPoints: 2,
+      explanationText: '$P_3(x) = \\frac{x^0}{0!} + \\frac{x^1}{1!} + \\frac{x^2}{2!} + \\frac{x^3}{3!} = 1 + x + \\frac{x^2}{2} + \\frac{x^3}{6}$',
+      hintText: 'A Maclaurin polynomial is a Taylor polynomial centered at zero. The n-th term is x^n / n!.'
+    },
+    {
+      key: 'integral_tf',
+      type: 'TF',
+      text: 'The integral $\\int_0^1 x^2 \\, dx = \\frac{1}{3}$',
+      options: [],
+      correctAnswer: 'true',
+      difficulty: 'EASY',
+      points: 1,
+      quizPoints: 1,
+      richText: 'Evaluate the definite integral using the antiderivative $\\frac{x^3}{3}$.',
+      explanationText: '$\\int_0^1 x^2 \\, dx = [\\frac{x^3}{3}]_0^1 = \\frac{1}{3} - 0 = \\frac{1}{3}$. The statement is true.',
+      hintText: 'Find the antiderivative of x^2 and evaluate from 0 to 1.'
+    },
+    {
+      key: 'discriminant_fb',
+      type: 'FB',
+      text: 'In the equation $ax^2 + bx + c = 0$, the discriminant formula is $\\Delta = b^2 - 4ac$. If $a=1, b=5, c=6$, what is $\\Delta$?',
+      options: [],
+      correctAnswer: '1',
+      difficulty: 'MEDIUM',
+      points: 2,
+      quizPoints: 2,
+      explanationText: '$\\Delta = 5^2 - 4(1)(6) = 25 - 24 = 1$',
+      hintText: 'Substitute a=1, b=5, c=6 into the discriminant formula.'
+    },
+    {
+      key: 'fixed_point_sa',
+      type: 'SA',
+      text: 'Using the Fixed-Point Iteration method with $g(x) = \\frac{x + \\frac{2}{x}}{2}$ and initial guess $p_0 = 1$, compute $p_1$ to 6 significant digits.',
+      options: [],
+      correctAnswer: '1.50000',
+      acceptedAnswers: ['1.5', '1.5000', '1.50000'],
+      difficulty: 'HARD',
+      points: 3,
+      quizPoints: 3,
+      richText: 'The Fixed-Point Iteration formula is $p_n = g(p_{n-1})$.\\n\\nCompute: $p_1 = g(p_0) = g(1) = \\frac{1 + \\frac{2}{1}}{2}$',
+      explanationText: '$p_1 = g(1) = \\frac{1 + 2}{2} = \\frac{3}{2} = 1.50000$',
+      hintText: 'Substitute p_0 = 1 into g(x) and simplify.'
+    },
+    {
+      key: 'root_methods_mr',
+      type: 'MR',
+      text: 'Which of the following are root-finding methods in Numerical Analysis? (Select all that apply)',
+      options: [
+        'Bisection Method',
+        "Euler's Method",
+        'Newton-Raphson Method',
+        'Regula Falsi (False Position)',
+        'Runge-Kutta Method',
+        'Secant Method'
+      ],
+      correctAnswer: '0,2,3,5',
+      difficulty: 'MEDIUM',
+      points: 3,
+      quizPoints: 3,
+      explanationText: "Bisection, Newton-Raphson, Regula Falsi, and Secant are root-finding methods. Euler's and Runge-Kutta are ODE solvers.",
+      hintText: 'Root-finding methods are used to solve f(x) = 0. Some methods listed here are for ODEs instead.'
+    },
+    {
+      key: 'bisection_order_or',
+      type: 'OR',
+      text: 'Arrange the steps of the Bisection Method in the correct order:',
+      options: [
+        'Choose initial interval [a, b] where f(a)*f(b) < 0',
+        'Compute midpoint c = (a + b) / 2',
+        'Evaluate f(c)',
+        'If f(a)*f(c) < 0, set b = c; else set a = c',
+        'Check if |b - a| < tolerance or f(c) is close to 0',
+        'Repeat until convergence'
+      ],
+      correctAnswer: '0,1,2,3,4,5',
+      difficulty: 'MEDIUM',
+      points: 3,
+      quizPoints: 3,
+      explanationText: 'The Bisection Method systematically halves the interval containing the root until the desired precision is achieved.',
+      hintText: 'Start with interval selection, then iterate: midpoint, evaluate, narrow interval, check convergence.'
+    },
+    {
+      key: 'convergence_es',
+      type: 'ES',
+      text: 'Explain the concept of convergence in iterative numerical methods. Discuss at least two conditions that guarantee convergence and provide an example.',
+      options: [],
+      correctAnswer: '',
+      difficulty: 'HARD',
+      points: 5,
+      quizPoints: 5,
+      richText: "Your answer should address:\\n\\n1. What convergence means in the context of iterative methods.\\n2. The role of the contraction mapping theorem.\\n3. How |g'(x)| < 1 supports convergence in Fixed-Point Iteration.\\n4. A concrete example with a function g(x).",
+      explanationText: 'This question is manually graded. A complete answer discusses convergence as iterates approaching the true solution, contraction mapping, and the Fixed-Point condition.',
+      hintText: 'Think about what happens to the error |p_n - p| as n approaches infinity.'
+    },
+    {
+      key: 'regula_falsi_mt',
+      type: 'MT',
+      text: 'Complete the Regula Falsi (False Position) iteration table for $f(x) = x^3 - x - 2$ with initial bracket $[1, 2]$.',
+      options: [],
+      correctAnswer: '',
+      difficulty: 'HARD',
+      points: 6,
+      quizPoints: 6,
+      richText: 'Use the Regula Falsi formula:\\n\\n$$c_n = a_n - f(a_n) \\cdot \\frac{b_n - a_n}{f(b_n) - f(a_n)}$$\\n\\nFill in each cell. Round to 5 decimal places.',
+      explanationText: 'Row 1: c_1 = 1 - (-2) * (2 - 1) / (4 - (-2)) = 1.33333. Then f(1.33333) = -0.96296, so the root is in [1.33333, 2].',
+      hintText: 'Remember: f(1) = -2 and f(2) = 4. Use the formula to find c_1.',
+      tableConfig: {
+        columns: [
+          { header: 'i', type: 'label' },
+          { header: 'a', type: 'input' },
+          { header: 'b', type: 'input' },
+          { header: 'c', type: 'input' },
+          { header: 'f(c)', type: 'input' }
+        ],
+        rowCount: 3,
+        prefill: {},
+        correctData: {
+          r0_c1: '1',
+          r0_c2: '2',
+          r0_c3: '1.33333',
+          r0_c4: '-0.96296',
+          r1_c1: '1.33333',
+          r1_c2: '2',
+          r1_c3: '1.46269',
+          r1_c4: '-0.33334',
+          r2_c1: '1.46269',
+          r2_c2: '2',
+          r2_c3: '1.50402',
+          r2_c4: '-0.10182'
+        },
+        validation: {}
+      }
+    },
+    {
+      key: 'bisection_mp',
+      type: 'MP',
+      text: 'Consider the function $f(x) = x^3 + 4x^2 - 10$ on the interval $[1, 2]$.',
+      options: [],
+      correctAnswer: '',
+      difficulty: 'HARD',
+      points: 8,
+      quizPoints: 8,
+      richText: 'This is a multi-part problem. Answer each sub-question independently.',
+      explanationText: 'Each part builds toward understanding Fixed-Point Iteration convergence for this function.',
+      hintText: 'For part (a), substitute directly. For part (b), rearrange x^3 + 4x^2 - 10 = 0 to isolate x.',
+      parts: [
+        {
+          partLabel: '(a)',
+          partText: 'Evaluate the sign of f(1).',
+          answerType: 'sign',
+          correctAnswer: '-',
+          points: 1
+        },
+        {
+          partLabel: '(b)',
+          partText: 'Evaluate the sign of f(2).',
+          answerType: 'sign',
+          correctAnswer: '+',
+          points: 1
+        },
+        {
+          partLabel: '(c)',
+          partText: 'Compute the first bisection midpoint.',
+          answerType: 'numeric',
+          correctAnswer: '1.5',
+          acceptedAnswers: ['1.50', '1.500'],
+          points: 2
+        },
+        {
+          partLabel: '(d)',
+          partText: 'Evaluate the sign of f(1.5).',
+          answerType: 'sign',
+          correctAnswer: '+',
+          points: 1
+        },
+        {
+          partLabel: '(e)',
+          partText: 'Which subinterval contains the root after the first bisection step?',
+          answerType: 'text',
+          correctAnswer: '1,1.5',
+          acceptedAnswers: ['[1,1.5]', '[1, 1.5]', '1 to 1.5'],
+          points: 3
+        }
+      ]
+    }
+  ];
 }
 
 function ensureDemoQuiz(database) {

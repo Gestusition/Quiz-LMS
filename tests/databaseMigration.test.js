@@ -333,6 +333,56 @@ describe('database helper and migration coverage', () => {
     dbModule.closeDatabase();
   });
 
+  test('seed creates the advanced full demo exam on a fresh install', () => {
+    let dbModule = freshDbModule();
+    removeDbFiles(dbModule);
+    dbModule.initDatabase(TEST_DB);
+
+    dbModule.seedDatabase();
+    const database = dbModule.getDatabase();
+
+    const quiz = database.prepare(`
+      SELECT id, durationMinutes, maxAttempts
+      FROM quizzes
+      WHERE LOWER(title) LIKE 'numerical methods%full demo exam'
+    `).get();
+    expect(quiz).toBeDefined();
+    expect(quiz.durationMinutes).toBe(120);
+    expect(quiz.maxAttempts).toBe(99);
+
+    const linkedQuestions = database.prepare(`
+      SELECT q.type, qq.points
+      FROM quiz_questions qq
+      JOIN questions q ON q.id = qq.questionId
+      WHERE qq.quizId = ?
+      ORDER BY qq.position ASC
+    `).all(quiz.id);
+    expect(linkedQuestions.map(question => question.type))
+      .toEqual(['MC', 'TF', 'FB', 'SA', 'MR', 'OR', 'ES', 'MT', 'MP']);
+    expect(linkedQuestions.map(question => question.points))
+      .toEqual([2, 1, 2, 3, 3, 3, 5, 6, 8]);
+
+    const mathTable = database.prepare(`
+      SELECT COUNT(*) as count
+      FROM question_table_config qtc
+      JOIN questions q ON q.id = qtc.questionId
+      JOIN quiz_questions qq ON qq.questionId = q.id
+      WHERE qq.quizId = ? AND q.type = 'MT'
+    `).get(quiz.id);
+    const multiPart = database.prepare(`
+      SELECT COUNT(*) as count
+      FROM question_parts qp
+      JOIN questions q ON q.id = qp.questionId
+      JOIN quiz_questions qq ON qq.questionId = q.id
+      WHERE qq.quizId = ? AND q.type = 'MP'
+    `).get(quiz.id);
+
+    expect(mathTable.count).toBe(1);
+    expect(multiPart.count).toBe(5);
+
+    dbModule.closeDatabase();
+  });
+
   test('attaches legacy categories and repairs published quiz question links during seed', () => {
     let dbModule = freshDbModule();
     removeDbFiles(dbModule);
