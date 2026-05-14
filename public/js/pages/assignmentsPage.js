@@ -184,18 +184,27 @@ export const AssignmentsPage = {
         </select></label>
         <div id="submission-link-field">${this.input('submission-url', 'Submission URL', '', 'url', 'https://...')}</div>
         <label class="form-field" id="submission-file-field" style="display:none"><span>Submission file</span><input class="form-input" id="submission-file" type="file" accept="${this.submissionFileAccept()}"></label>
-        <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary">Submit</button></div>
+        <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Submit</button></div>
       </form>
     `);
     this.bindSubmissionTypeFields();
     document.getElementById('submission-form').addEventListener('submit', async event => {
       event.preventDefault();
+      const form = event.currentTarget;
+      if (form.dataset.submitting === 'true') return;
+      const submitButton = form.querySelector('button[type="submit"]');
+      form.dataset.submitting = 'true';
+      if (submitButton) submitButton.disabled = true;
       try {
         await API.submitAssignment(assignmentId, this.submissionPayload());
         this.closeModal();
         this.route();
         this.toast('Submission saved.', 'success');
-      } catch (err) { this.toast(err.message, 'error'); }
+      } catch (err) {
+        form.dataset.submitting = '';
+        if (submitButton) submitButton.disabled = false;
+        this.toast(err.message, 'error');
+      }
     });
   },
 
@@ -277,11 +286,17 @@ export const AssignmentsPage = {
   submissionPayload() {
     const submissionText = value('submission-text');
     if (value('submission-type') === 'file') {
-      const formData = new FormData();
-      formData.append('submissionText', submissionText);
       const file = document.getElementById('submission-file')?.files[0];
-      if (file) formData.append('file', file);
-      return formData;
+      if (file) {
+        const formData = new FormData();
+        formData.append('submissionText', submissionText);
+        formData.append('file', file);
+        return formData;
+      }
+      return {
+        submissionText,
+        submissionUrl: ''
+      };
     }
     return {
       submissionText,

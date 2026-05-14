@@ -21,6 +21,18 @@ function cookie(session) {
   return `auth_token=${session.token}`;
 }
 
+const createdSubmissionUploadUrls = [];
+
+function removeSubmissionUploadByUrl(url) {
+  const fileName = path.basename(String(url || ''));
+  if (!fileName) return;
+  const submissionsDir = path.join(__dirname, '..', 'public', 'uploads', 'submissions');
+  const resolvedDir = path.resolve(submissionsDir);
+  const filePath = path.resolve(path.join(submissionsDir, fileName));
+  if (!filePath.startsWith(`${resolvedDir}${path.sep}`)) return;
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
+
 beforeAll(() => {
   removeDbFiles();
   initDatabase(TEST_DB);
@@ -29,6 +41,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  createdSubmissionUploadUrls.forEach(removeSubmissionUploadByUrl);
   closeDatabase();
   removeDbFiles();
 });
@@ -367,6 +380,7 @@ describe('Academic management system', () => {
     expect(submission.fileName).toBe('proof.txt');
     expect(submission.fileSizeBytes).toBeGreaterThan(0);
     expect(submission.submissionUrl).toMatch(/^\/uploads\/submissions\/.+\.txt$/);
+    createdSubmissionUploadUrls.push(submission.submissionUrl);
 
     await request(app)
       .get(`/api/academic/assignments/${assignment.id}/submissions`)
