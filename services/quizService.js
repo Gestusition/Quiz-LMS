@@ -293,7 +293,7 @@ class QuizService {
     }
 
     const attemptNumber = submittedCount + 1;
-    const maxScore = validQuestions.reduce((sum, question) => sum + Number(question.points || 1), 0);
+    const maxScore = roundScore(validQuestions.reduce((sum, question) => sum + Number(question.points || 1), 0));
     const startedAtMs = Date.now();
     const durationMinutes = Number(quiz.durationMinutes || quiz.timeLimitMinutes || 0);
     const expiresAt = durationMinutes > 0
@@ -336,7 +336,7 @@ class QuizService {
 
     const answers = normalizeAnswers(payload.answers);
     let score = 0;
-    const maxScore = validQuestions.reduce((sum, question) => sum + Number(question.points || 1), 0);
+    const maxScore = roundScore(validQuestions.reduce((sum, question) => sum + Number(question.points || 1), 0));
     const now = Date.now();
     const startedAt = new Date(attempt.startedAt).getTime();
     const expiresAtTs = attempt.expiresAt ? new Date(attempt.expiresAt).getTime() : null;
@@ -352,7 +352,7 @@ class QuizService {
         quizRepository.insertAttemptAnswer(attemptId, question.id, answer, outcome.isCorrect, outcome.pointsAwarded);
       });
 
-      score = Math.max(0, Math.min(maxScore, Math.round(score * 100) / 100));
+      score = Math.max(0, Math.min(maxScore, roundScore(score)));
       const percentage = maxScore > 0 ? Math.round((score / maxScore) * 10000) / 100 : 0;
       const timeSpentSeconds = Number(payload.timeSpentSeconds) || Math.max(0, Math.round((now - startedAt) / 1000));
 
@@ -422,6 +422,7 @@ class QuizService {
       gradeStatus: attempt.gradeStatus || 'ready',
       gradeMessage: attempt.gradeMessage || ''
     };
+    normalizeScoreFields(result);
 
     if (user.role === 'student' && !canSeeResult && attempt.status === 'submitted') {
       this.hideAttemptResult(result, policy);
@@ -461,6 +462,7 @@ class QuizService {
         gradeStatus: attempt.gradeStatus || 'ready',
         gradeMessage: attempt.gradeMessage || ''
       };
+      normalizeScoreFields(result);
       if (user.role === 'student' && attempt.status === 'submitted' && !canSeeResult) {
         this.hideAttemptResult(result, policy);
       }
@@ -1048,7 +1050,7 @@ class QuizService {
     const now = Date.now();
     const startedAt = new Date(attempt.startedAt).getTime();
     const timeSpentSeconds = Number.isFinite(startedAt) ? Math.max(0, Math.round((now - startedAt) / 1000)) : 0;
-    const maxScore = Number(attempt.maxScore || 0);
+    const maxScore = roundScore(attempt.maxScore || 0);
     quizRepository.markAttemptExpired(attempt.id, nowIso(), 0, maxScore, 0, timeSpentSeconds);
     const gradeResolution = gradeSchemeService.resolveLetterGrade(quiz.courseId, 0);
     quizRepository.setAttemptGradeStatus(attempt.id, {
@@ -1137,6 +1139,21 @@ function parseJson(value, fallback) {
   } catch (e) {
     return fallback;
   }
+}
+
+function roundScore(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return 0;
+  return Math.round((number + Number.EPSILON) * 100) / 100;
+}
+
+function normalizeScoreFields(target) {
+  ['score', 'maxScore', 'percentage'].forEach(field => {
+    if (target[field] !== null && target[field] !== undefined) {
+      target[field] = roundScore(target[field]);
+    }
+  });
+  return target;
 }
 
 module.exports = new QuizService();

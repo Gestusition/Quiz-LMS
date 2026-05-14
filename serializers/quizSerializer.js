@@ -13,6 +13,7 @@ function serializeQuiz(quiz) {
     ...quiz,
     startAt,
     endAt,
+    ...(quiz.maxScore !== undefined ? { maxScore: roundScore(quiz.maxScore) } : {}),
     durationMinutes: Number(quiz.durationMinutes || quiz.timeLimitMinutes || 0),
     maxAttempts: Number(quiz.maxAttempts || quiz.attemptsAllowed || 1),
     gradingMode: quiz.gradingMode || 'standard',
@@ -26,6 +27,12 @@ function serializeQuiz(quiz) {
     showCorrectAnswers: !!quiz.showCorrectAnswers,
     isOpen
   };
+}
+
+function roundScore(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return 0;
+  return Math.round((number + Number.EPSILON) * 100) / 100;
 }
 
 function serializeQuizQuestion(row, options = {}) {

@@ -343,7 +343,7 @@ export const DashboardPage = {
         <div class="student-dashboard-column">
           <div class="panel student-dashboard-quizzes">
             <div class="panel-header"><h2>Upcoming quizzes/exams</h2><a href="#/quizzes">View all</a></div>
-            <div class="list">${upcomingQuizzes.map(quiz => this.quizRow(quiz)).join('') || this.emptyLine('No quizzes available.')}</div>
+            <div class="list">${upcomingQuizzes.map(quiz => this.quizRow(quiz, false, false, { showPoints: false })).join('') || this.emptyLine('No quizzes available.')}</div>
           </div>
         </div>
       </section>

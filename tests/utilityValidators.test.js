@@ -529,6 +529,7 @@ describe('course, quiz, question validators and serializers', () => {
       closeAt: new Date(Date.now() + 1000).toISOString(),
       timeLimitMinutes: 20,
       attemptsAllowed: 2,
+      maxScore: 100.00000000000001,
       requiresSeb: 1,
       penaltyEnabled: 1,
       penaltyPerWrong: '0.5',
@@ -540,6 +541,7 @@ describe('course, quiz, question validators and serializers', () => {
     expect(openQuiz.isOpen).toBe(true);
     expect(openQuiz.durationMinutes).toBe(20);
     expect(openQuiz.maxAttempts).toBe(2);
+    expect(openQuiz.maxScore).toBe(100);
     expect(openQuiz.requiresSeb).toBe(true);
 
     const questionWithoutCorrect = serializeQuizQuestion({

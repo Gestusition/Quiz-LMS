@@ -12,7 +12,7 @@ function list(user, filters = {}, validStatuses = []) {
         WHERE qg.resourceType = 'quiz' AND qg.resourceId = q.id AND qg.teacherUserId = ?
         LIMIT 1)` : 'NULL'} as accessLevel,
       COUNT(DISTINCT qq.questionId) as questionCount,
-      COALESCE(SUM(qq.points), 0) as maxScore
+      ROUND(COALESCE(SUM(qq.points), 0), 2) as maxScore
     FROM quizzes q
     JOIN courses c ON c.id = q.courseId
     LEFT JOIN quiz_questions qq ON qq.quizId = q.id

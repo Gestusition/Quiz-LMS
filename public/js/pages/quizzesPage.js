@@ -69,6 +69,7 @@ export const QuizzesPage = {
     const isManager = this.canManageLearning();
     const readOnly = quiz.accessLevel === 'read';
     const canDelete = this.user.role === 'admin' || Number(quiz.createdBy) === Number(this.user.id);
+    const attempts = quiz.maxAttempts || quiz.attemptsAllowed || 1;
     const attribution = [
       quiz.createdByName ? `Created by ${this.esc(quiz.createdByName)}` : '',
       quiz.updatedByName ? `Edited by ${this.esc(quiz.updatedByName)}` : '',
@@ -87,8 +88,8 @@ export const QuizzesPage = {
         <div class="quiz-card-meta">
           <span title="Questions">📋 ${quiz.questionCount || 0}</span>
           <span title="Duration">⏱ ${quiz.durationMinutes || quiz.timeLimitMinutes || 0}m</span>
-          <span title="Max score">⭐ ${quiz.maxScore || 0}</span>
-          <span title="Attempts">${quiz.maxAttempts || quiz.attemptsAllowed || 1} attempt${(quiz.maxAttempts || 1) > 1 ? 's' : ''}</span>
+          <span title="Max score">⭐ ${this.formatPoints(quiz.maxScore)}</span>
+          <span title="Attempts">${attempts} attempt${attempts > 1 ? 's' : ''}</span>
         </div>
         <div class="quiz-card-actions">
           ${isManager ? `
@@ -108,13 +109,13 @@ export const QuizzesPage = {
     `;
   },
 
-  quizRow(quiz, showCourse = false, manager = false) {
+  quizRow(quiz, showCourse = false, manager = false, options = {}) {
     const duration = quiz.durationMinutes || quiz.timeLimitMinutes || 0;
     const attempts = quiz.maxAttempts || quiz.attemptsAllowed || 1;
     const detail = [
       showCourse ? this.esc(quiz.courseCode || '') : '',
       `${quiz.questionCount || 0} questions`,
-      `${quiz.maxScore || 0} points`,
+      options.showPoints === false ? '' : `${this.formatPoints(quiz.maxScore)} points`,
       `${duration} min`,
       `${attempts} attempt${attempts > 1 ? 's' : ''}`
     ].filter(Boolean).join(' - ');
@@ -143,6 +144,14 @@ export const QuizzesPage = {
         </div>
       </div>
     `;
+  },
+
+  formatPoints(value) {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return '0';
+    const rounded = Math.round((number + Number.EPSILON) * 100) / 100;
+    if (Number.isInteger(rounded)) return String(rounded);
+    return rounded.toFixed(2).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
   },
 
   async showQuizForm(id, courseId) {
