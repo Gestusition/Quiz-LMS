@@ -35,13 +35,25 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 
 ## Screenshots
 
-| Admin dashboard | Course detail |
+| Admin dashboard | Student dashboard |
 | --- | --- |
-| ![Admin dashboard](docs/screenshots/dashboard.png) | ![Course detail](docs/screenshots/course-detail.png) |
+| ![Admin dashboard](docs/screenshots/dashboard.png) | ![Student dashboard](docs/screenshots/student-dashboard.png) |
 
-| Question bank | Mobile users page |
+| Course management | Course detail |
 | --- | --- |
-| ![Question bank](docs/screenshots/question-bank.png) | ![Mobile users page](docs/screenshots/users-mobile.png) |
+| ![Course management](docs/screenshots/course-management.png) | ![Course detail](docs/screenshots/course-detail.png) |
+
+| Edit quiz workflow | Question bank |
+| --- | --- |
+| ![Edit quiz workflow](docs/screenshots/edit-quiz-workflow.png) | ![Question bank](docs/screenshots/question-bank.png) |
+
+| Quiz attempt review | Gradebook |
+| --- | --- |
+| ![Quiz attempt review](docs/screenshots/quiz-attempt-review.png) | ![Gradebook](docs/screenshots/gradebook.png) |
+
+| Mobile users page |
+| --- |
+| ![Mobile users page](docs/screenshots/users-mobile.png) |
 
 ## First Run / Maintenance Mode
 
