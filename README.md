@@ -153,7 +153,7 @@ student1@example.com,CS101
 ## Architecture
 
 ```text
-quiz-web/
+quiz-lms/
 |-- constants/      Shared enums, limits, and issue codes
 |-- database/       SQLite initialization, schema, and seed data
 |-- middleware/     Auth, rate limiting, validation, and upload guards

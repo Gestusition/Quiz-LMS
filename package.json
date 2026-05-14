@@ -1,5 +1,5 @@
 {
-  "name": "quiz-web",
+  "name": "quiz-lms",
   "version": "1.0.0",
   "description": "A role-based quiz LMS with secure accounts, course management, quiz attempts, REST API, and vanilla JavaScript SPA.",
   "main": "server.js",
