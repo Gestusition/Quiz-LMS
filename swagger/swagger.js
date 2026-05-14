@@ -1688,13 +1688,45 @@ function applyExplicitOperationSecurity(spec) {
 
 applyExplicitOperationSecurity(swaggerSpec);
 
+const swaggerCustomCss = `
+  .swagger-ui .topbar { display: none }
+  .swagger-ui .response-col_links { display: none }
+  .swagger-ui .opblock-section.hide-empty-parameters .tab-header,
+  .swagger-ui .opblock-section.hide-empty-parameters .parameters-container {
+    display: none;
+  }
+  .swagger-ui .opblock-section.hide-empty-parameters .opblock-section-header {
+    justify-content: flex-end;
+  }
+`;
+
+const swaggerCustomJs = `
+  (function hideEmptyParameterSections() {
+    function refresh() {
+      document.querySelectorAll('.swagger-ui .parameters-container').forEach(function (container) {
+        var section = container.closest('.opblock-section');
+        if (!section) return;
+
+        var hasParameterRows = container.querySelector('table.parameters tbody tr, .parameters tbody tr');
+        var isNoParametersPlaceholder = container.textContent.trim() === 'No parameters';
+        section.classList.toggle('hide-empty-parameters', !hasParameterRows && isNoParametersPlaceholder);
+      });
+    }
+
+    var observer = new MutationObserver(refresh);
+    observer.observe(document.body, { childList: true, subtree: true });
+    refresh();
+  })();
+`;
+
 /**
  * Setup Swagger UI middleware on the given Express app.
  * @param {import('express').Application} app - The Express application.
  */
 function setupSwagger(app) {
   app.use('/api-docs', requireAuth, requireRole('admin'), swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-    customCss: '.swagger-ui .topbar { display: none } .swagger-ui .response-col_links { display: none }',
+    customCss: swaggerCustomCss,
+    customJsStr: swaggerCustomJs,
     customSiteTitle: 'Quiz LMS API Docs'
   }));
 
