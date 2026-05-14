@@ -155,26 +155,34 @@ export const QuizzesPage = {
   },
 
   async showQuizForm(id, courseId) {
-    const courses = await API.getCourses();
-    const templates = await API.getTemplates({ courseId });
-    const quiz = id ? await API.getQuiz(id) : {
-      courseId: courseId || '', title: '', description: '', status: 'draft',
-      startAt: '', endAt: '', durationMinutes: 30, maxAttempts: 1,
-      shuffleQuestions: false, shuffleOptions: false, showCorrectAnswers: false,
-      showResultPolicy: 'immediately', gradingMode: 'standard',
-      penaltyEnabled: false, penaltyPerWrong: 0, requiresSeb: false, templateName: ''
-    };
+    let quiz;
+    try {
+      quiz = id ? await API.getQuiz(id) : {
+        courseId: courseId || '', title: '', description: '', status: 'draft',
+        startAt: '', endAt: '', durationMinutes: 30, maxAttempts: 1,
+        shuffleQuestions: false, shuffleOptions: false, showCorrectAnswers: false,
+        showResultPolicy: 'immediately', gradingMode: 'standard',
+        penaltyEnabled: false, penaltyPerWrong: 0, requiresSeb: false, templateName: ''
+      };
+    } catch (err) {
+      return this.toast('Failed to load quiz: ' + err.message, 'error');
+    }
+
+    const effectiveCourseId = courseId || quiz.courseId;
+    const [courses, templates] = await Promise.all([
+      API.getCourses(),
+      effectiveCourseId ? API.getTemplates({ courseId: effectiveCourseId }) : Promise.resolve([])
+    ]);
 
     this.openModal(id ? 'Edit quiz' : 'New quiz / exam', `
       <form id="quiz-form" class="stack quiz-form-advanced">
         <div class="form-section">
-          <h3>Workflow</h3>
-          <div class="workflow-steps">
-            <span class="status-chip draft">1 Create draft</span>
-            <span class="status-chip">2 Assign questions</span>
-            <span class="status-chip">3 Review</span>
-            <span class="status-chip published">4 Publish</span>
-          </div>
+          ${id ? this._workflowNavHtml(1, id) : `<div class="workflow-steps">
+            <span class="status-chip draft wf-step wf-active">1 Create draft</span>
+            <span class="status-chip wf-step">2 Assign questions</span>
+            <span class="status-chip wf-step">3 Review</span>
+            <span class="status-chip published wf-step">4 Publish</span>
+          </div>`}
         </div>
         <div class="form-section">
           <h3>Template</h3>
@@ -248,6 +256,11 @@ export const QuizzesPage = {
         if (defaults.penaltyPerWrong) document.getElementById('quiz-penalty-amount').value = defaults.penaltyPerWrong;
       } catch (e) { /* ignore */ }
     });
+
+    // Workflow step navigation
+    if (id) {
+      this._bindWorkflowNav(1, id);
+    }
 
     document.getElementById('quiz-form').addEventListener('submit', async event => {
       event.preventDefault();
@@ -363,6 +376,7 @@ export const QuizzesPage = {
 
     this.openModal('Assign questions to ' + quiz.title, `
       <div class="assign-questions-panel">
+        ${this._workflowNavHtml(2, quizId)}
         <div class="assigned-section">
           <div class="assigned-header-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <h3 style="margin: 0;">Assigned (<span id="assigned-count">${assignedIds.size}</span>)</h3>
@@ -591,6 +605,9 @@ export const QuizzesPage = {
 
     // Run initial total calculation
     requestAnimationFrame(updateAssignTotal);
+
+    // Workflow step navigation
+    this._bindWorkflowNav(2, quizId);
   },
 
   addAssigned(questionId) {
@@ -817,6 +834,159 @@ export const QuizzesPage = {
       await API.deleteTemplate(id);
       this.toast('Template deleted.', 'success');
       this.renderQuizzes();
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  /** Reusable workflow nav HTML for the quiz editing modal steps */
+  _workflowNavHtml(activeStep, quizId) {
+    const steps = [
+      { n: 1, label: '1 Create draft', cls: 'draft' },
+      { n: 2, label: '2 Assign questions', cls: '' },
+      { n: 3, label: '3 Review', cls: '' },
+      { n: 4, label: '4 Publish', cls: 'published' }
+    ];
+    return `
+      <div class="workflow-nav">
+        <button type="button" class="workflow-arrow workflow-arrow-prev" id="wf-prev" ${activeStep <= 1 ? 'disabled' : ''} title="Previous step">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="workflow-steps">
+          ${steps.map(s => `<span class="status-chip ${s.cls} wf-step ${s.n === activeStep ? 'wf-active' : 'wf-clickable'}" data-step="${s.n}">${s.label}</span>`).join('')}
+        </div>
+        <button type="button" class="workflow-arrow workflow-arrow-next" id="wf-next" ${activeStep >= 4 ? 'disabled' : ''} title="Next step">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+        </button>
+      </div>`;
+  },
+
+  /** Bind workflow arrow + step click navigation */
+  _bindWorkflowNav(currentStep, quizId) {
+    const navigate = (step) => {
+      if (step < 1 || step > 4 || step === currentStep) return;
+      if (step === 1) this.showQuizForm(quizId);
+      else if (step === 2) this.showAssignQuestions(quizId);
+      else if (step === 3) this.showQuizReview(quizId);
+      else if (step === 4) this.showQuizPublish(quizId);
+    };
+    document.getElementById('wf-prev')?.addEventListener('click', () => navigate(currentStep - 1));
+    document.getElementById('wf-next')?.addEventListener('click', () => navigate(currentStep + 1));
+    document.querySelectorAll('.wf-step.wf-clickable').forEach(el => {
+      el.addEventListener('click', () => navigate(Number(el.dataset.step)));
+    });
+  },
+
+  /** Step 3: Review – shows quiz summary and assigned questions */
+  async showQuizReview(quizId) {
+    try {
+      const quiz = await API.getQuiz(quizId);
+      const questions = quiz.questions || [];
+      const totalPts = Math.round(questions.reduce((s, q) => s + (q.points || 0), 0) * 100) / 100;
+
+      this.openModal('Review — ' + quiz.title, `
+        <div class="stack">
+          ${this._workflowNavHtml(3, quizId)}
+          <div class="panel" style="margin-top:12px;">
+            <div class="panel-header"><h2>Quiz Summary</h2></div>
+            <div class="form-grid two-col">
+              <div class="form-field"><span>Title</span><strong>${this.esc(quiz.title)}</strong></div>
+              <div class="form-field"><span>Course</span><strong>${this.esc(quiz.courseCode || quiz.courseId)}</strong></div>
+              <div class="form-field"><span>Duration</span><strong>${quiz.durationMinutes || 0} min</strong></div>
+              <div class="form-field"><span>Max attempts</span><strong>${quiz.maxAttempts || 1}</strong></div>
+              <div class="form-field"><span>Status</span><strong><span class="status ${quiz.status}">${quiz.status}</span></strong></div>
+              <div class="form-field"><span>Show results</span><strong>${(quiz.showResultPolicy || '').replace(/_/g, ' ')}</strong></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h2>Questions (${questions.length})</h2><span>${totalPts} pts total</span></div>
+            <div class="list compact scroll-list" style="max-height:280px;">
+              ${questions.length ? questions.map((q, i) => `
+                <div class="list-row">
+                  <div>
+                    <strong>${i + 1}. ${this.esc(q.text.slice(0, 80))}</strong>
+                    <small>${q.type} · ${q.difficulty || '—'} · ${Math.round(q.points * 100) / 100} pts</small>
+                  </div>
+                </div>
+              `).join('') : this.emptyBlock('No questions assigned yet.')}
+            </div>
+          </div>
+          ${quiz.shuffleQuestions || quiz.shuffleOptions || quiz.showCorrectAnswers || quiz.requiresSeb ? `
+          <div class="panel">
+            <div class="panel-header"><h2>Options</h2></div>
+            <div class="check-grid">
+              ${quiz.shuffleQuestions ? '<span class="status-chip">✓ Shuffle questions</span>' : ''}
+              ${quiz.shuffleOptions ? '<span class="status-chip">✓ Shuffle options</span>' : ''}
+              ${quiz.showCorrectAnswers ? '<span class="status-chip">✓ Show correct answers</span>' : ''}
+              ${quiz.requiresSeb ? '<span class="status-chip">✓ Require SEB</span>' : ''}
+            </div>
+          </div>` : ''}
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+          </div>
+        </div>
+      `);
+      this._bindWorkflowNav(3, quizId);
+    } catch (err) {
+      this.toast(err.message, 'error');
+    }
+  },
+
+  /** Step 4: Publish – quick status change */
+  async showQuizPublish(quizId) {
+    try {
+      const quiz = await API.getQuiz(quizId);
+      const questions = quiz.questions || [];
+      const totalPts = Math.round(questions.reduce((s, q) => s + (q.points || 0), 0) * 100) / 100;
+      const canPublish = questions.length > 0;
+      const isPublished = quiz.status === 'published';
+
+      this.openModal('Publish — ' + quiz.title, `
+        <div class="stack">
+          ${this._workflowNavHtml(4, quizId)}
+          <div class="panel" style="margin-top:12px;">
+            <div class="panel-header"><h2>Publish Checklist</h2></div>
+            <div class="list compact">
+              <div class="list-row">
+                <span>${questions.length > 0 ? '✅' : '❌'} Questions assigned</span>
+                <strong>${questions.length} questions · ${totalPts} pts</strong>
+              </div>
+              <div class="list-row">
+                <span>${quiz.title ? '✅' : '❌'} Title set</span>
+                <strong>${this.esc(quiz.title)}</strong>
+              </div>
+              <div class="list-row">
+                <span>${quiz.durationMinutes > 0 ? '✅' : '⚠️'} Duration</span>
+                <strong>${quiz.durationMinutes || 0} min</strong>
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+            ${isPublished
+              ? '<button type="button" class="btn btn-ghost" id="btn-wf-unpublish">Unpublish (Draft)</button>'
+              : `<button type="button" class="btn btn-primary" id="btn-wf-publish" ${!canPublish ? 'disabled title="Assign questions first"' : ''}>Publish Quiz</button>`}
+          </div>
+        </div>
+      `);
+      this._bindWorkflowNav(4, quizId);
+
+      document.getElementById('btn-wf-publish')?.addEventListener('click', async () => {
+        try {
+          await API.updateQuiz(quizId, { status: 'published' });
+          this.toast('Quiz published!', 'success');
+          this.closeModal();
+          this.renderQuizzes();
+        } catch (err) { this.toast(err.message, 'error'); }
+      });
+      document.getElementById('btn-wf-unpublish')?.addEventListener('click', async () => {
+        try {
+          await API.updateQuiz(quizId, { status: 'draft' });
+          this.toast('Quiz reverted to draft.', 'success');
+          this.closeModal();
+          this.renderQuizzes();
+        } catch (err) { this.toast(err.message, 'error'); }
+      });
     } catch (err) {
       this.toast(err.message, 'error');
     }

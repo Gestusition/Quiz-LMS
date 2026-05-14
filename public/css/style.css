@@ -2596,3 +2596,72 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .qb-filter-group { flex: 1 1 100%; }
   .qb-card-actions { flex-wrap: wrap; }
 }
+
+/* ── Workflow Navigation (Edit Quiz Modal) ──────────────── */
+.workflow-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workflow-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.workflow-arrow {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.workflow-arrow:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+  transform: scale(1.1);
+}
+
+.workflow-arrow:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.workflow-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.wf-step {
+  transition: all 0.15s ease;
+}
+
+.wf-step.wf-active {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  font-weight: 700;
+}
+
+.wf-step.wf-clickable {
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.wf-step.wf-clickable:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
