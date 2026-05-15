@@ -542,9 +542,31 @@ class QuizService {
       });
 
       const completed = quizGrades.filter(item => item.score !== null && item.maxScore !== null && Number(item.maxScore) > 0);
-      const earned = completed.reduce((sum, item) => sum + Number(item.score || 0), 0);
-      const possible = completed.reduce((sum, item) => sum + Number(item.maxScore || 0), 0);
-      const weightedAverage = possible > 0 ? Math.round((earned / possible) * 10000) / 100 : null;
+      
+      const quizzesWithWeight = quizzes.filter(q => Number(q.weight || 0) > 0);
+      let weightedAverage;
+
+      if (quizzesWithWeight.length > 0) {
+        // Use weighted average logic
+        let earnedWeight = 0;
+        let totalPossibleWeight = 0;
+        
+        completed.forEach(item => {
+          const quiz = quizzes.find(q => q.id === item.quizId);
+          const weight = Number(quiz?.weight || 0);
+          if (weight > 0) {
+            earnedWeight += (Number(item.score) / Number(item.maxScore)) * weight;
+            totalPossibleWeight += weight;
+          }
+        });
+        
+        weightedAverage = totalPossibleWeight > 0 ? Math.round((earnedWeight / totalPossibleWeight) * 10000) / 100 : null;
+      } else {
+        // Fallback to point-based weighted average
+        const earned = completed.reduce((sum, item) => sum + Number(item.score || 0), 0);
+        const possible = completed.reduce((sum, item) => sum + Number(item.maxScore || 0), 0);
+        weightedAverage = possible > 0 ? Math.round((earned / possible) * 10000) / 100 : null;
+      }
       const gradeResolution = weightedAverage === null
         ? { letterGrade: null, status: 'pending', message: 'No submitted quiz attempts yet.' }
         : gradeSchemeService.resolveLetterGrade(courseId, weightedAverage);

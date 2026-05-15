@@ -89,9 +89,9 @@ function insert(payload, userId) {
       attemptsAllowed, shuffleQuestions, showCorrectAnswers,
       startAt, endAt, durationMinutes, maxAttempts, shuffleOptions, showResultPolicy,
       gradingMode, penaltyEnabled, penaltyPerWrong, penaltyRatio, requiresSeb, sebConfigName, sebConfigUrl,
-      templateName, createdBy
+      templateName, weight, createdBy
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     payload.courseId,
     payload.title,
@@ -117,6 +117,7 @@ function insert(payload, userId) {
     payload.sebConfigName || '',
     payload.sebConfigUrl || '',
     payload.templateName || '',
+    Number(payload.weight || 0),
     userId
   );
 }
@@ -128,7 +129,7 @@ function update(id, payload, updatedAt, actorUserId = null) {
       timeLimitMinutes = ?, attemptsAllowed = ?, shuffleQuestions = ?, showCorrectAnswers = ?,
       startAt = ?, endAt = ?, durationMinutes = ?, maxAttempts = ?, shuffleOptions = ?, showResultPolicy = ?,
       gradingMode = ?, penaltyEnabled = ?, penaltyPerWrong = ?, penaltyRatio = ?, requiresSeb = ?,
-      sebConfigName = ?, sebConfigUrl = ?, templateName = ?, updatedBy = ?,
+      sebConfigName = ?, sebConfigUrl = ?, templateName = ?, weight = ?, updatedBy = ?,
       updatedAt = ?
     WHERE id = ?
   `).run(
@@ -156,6 +157,7 @@ function update(id, payload, updatedAt, actorUserId = null) {
     payload.sebConfigName || '',
     payload.sebConfigUrl || '',
     payload.templateName || '',
+    Number(payload.weight || 0),
     actorUserId,
     updatedAt,
     id
@@ -301,7 +303,7 @@ function getAttemptsForQuiz(quizId, user) {
 
 function getGradebookQuizzes(courseId) {
   return getDatabase().prepare(`
-    SELECT id, title
+    SELECT id, title, weight
     FROM quizzes
     WHERE courseId = ?
     ORDER BY createdAt ASC

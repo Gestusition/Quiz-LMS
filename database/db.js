@@ -769,6 +769,7 @@ function migrateExistingTables() {
   ensureColumn('assessment', 'quizzes', 'sebConfigUrl', 'sebConfigUrl TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'quizzes', 'manualResultReleasedAt', 'manualResultReleasedAt TEXT DEFAULT \'\'');
   ensureColumn('assessment', 'quizzes', 'templateName', 'templateName TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'quizzes', 'weight', 'weight REAL DEFAULT 0');
   ensureColumn('assessment', 'quizzes', 'updatedBy', 'updatedBy INTEGER');
 
   ensureColumn('assessment', 'quiz_attempts', 'expiresAt', 'expiresAt TEXT DEFAULT \'\'');

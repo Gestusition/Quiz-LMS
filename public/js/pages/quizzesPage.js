@@ -161,8 +161,7 @@ export const QuizzesPage = {
         courseId: courseId || '', title: '', description: '', status: 'draft',
         startAt: '', endAt: '', durationMinutes: 30, maxAttempts: 1,
         shuffleQuestions: false, shuffleOptions: false, showCorrectAnswers: false,
-        showResultPolicy: 'immediately', gradingMode: 'standard',
-        penaltyEnabled: false, penaltyPerWrong: 0, requiresSeb: false, templateName: ''
+        penaltyEnabled: false, penaltyPerWrong: 0, requiresSeb: false, templateName: '', weight: 0
       };
     } catch (err) {
       return this.toast('Failed to load quiz: ' + err.message, 'error');
@@ -202,6 +201,7 @@ export const QuizzesPage = {
               ${courses.map(course => `<option value="${course.id}" ${Number(quiz.courseId) === course.id ? 'selected' : ''}>${this.esc(course.code)} - ${this.esc(course.title)}</option>`).join('')}
             </select></label>
             ${this.input('quiz-title', 'Title', quiz.title)}
+            ${this.input('quiz-weight', 'Weight (%)', quiz.weight || 0, 'number', '', { min: 0, max: 100, step: 'any' })}
           </div>
           ${this.textarea('quiz-description', 'Description', quiz.description || '')}
           <label class="form-field"><span>Status</span><select class="form-select" id="quiz-status">
@@ -279,7 +279,8 @@ export const QuizzesPage = {
         showResultPolicy: value('quiz-show-result'),
         penaltyPerWrong: Number(value('quiz-penalty-amount') || 0),
         requiresSeb: document.getElementById('quiz-seb').checked,
-        templateName: document.getElementById('quiz-template').selectedOptions[0]?.dataset.templateName || ''
+        templateName: document.getElementById('quiz-template').selectedOptions[0]?.dataset.templateName || '',
+        weight: Number(value('quiz-weight') || 0)
       };
 
       try {
