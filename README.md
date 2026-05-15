@@ -35,25 +35,33 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 
 ## Screenshots
 
-| Admin dashboard | Student dashboard |
+| Admin dashboard | Teacher dashboard |
 | --- | --- |
-| ![Admin dashboard](docs/screenshots/dashboard.png) | ![Student dashboard](docs/screenshots/student-dashboard.png) |
+| ![Admin dashboard](docs/screenshots/dashboard.png) | ![Teacher dashboard](docs/screenshots/teacher-dashboard.png) |
 
-| Course management | Course detail |
+| Student dashboard | Course management |
 | --- | --- |
-| ![Course management](docs/screenshots/course-management.png) | ![Course detail](docs/screenshots/course-detail.png) |
+| ![Student dashboard](docs/screenshots/student-dashboard.png) | ![Course management](docs/screenshots/course-management.png) |
 
-| Edit quiz workflow | Question bank |
+| Course detail | Edit quiz workflow |
 | --- | --- |
-| ![Edit quiz workflow](docs/screenshots/edit-quiz-workflow.png) | ![Question bank](docs/screenshots/question-bank.png) |
+| ![Course detail](docs/screenshots/course-detail.png) | ![Edit quiz workflow](docs/screenshots/edit-quiz-workflow.png) |
 
-| Quiz attempt review | Gradebook |
+| Question bank | Quiz taking experience |
 | --- | --- |
-| ![Quiz attempt review](docs/screenshots/quiz-attempt-review.png) | ![Gradebook](docs/screenshots/gradebook.png) |
+| ![Question bank](docs/screenshots/question-bank.png) | ![Quiz taking experience](docs/screenshots/quiz-taking-ui.png) |
 
-| Quiz taking experience | Mobile users page |
+| Quiz attempt review | Quiz attempts list |
 | --- | --- |
-| ![Quiz taking experience](docs/screenshots/quiz-taking-ui.png) | ![Mobile users page](docs/screenshots/users-mobile.png) |
+| ![Quiz attempt review](docs/screenshots/quiz-attempt-review.png) | ![Quiz attempts list](docs/screenshots/quiz-attempts.png) |
+
+| Gradebook | Mobile users page |
+| --- | --- |
+| ![Gradebook](docs/screenshots/gradebook.png) | ![Mobile users page](docs/screenshots/users-mobile.png) |
+
+| Swagger API Docs |
+| --- |
+| ![Swagger API Docs](docs/screenshots/swagger-ui.png) |
 
 ## First Run / Maintenance Mode
 
