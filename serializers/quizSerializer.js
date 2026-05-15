@@ -25,7 +25,7 @@ function serializeQuiz(quiz) {
     shuffleQuestions: !!quiz.shuffleQuestions,
     shuffleOptions: !!quiz.shuffleOptions,
     showCorrectAnswers: !!quiz.showCorrectAnswers,
-    weight: Number(quiz.weight || 0),
+    weight: roundScore(quiz.weight),
     isOpen
   };
 }

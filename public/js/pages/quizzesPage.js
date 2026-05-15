@@ -264,24 +264,8 @@ export const QuizzesPage = {
 
     document.getElementById('quiz-form').addEventListener('submit', async event => {
       event.preventDefault();
-      const data = {
-        courseId: Number(value('quiz-course')),
-        title: value('quiz-title'),
-        description: value('quiz-description'),
-        status: value('quiz-status'),
-        startAt: value('quiz-start'),
-        endAt: value('quiz-end'),
-        durationMinutes: Number(value('quiz-duration')),
-        maxAttempts: Number(value('quiz-max-attempts')),
-        shuffleQuestions: document.getElementById('quiz-shuffle-q').checked,
-        shuffleOptions: document.getElementById('quiz-shuffle-o').checked,
-        showCorrectAnswers: document.getElementById('quiz-show-correct').checked,
-        showResultPolicy: value('quiz-show-result'),
-        penaltyPerWrong: Number(value('quiz-penalty-amount') || 0),
-        requiresSeb: document.getElementById('quiz-seb').checked,
-        templateName: document.getElementById('quiz-template').selectedOptions[0]?.dataset.templateName || '',
-        weight: Number(value('quiz-weight') || 0)
-      };
+      const data = this._getStep1Data();
+      if (!data) return;
 
       try {
         if (!id && data.status === 'published') {
@@ -596,9 +580,9 @@ export const QuizzesPage = {
         });
         
         await API.setQuizQuestions(this._quizId, payloadQuestions);
+        this.toast('Questions updated.', 'success');
         this.closeModal();
         this.renderQuizzes();
-        this.toast('Questions assigned.', 'success');
       } catch (err) {
         this.toast(err.message, 'error');
       }
@@ -864,8 +848,23 @@ export const QuizzesPage = {
 
   /** Bind workflow arrow + step click navigation */
   _bindWorkflowNav(currentStep, quizId) {
-    const navigate = (step) => {
+    const navigate = async (step) => {
       if (step < 1 || step > 4 || step === currentStep) return;
+
+      // If leaving step 1, try to save settings first so they aren't lost
+      if (currentStep === 1) {
+        const data = this._getStep1Data();
+        if (data) {
+          try {
+            await API.updateQuiz(quizId, data);
+            // After successful save, proceed to next step
+          } catch (err) {
+            this.toast('Failed to save settings: ' + err.message, 'error');
+            return;
+          }
+        }
+      }
+
       if (step === 1) this.showQuizForm(quizId);
       else if (step === 2) this.showAssignQuestions(quizId);
       else if (step === 3) this.showQuizReview(quizId);
@@ -876,6 +875,34 @@ export const QuizzesPage = {
     document.querySelectorAll('.wf-step.wf-clickable').forEach(el => {
       el.addEventListener('click', () => navigate(Number(el.dataset.step)));
     });
+  },
+
+  /** Helper to collect all Step 1 (Basic Settings) data from DOM */
+  _getStep1Data() {
+    const form = document.getElementById('quiz-form');
+    if (!form) return null;
+
+    const weightInput = document.getElementById('quiz-weight');
+    const weight = weightInput ? Number(weightInput.value || 0) : 0;
+    
+    return {
+      courseId: Number(value('quiz-course')),
+      title: value('quiz-title'),
+      description: value('quiz-description'),
+      status: value('quiz-status'),
+      startAt: value('quiz-start'),
+      endAt: value('quiz-end'),
+      durationMinutes: Number(value('quiz-duration') || 30),
+      maxAttempts: Number(value('quiz-max-attempts') || 1),
+      shuffleQuestions: document.getElementById('quiz-shuffle-q').checked,
+      shuffleOptions: document.getElementById('quiz-shuffle-o').checked,
+      showCorrectAnswers: document.getElementById('quiz-show-correct').checked,
+      showResultPolicy: value('quiz-show-result'),
+      penaltyPerWrong: Number(value('quiz-penalty-amount') || 0),
+      requiresSeb: document.getElementById('quiz-seb').checked,
+      templateName: document.getElementById('quiz-template').value ? (document.getElementById('quiz-template').selectedOptions[0]?.dataset.templateName || '') : '',
+      weight: weight
+    };
   },
 
   /** Step 3: Review – shows quiz summary and assigned questions */
@@ -897,6 +924,7 @@ export const QuizzesPage = {
               <div class="form-field"><span>Max attempts</span><strong>${quiz.maxAttempts || 1}</strong></div>
               <div class="form-field"><span>Status</span><strong><span class="status ${quiz.status}">${quiz.status}</span></strong></div>
               <div class="form-field"><span>Show results</span><strong>${(quiz.showResultPolicy || '').replace(/_/g, ' ')}</strong></div>
+              <div class="form-field"><span>Weight</span><strong>${quiz.weight || 0}%</strong></div>
             </div>
           </div>
           <div class="panel">

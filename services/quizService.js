@@ -49,7 +49,11 @@ class QuizService {
   }
 
   create(data, user) {
-    const payload = this.applyTemplate(validateQuiz(data), data.templateName);
+    const payload = this.applyTemplate(validateQuiz({
+      ...data,
+      weight: data.weight !== undefined ? Number(data.weight) : 0
+    }), data.templateName);
+    payload.weight = roundScore(payload.weight);
     const course = courseRepository.findById(payload.courseId);
     if (!course) {
       throw notFoundError('Course not found.');
@@ -96,8 +100,11 @@ class QuizService {
       sebConfigName: data.sebConfigName !== undefined ? data.sebConfigName : existing.sebConfigName,
       sebConfigUrl: data.sebConfigUrl !== undefined ? data.sebConfigUrl : existing.sebConfigUrl,
       showCorrectAnswers: data.showCorrectAnswers !== undefined ? data.showCorrectAnswers : !!existing.showCorrectAnswers,
-      templateName: data.templateName !== undefined ? data.templateName : existing.templateName
+      templateName: data.templateName !== undefined ? data.templateName : existing.templateName,
+      weight: data.weight !== undefined ? data.weight : existing.weight
     }), data.templateName);
+
+    payload.weight = roundScore(payload.weight);
 
     if (payload.status === 'published') {
       this.assertQuizPublishable(this.buildPublishableCandidate(id, payload));

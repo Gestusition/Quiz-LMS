@@ -694,6 +694,7 @@ const options = {
             courseCode: { type: 'string' },
             questionCount: { type: 'integer' },
             maxScore: { type: 'number' },
+            weight: { type: 'number' },
             isOpen: { type: 'boolean' }
           }
         },
@@ -719,7 +720,8 @@ const options = {
             requiresSeb: { type: 'boolean' },
             sebConfigName: { type: 'string' },
             sebConfigUrl: { type: 'string' },
-            templateName: { type: 'string' }
+            templateName: { type: 'string' },
+            weight: { type: 'number' }
           }
         },
         UpdateQuizRequest: {
@@ -742,7 +744,8 @@ const options = {
             requiresSeb: { type: 'boolean' },
             sebConfigName: { type: 'string' },
             sebConfigUrl: { type: 'string' },
-            templateName: { type: 'string' }
+            templateName: { type: 'string' },
+            weight: { type: 'number' }
           }
         },
         SetQuizQuestionsRequest: {

@@ -61,7 +61,8 @@ function validateQuiz(data) {
     requiresSeb: booleanValue(data.requiresSeb, false),
     sebConfigName: optionalText(data.sebConfigName, 'seb_config_name', LIMITS.quizzes.sebConfigMax),
     sebConfigUrl: optionalText(data.sebConfigUrl, 'seb_config_url', LIMITS.quizzes.sebConfigMax),
-    showCorrectAnswers: data.showCorrectAnswers !== false
+    showCorrectAnswers: data.showCorrectAnswers !== false,
+    weight: numberInRange(data.weight, 'weight', 0, 100, { required: false, defaultValue: 0 })
   };
 
   return payload;
