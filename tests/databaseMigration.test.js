@@ -357,10 +357,14 @@ describe('database helper and migration coverage', () => {
       WHERE qq.quizId = ?
       ORDER BY qq.position ASC
     `).all(quiz.id);
+    const expectedTypes = Array(5).fill(['MC', 'TF', 'FB', 'SA', 'MR', 'OR', 'ES', 'MT', 'MP']).flat();
     expect(linkedQuestions.map(question => question.type))
-      .toEqual(['MC', 'TF', 'FB', 'SA', 'MR', 'OR', 'ES', 'MT', 'MP']);
+      .toEqual(expectedTypes);
+    
+    const expectedPoints = Array(45).fill(2.22);
+    expectedPoints[2] = 2.32;
     expect(linkedQuestions.map(question => question.points))
-      .toEqual([2, 1, 2, 3, 3, 3, 5, 6, 8]);
+      .toEqual(expectedPoints);
 
     const mathTable = database.prepare(`
       SELECT COUNT(*) as count
@@ -377,8 +381,8 @@ describe('database helper and migration coverage', () => {
       WHERE qq.quizId = ? AND q.type = 'MP'
     `).get(quiz.id);
 
-    expect(mathTable.count).toBe(1);
-    expect(multiPart.count).toBe(5);
+    expect(mathTable.count).toBe(5);
+    expect(multiPart.count).toBe(25);
 
     dbModule.closeDatabase();
   });
