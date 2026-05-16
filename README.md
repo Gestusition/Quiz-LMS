@@ -1,5 +1,6 @@
 # Quiz LMS
 
+[![Node.js CI](https://github.com/Gestusition/Quiz-LMS/actions/workflows/nodejs.yml/badge.svg)](https://github.com/Gestusition/Quiz-LMS/actions/workflows/nodejs.yml)
 Quiz LMS is a full-stack course and quiz management system built for the System Analysis and Design CRUD project requirements. It uses a vanilla JavaScript single-page frontend, an Express REST API, and SQLite databases with a layered backend structure.
 
 The project is intentionally backend-heavy: routes stay thin, business rules live in services, SQL lives in repositories, and tests exercise the academic workflows instead of only checking that pages render.
