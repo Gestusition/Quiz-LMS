@@ -59,9 +59,9 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 | --- | --- |
 | ![Gradebook](docs/screenshots/gradebook.png) | ![Mobile users page](docs/screenshots/users-mobile.png) |
 
-| Swagger API Docs |
-| --- |
-| ![Swagger API Docs](docs/screenshots/swagger-ui.png) |
+| Swagger API Docs | Login screen |
+| --- | --- |
+| ![Swagger API Docs](docs/screenshots/swagger-ui.png) | ![Login screen](docs/screenshots/login-screen.png) |
 
 ## First Run / Maintenance Mode
 
