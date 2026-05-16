@@ -1801,8 +1801,23 @@ function seedQuestionBank(database) {
     const addQuizQuestion = database.prepare(
       'INSERT INTO quiz_questions (quizId, questionId, points, position) VALUES (?, ?, ?, ?)'
     );
-    [0, 1, 3, 6, 10].forEach((questionIndex, index) => {
-      addQuizQuestion.run(quizId, seededQuestionIds[questionIndex], 1, index + 1);
+    const quizQuestionsToSeed = [
+      { index: 0, points: 4.44 },
+      { index: 1, points: 4.44 },
+      { index: 2, points: 19.99 },
+      { index: 3, points: 19.99 },
+      { index: 4, points: 19.99 },
+      { index: 5, points: 4.44 },
+      { index: 6, points: 4.44 },
+      { index: 7, points: 4.44 },
+      { index: 8, points: 4.44 },
+      { index: 9, points: 4.44 },
+      { index: 10, points: 4.44 },
+      { index: 13, points: 4.51 }
+    ];
+
+    quizQuestionsToSeed.forEach((q, i) => {
+      addQuizQuestion.run(quizId, seededQuestionIds[q.index], q.points, i + 1);
     });
 
     database.exec('COMMIT');
@@ -1828,7 +1843,22 @@ function ensureAdvancedDemoSeed(database) {
   const categoryName = 'Advanced Demo';
   const quizTitle = 'Numerical Methods - Full Demo Exam';
   const quizDescription = 'A comprehensive demo exam showcasing all question types: Multiple Choice with LaTeX, True/False, Fill-in-the-Blank, Short Answer Numeric, Multiple Response, Ordering, Essay, Math Table, and Multi-Part problems.';
-  const questionSeeds = getAdvancedDemoQuestionSeeds();
+  const baseSeeds = getAdvancedDemoQuestionSeeds();
+  const questionSeeds = [];
+  for (let i = 0; i < 5; i++) {
+    baseSeeds.forEach((seed, seedIndex) => {
+      const newSeed = JSON.parse(JSON.stringify(seed));
+      newSeed.key = seed.key + '_' + i;
+      if (i === 0 && seedIndex === 2) {
+        newSeed.points = 2.32;
+        newSeed.quizPoints = 2.32;
+      } else {
+        newSeed.points = 2.22;
+        newSeed.quizPoints = 2.22;
+      }
+      questionSeeds.push(newSeed);
+    });
+  }
 
   const selectCategory = database.prepare(`
     SELECT id
@@ -1919,9 +1949,13 @@ function ensureAdvancedDemoSeed(database) {
     }
 
     const questionIds = new Map();
+    const existingCategoryQuestions = database.prepare('SELECT id, type, text FROM questions WHERE categoryId = ? ORDER BY id ASC').all(category.id);
+    let seedIdx = 0;
+    
     questionSeeds.forEach(seed => {
-      const existingQuestion = selectQuestion.get(category.id, seed.type, seed.text);
-      const questionId = existingQuestion
+      const existingQuestion = existingCategoryQuestions.length > seedIdx ? existingCategoryQuestions[seedIdx] : null;
+      seedIdx++;
+      const questionId = existingQuestion && existingQuestion.type === seed.type && existingQuestion.text === seed.text
         ? Number(existingQuestion.id)
         : Number(insertQuestion.run(
           category.id,
@@ -1980,7 +2014,6 @@ function ensureAdvancedDemoSeed(database) {
     }
 
     questionSeeds.forEach((seed, index) => {
-      if (selectQuizQuestion.get(quiz.id, seed.type, seed.text)) return;
       insertQuizQuestion.run(quiz.id, questionIds.get(seed.key), seed.quizPoints || seed.points || 1, index + 1);
     });
 
@@ -2207,8 +2240,8 @@ function ensureDemoQuiz(database) {
     FROM questions q
     JOIN categories c ON c.id = q.categoryId
     WHERE c.courseId = ?
-    ORDER BY q.id ASC
-    LIMIT 5
+    ORDER BY CASE WHEN LOWER(c.name) = 'advanced demo' THEN 1 ELSE 0 END, q.id ASC
+    LIMIT 12
   `).all(course.id);
   if (questions.length === 0) return;
 
@@ -2231,7 +2264,26 @@ function ensureDemoQuiz(database) {
       INSERT INTO quiz_questions (quizId, questionId, points, position)
       VALUES (?, ?, ?, ?)
     `);
-    questions.forEach((question, index) => insert.run(quiz.lastInsertRowid, question.id, 1, index + 1));
+    
+    const quizQuestionsToSeed = [
+      { points: 4.44 },
+      { points: 4.44 },
+      { points: 19.99 },
+      { points: 19.99 },
+      { points: 19.99 },
+      { points: 4.44 },
+      { points: 4.44 },
+      { points: 4.44 },
+      { points: 4.44 },
+      { points: 4.44 },
+      { points: 4.44 },
+      { points: 4.51 }
+    ];
+
+    questions.forEach((question, index) => {
+      const points = (index < quizQuestionsToSeed.length) ? quizQuestionsToSeed[index].points : 1;
+      insert.run(quiz.lastInsertRowid, question.id, points, index + 1);
+    });
     database.exec('COMMIT');
   } catch (e) {
     database.exec('ROLLBACK');
