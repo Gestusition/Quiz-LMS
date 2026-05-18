@@ -80,9 +80,16 @@ Default seeded demo users:
 - teacher: `teacher@example.com` / `Teacher123!`
 - student: `STU-0003` / `Student123!`
 
+## Prerequisites
+
+- Git for cloning the repository.
+- Node.js `>=22.13.0` with npm. This version is required because the database layer uses `node:sqlite`.
+- A modern browser for the SPA.
+- No external database server is required; SQLite files are created under `data/`.
+
 ## Setup
 
-Requires Node.js `>=22.13.0` because the database layer uses `node:sqlite`.
+From the project root:
 
 ```bash
 npm ci
@@ -98,6 +105,36 @@ npm start
 The API index and Swagger are admin-only, so sign in as an admin first.
 The public health check returns `status: "not_ok"` with HTTP `503` if the database check fails.
 Admins can open the API index and API docs from the navbar; the Maintenance page also shows the current `/api/health` result.
+
+## Quick Reproduction Walkthrough
+
+Use these steps to reproduce the running program from a fresh local checkout:
+
+1. Clone the repository and enter the project folder.
+
+   ```bash
+   git clone https://github.com/Gestusition/Quiz-LMS.git
+   cd Quiz-LMS
+   ```
+
+2. Install dependencies and start the server.
+
+   ```bash
+   npm ci
+   npm start
+   ```
+
+3. Open `http://localhost:3000` and sign in with the seeded admin account: `admin` / `Admin123!`.
+4. On the first admin login, change the default admin username and password when prompted.
+5. Open `Maintenance` from the admin navbar and turn maintenance mode off.
+6. Sign out, then sign in as the seeded teacher: `teacher@example.com` / `Teacher123!`.
+7. Open `Courses`, select `WEB101 - Web Programming Fundamentals`, then create or inspect categories, questions, and quizzes.
+8. Create a quiz as a draft, assign at least one valid question, publish it, then sign out.
+9. Sign in as the seeded student: `STU-0003` / `Student123!`.
+10. Open the published quiz, start an attempt, submit answers, and review the result according to the quiz result policy.
+11. Optional verification: run `npm test` and `npm run test:api-docs` to reproduce the automated checks.
+
+The first startup seeds demo users, a demo course, categories, question banks, and published demo quizzes. Existing SQLite files in `data/` are reused on later runs, so use a clean checkout or remove local demo database files only if you intentionally want a fresh seed.
 
 ## Environment
 
@@ -142,6 +179,126 @@ The main suite includes backend unit/integration tests for auth, maintenance mod
 - `/api/weeks`
 - `/api/audit`
 - `/api/settings`
+
+## Example API Requests
+
+The API uses an `auth_token` HTTP-only cookie for sessions. These examples use `curl` cookie jars (`-c` to save cookies and `-b` to send them back). Replace placeholder IDs such as `COURSE_ID`, `CATEGORY_ID`, `QUESTION_ID`, `QUIZ_ID`, and `ATTEMPT_ID` with IDs returned by earlier responses.
+
+```bash
+BASE=http://localhost:3000
+```
+
+Public health check:
+
+```bash
+curl "$BASE/api/health"
+```
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "database": "ok",
+  "timestamp": "2026-05-18T20:00:00.000Z"
+}
+```
+
+Admin login, first-run credential rotation, and maintenance disable:
+
+```bash
+curl -i -c admin-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"identifier":"admin","password":"Admin123!"}' \
+  "$BASE/api/auth/login"
+
+curl -b admin-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin.local","currentPassword":"Admin123!","newPassword":"Admin1234!"}' \
+  "$BASE/api/auth/change-credentials"
+
+curl -b admin-cookies.txt \
+  -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":false}' \
+  "$BASE/api/settings/maintenance"
+```
+
+If the admin account has already been rotated, log in with the current admin username and password and skip the credential-rotation request.
+
+Teacher login, course lookup, category creation, question creation, quiz creation, question assignment, and publishing:
+
+```bash
+curl -i -c teacher-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"identifier":"teacher@example.com","password":"Teacher123!"}' \
+  "$BASE/api/auth/login"
+
+curl -b teacher-cookies.txt "$BASE/api/courses"
+
+curl -b teacher-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"courseId":COURSE_ID,"name":"API Demo","description":"Questions created through README API examples."}' \
+  "$BASE/api/categories"
+
+curl -b teacher-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"categoryId":CATEGORY_ID,"text":"HTTP is stateless.","type":"TF","correctAnswer":"true","difficulty":"EASY","points":1}' \
+  "$BASE/api/questions"
+
+curl -b teacher-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"courseId":COURSE_ID,"title":"API Demo Quiz","description":"Created from curl examples.","status":"draft","durationMinutes":20,"maxAttempts":1}' \
+  "$BASE/api/quizzes"
+
+curl -b teacher-cookies.txt \
+  -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"questionIds":[QUESTION_ID]}' \
+  "$BASE/api/quizzes/QUIZ_ID/questions"
+
+curl -b teacher-cookies.txt \
+  -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"status":"published"}' \
+  "$BASE/api/quizzes/QUIZ_ID"
+```
+
+Example quiz response fields:
+
+```json
+{
+  "id": 12,
+  "courseId": 1,
+  "title": "API Demo Quiz",
+  "status": "published",
+  "durationMinutes": 20,
+  "maxAttempts": 1
+}
+```
+
+Student login, attempt start, attempt submission, and attempt lookup:
+
+```bash
+curl -i -c student-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"identifier":"STU-0003","password":"Student123!"}' \
+  "$BASE/api/auth/login"
+
+curl -b student-cookies.txt \
+  -X POST \
+  "$BASE/api/quizzes/QUIZ_ID/attempts"
+
+curl -b student-cookies.txt \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"answers":{"QUESTION_ID":"true"},"timeSpentSeconds":30}' \
+  "$BASE/api/quizzes/attempts/ATTEMPT_ID/submit"
+
+curl -b student-cookies.txt "$BASE/api/quizzes/attempts/ATTEMPT_ID"
+```
+
+Swagger UI at `http://localhost:3000/api-docs` contains the full request and response schema for every route.
 
 ## Import Batches
 
