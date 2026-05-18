@@ -387,6 +387,62 @@ describe('database helper and migration coverage', () => {
     dbModule.closeDatabase();
   });
 
+  test('advanced full demo seed stays idempotent with legacy advanced questions', () => {
+    let dbModule = freshDbModule();
+    removeDbFiles(dbModule);
+    dbModule.initDatabase(TEST_DB);
+
+    const database = dbModule.getDatabase();
+    const courseId = Number(database.prepare(`
+      INSERT INTO courses (code, title, visibility)
+      VALUES (?, ?, ?)
+    `).run('WEB101', 'Legacy Advanced Demo Course', 'published').lastInsertRowid);
+    const categoryId = Number(database.prepare(`
+      INSERT INTO categories (courseId, name, description)
+      VALUES (?, ?, ?)
+    `).run(courseId, 'Advanced Demo', 'Older advanced demo question bank.').lastInsertRowid);
+    database.prepare(`
+      INSERT INTO questions (categoryId, text, type, options, correctAnswer, difficulty, points)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      categoryId,
+      'What is the derivative of $f(x) = 3x^2 + 2x - 5$?',
+      'MC',
+      JSON.stringify(['6x + 2', '3x + 2', '6x - 5', 'x^2 + 2']),
+      '0',
+      'MEDIUM',
+      2
+    );
+
+    dbModule.seedDatabase();
+    dbModule.seedDatabase();
+
+    const quiz = database.prepare(`
+      SELECT id
+      FROM quizzes
+      WHERE LOWER(title) LIKE 'numerical methods%full demo exam'
+    `).get();
+    const linkedQuestions = database.prepare(`
+      SELECT q.type
+      FROM quiz_questions qq
+      JOIN questions q ON q.id = qq.questionId
+      WHERE qq.quizId = ?
+      ORDER BY qq.position ASC
+    `).all(quiz.id);
+    const advancedQuestionCount = database.prepare(`
+      SELECT COUNT(*) as count
+      FROM questions
+      WHERE categoryId = ?
+    `).get(categoryId);
+
+    expect(linkedQuestions).toHaveLength(45);
+    expect(linkedQuestions.map(question => question.type))
+      .toEqual(Array(5).fill(['MC', 'TF', 'FB', 'SA', 'MR', 'OR', 'ES', 'MT', 'MP']).flat());
+    expect(advancedQuestionCount.count).toBe(46);
+
+    dbModule.closeDatabase();
+  });
+
   test('attaches legacy categories and repairs published quiz question links during seed', () => {
     let dbModule = freshDbModule();
     removeDbFiles(dbModule);

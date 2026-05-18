@@ -1834,6 +1834,10 @@ function attachLegacyDataToDemoCourse(database) {
   database.prepare('UPDATE categories SET courseId = ? WHERE courseId IS NULL').run(course.id);
 }
 
+function getQuestionSeedSignature(type, text) {
+  return JSON.stringify([type, text]);
+}
+
 function ensureAdvancedDemoSeed(database) {
   const course = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
   if (!course) return;
@@ -1869,13 +1873,6 @@ function ensureAdvancedDemoSeed(database) {
   const insertCategory = database.prepare(`
     INSERT INTO categories (courseId, name, description, createdBy)
     VALUES (?, ?, ?, ?)
-  `);
-  const selectQuestion = database.prepare(`
-    SELECT id
-    FROM questions
-    WHERE categoryId = ? AND type = ? AND text = ?
-    ORDER BY id ASC
-    LIMIT 1
   `);
   const insertQuestion = database.prepare(`
     INSERT INTO questions (
@@ -1922,15 +1919,24 @@ function ensureAdvancedDemoSeed(database) {
     VALUES (?, ?, ?, 'published', '', '', 120, 99, 1, 1, ?, '', '', 120, 99, 0,
       'immediately', 'standard', 0, 0, 0, 0, '', '', '')
   `);
-  const selectQuizQuestion = database.prepare(`
-    SELECT qq.questionId
+  const selectAdvancedQuizLinks = database.prepare(`
+    SELECT qq.id, qq.questionId
     FROM quiz_questions qq
     JOIN questions q ON q.id = qq.questionId
-    WHERE qq.quizId = ? AND q.type = ? AND q.text = ?
-    LIMIT 1
+    WHERE qq.quizId = ? AND q.categoryId = ?
+    ORDER BY qq.position ASC, qq.id ASC
+  `);
+  const deleteAdvancedQuizLinks = database.prepare(`
+    DELETE FROM quiz_questions
+    WHERE quizId = ?
+      AND questionId IN (
+        SELECT id
+        FROM questions
+        WHERE categoryId = ?
+      )
   `);
   const insertQuizQuestion = database.prepare(`
-    INSERT OR IGNORE INTO quiz_questions (quizId, questionId, points, position)
+    INSERT INTO quiz_questions (quizId, questionId, points, position)
     VALUES (?, ?, ?, ?)
   `);
 
@@ -1949,14 +1955,22 @@ function ensureAdvancedDemoSeed(database) {
     }
 
     const questionIds = new Map();
-    const existingCategoryQuestions = database.prepare('SELECT id, type, text FROM questions WHERE categoryId = ? ORDER BY id ASC').all(category.id);
-    let seedIdx = 0;
-    
+    const existingQuestionsBySignature = new Map();
+    database.prepare('SELECT id, type, text FROM questions WHERE categoryId = ? ORDER BY id ASC')
+      .all(category.id)
+      .forEach(question => {
+        const signature = getQuestionSeedSignature(question.type, question.text);
+        if (!existingQuestionsBySignature.has(signature)) {
+          existingQuestionsBySignature.set(signature, []);
+        }
+        existingQuestionsBySignature.get(signature).push(Number(question.id));
+      });
+
     questionSeeds.forEach(seed => {
-      const existingQuestion = existingCategoryQuestions.length > seedIdx ? existingCategoryQuestions[seedIdx] : null;
-      seedIdx++;
-      const questionId = existingQuestion && existingQuestion.type === seed.type && existingQuestion.text === seed.text
-        ? Number(existingQuestion.id)
+      const matchingExistingQuestions = existingQuestionsBySignature.get(getQuestionSeedSignature(seed.type, seed.text)) || [];
+      const existingQuestionId = matchingExistingQuestions.shift();
+      const questionId = existingQuestionId
+        ? existingQuestionId
         : Number(insertQuestion.run(
           category.id,
           seed.text,
@@ -2013,9 +2027,21 @@ function ensureAdvancedDemoSeed(database) {
       };
     }
 
-    questionSeeds.forEach((seed, index) => {
-      insertQuizQuestion.run(quiz.id, questionIds.get(seed.key), seed.quizPoints || seed.points || 1, index + 1);
-    });
+    const expectedQuestionIds = questionSeeds.map(seed => questionIds.get(seed.key));
+    const existingAdvancedLinks = selectAdvancedQuizLinks.all(quiz.id, category.id);
+    const existingQuestionIds = existingAdvancedLinks.map(link => Number(link.questionId));
+    const expectedQuestionIdSet = new Set(expectedQuestionIds);
+    const existingQuestionIdSet = new Set(existingQuestionIds);
+    const alreadySynced = existingQuestionIds.length === expectedQuestionIds.length
+      && existingQuestionIdSet.size === expectedQuestionIdSet.size
+      && expectedQuestionIds.every(questionId => existingQuestionIdSet.has(questionId));
+
+    if (!alreadySynced) {
+      deleteAdvancedQuizLinks.run(quiz.id, category.id);
+      questionSeeds.forEach((seed, index) => {
+        insertQuizQuestion.run(quiz.id, questionIds.get(seed.key), seed.quizPoints || seed.points || 1, index + 1);
+      });
+    }
 
     database.exec('COMMIT');
   } catch (e) {
