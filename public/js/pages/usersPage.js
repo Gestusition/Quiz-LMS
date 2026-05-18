@@ -318,7 +318,6 @@ export const UsersPage = {
       };
 
       if (!data.name.trim()) return this.toast('Name is required.', 'error');
-      if (!data.username.trim()) return this.toast('Username is required.', 'error');
       if (!data.email.trim() || !data.email.includes('@')) return this.toast('Valid email is required.', 'error');
       if (!data.role) return this.toast('Role is required.', 'error');
 

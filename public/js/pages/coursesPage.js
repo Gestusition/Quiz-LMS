@@ -146,7 +146,7 @@ export const CoursesPage = {
 
       if (!data.code.trim()) return this.toast('Course code is required.', 'error');
       if (!data.title.trim()) return this.toast('Course title is required.', 'error');
-      if (data.credits <= 0) return this.toast('Credits must be greater than 0.', 'error');
+      if (data.credits < 0) return this.toast('Credits cannot be negative.', 'error');
       if (data.startDate && data.endDate && new Date(data.startDate) > new Date(data.endDate))
         return this.toast('End date must be after start date.', 'error');
 

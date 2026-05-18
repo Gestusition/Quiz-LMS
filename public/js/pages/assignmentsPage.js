@@ -199,10 +199,14 @@ export const AssignmentsPage = {
 
       const payload = this.submissionPayload();
       const isFile = value('submission-type') === 'file';
-      if (isFile && !payload.get('file') && !payload.get('submissionText').trim()) {
+      const hasFile = payload instanceof FormData && payload.has('file');
+      const text = payload instanceof FormData ? payload.get('submissionText') : payload.submissionText;
+      const url = payload instanceof FormData ? '' : payload.submissionUrl;
+
+      if (isFile && !hasFile && !(text || '').trim()) {
          return this.toast('Please provide a file or submission text.', 'error');
       }
-      if (!isFile && !payload.submissionUrl.trim() && !payload.submissionText.trim()) {
+      if (!isFile && !(url || '').trim() && !(text || '').trim()) {
          return this.toast('Please provide a link or submission text.', 'error');
       }
 
