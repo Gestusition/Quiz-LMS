@@ -498,7 +498,7 @@ describe('course, quiz, question validators and serializers', () => {
       categoryId: 1,
       text: 'Bad part points',
       type: 'MP',
-      parts: [{ partLabel: 'a', answerType: 'text', correctAnswer: 'x', points: 0 }]
+      parts: [{ partLabel: 'a', answerType: 'text', correctAnswer: 'x', points: -1 }]
     }), 'parts');
     expectFieldError(() => validateQuestion({
       categoryId: 1,

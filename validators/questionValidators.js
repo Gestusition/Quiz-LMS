@@ -15,7 +15,7 @@ function validateQuestion(data) {
   const text = requiredText(data.text, 'text', { min: 2, max: LIMITS.questions.textMax });
   const type = String(data.type || '').trim().toUpperCase();
   const difficulty = data.difficulty ? String(data.difficulty).trim().toUpperCase() : 'MEDIUM';
-  const points = numberInRange(data.points, 'points', 0.1, LIMITS.questions.pointsMax, {
+  const points = numberInRange(data.points, 'points', 0, LIMITS.questions.pointsMax, {
     required: false,
     defaultValue: 1
   });
@@ -220,8 +220,8 @@ function validateMultiPart(data) {
       throw validationError('parts', `Part ${index + 1} must have a correct answer.`);
     }
     const points = Number(part.points);
-    if (!Number.isFinite(points) || points <= 0 || points > LIMITS.questions.pointsMax) {
-      throw validationError('parts', `Part ${index + 1} points must be a positive number.`);
+    if (!Number.isFinite(points) || points < 0 || points > LIMITS.questions.pointsMax) {
+      throw validationError('parts', `Part ${index + 1} points cannot be negative.`);
     }
     ['partLabel', 'partText', 'placeholder', 'correctAnswer'].forEach(field => {
       if (String(part[field] || '').length > LIMITS.questions.optionTextMax) {

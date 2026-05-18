@@ -395,7 +395,7 @@ export const QuestionsPage = {
           <label class="form-field"><span>Grading type</span><select class="form-select" id="question-grading-type">
             ${[['standard', 'Standard'], ['negative', 'Negative marking'], ['manual', 'Manual grading']].map(([val, label]) => `<option value="${val}" ${(question.gradingType || 'standard') === val ? 'selected' : ''}>${label}</option>`).join('')}
           </select></label>
-          ${this.input('question-points', 'Points', question.points || 1, 'number')}
+          ${this.input('question-points', 'Points', question.points ?? 1, 'number', '', { step: '0.1', min: '0' })}
         </div>
         ${this.textarea('question-text', 'Question text (supports $$LaTeX$$)', question.text)}
         ${this.textarea('question-richtext', 'Extended rich text / LaTeX body (optional)', question.richText || '')}
@@ -580,7 +580,7 @@ export const QuestionsPage = {
 
       if (!data.text.trim()) return this.toast('Question text is required.', 'error');
       if (!data.categoryId) return this.toast('Category is required.', 'error');
-      if (data.points <= 0) return this.toast('Points must be greater than 0.', 'error');
+      if (data.points < 0) return this.toast('Points cannot be negative.', 'error');
       if ((data.type === 'MC' || data.type === 'MR') && data.options.filter(o => o.trim()).length < 2)
         return this.toast('At least 2 options are required.', 'error');
       if (data.type === 'MC' && data.correctAnswer === '')
@@ -783,7 +783,7 @@ export const QuestionsPage = {
           ${['text', 'numeric', 'select', 'sign'].map(t => `<option value="${t}" ${part.answerType === t ? 'selected' : ''}>${t}</option>`).join('')}
         </select>
         <input class="form-input part-correct" value="${this.esc(part.correctAnswer || '')}" placeholder="Correct answer">
-        <input class="form-input part-points" value="${part.points || 1}" placeholder="Pts" type="number" style="width:60px">
+        <input class="form-input part-points" value="${part.points ?? 1}" placeholder="Pts" type="number" step="0.1" min="0" style="width:60px">
         <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.part-editor-row').remove()">✕</button>
       </div>
     `;
