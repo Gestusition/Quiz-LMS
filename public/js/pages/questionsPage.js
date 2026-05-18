@@ -11,6 +11,23 @@ const TYPE_COLORS = {
   MT: '#ec4899', MP: '#8b5cf6', SA: '#06b6d4',
   ES: '#64748b', OR: '#f97316', MR: '#14b8a6'
 };
+const QUESTION_LIMITS = {
+  textMax: 2000,
+  optionTextMax: 500,
+  pointsMax: 100,
+  minOptions: 2,
+  maxOptions: 6,
+  maxMultiResponse: 10,
+  maxOrderItems: 20,
+  maxTableRows: 15,
+  maxTableCols: 8,
+  maxParts: 20,
+  richTextMax: 10000,
+  hintMax: 1000,
+  explanationMax: 5000
+};
+const TABLE_COLUMN_TYPES = ['label', 'input', 'prefill', 'sign'];
+const MULTI_PART_ANSWER_TYPES = ['text', 'numeric', 'select', 'sign'];
 
 export const QuestionsPage = {
   async renderQuestionBank() {
@@ -395,7 +412,7 @@ export const QuestionsPage = {
           <label class="form-field"><span>Grading type</span><select class="form-select" id="question-grading-type">
             ${[['standard', 'Standard'], ['negative', 'Negative marking'], ['manual', 'Manual grading']].map(([val, label]) => `<option value="${val}" ${(question.gradingType || 'standard') === val ? 'selected' : ''}>${label}</option>`).join('')}
           </select></label>
-          ${this.input('question-points', 'Points', question.points ?? 1, 'number', '', { step: '0.1', min: '0' })}
+          ${this.input('question-points', 'Points', question.points ?? 1, 'number', '', { step: '0.1', min: '0', max: QUESTION_LIMITS.pointsMax, required: true })}
         </div>
         ${this.textarea('question-text', 'Question text (supports $$LaTeX$$)', question.text)}
         ${this.textarea('question-richtext', 'Extended rich text / LaTeX body (optional)', question.richText || '')}
@@ -444,7 +461,10 @@ export const QuestionsPage = {
           </div>`;
         document.getElementById('btn-add-option')?.addEventListener('click', () => {
           const opts = document.querySelectorAll('.question-option');
-          if (opts.length >= 10) return;
+          if (opts.length >= QUESTION_LIMITS.maxOptions) {
+            this.toast(`Multiple choice allows at most ${QUESTION_LIMITS.maxOptions} options.`, 'error');
+            return;
+          }
           const newIndex = opts.length;
           const wrapper = document.createElement('label');
           wrapper.className = 'option-field';
@@ -482,7 +502,10 @@ export const QuestionsPage = {
           </div>`;
         document.getElementById('btn-add-mr-option')?.addEventListener('click', () => {
           const opts = document.querySelectorAll('.question-option');
-          if (opts.length >= 15) return;
+          if (opts.length >= QUESTION_LIMITS.maxMultiResponse) {
+            this.toast(`Multiple response allows at most ${QUESTION_LIMITS.maxMultiResponse} options.`, 'error');
+            return;
+          }
           const newIndex = opts.length;
           const wrapper = document.createElement('label');
           wrapper.className = 'option-field';
@@ -507,7 +530,10 @@ export const QuestionsPage = {
           </div>`;
         document.getElementById('btn-add-order-item')?.addEventListener('click', () => {
           const items = document.querySelectorAll('.ordering-item');
-          if (items.length >= 20) return;
+          if (items.length >= QUESTION_LIMITS.maxOrderItems) {
+            this.toast(`Ordering questions allow at most ${QUESTION_LIMITS.maxOrderItems} items.`, 'error');
+            return;
+          }
           const wrapper = document.createElement('div');
           wrapper.className = 'ordering-item';
           wrapper.draggable = true;
@@ -577,18 +603,14 @@ export const QuestionsPage = {
     document.getElementById('question-form').addEventListener('submit', async event => {
       event.preventDefault();
       const data = this.collectQuestionDraft();
+      const validationMessage = this.validateQuestionDraft(data);
 
-      if (!data.text.trim()) return this.toast('Question text is required.', 'error');
-      if (!data.categoryId) return this.toast('Category is required.', 'error');
-      if (data.points < 0) return this.toast('Points cannot be negative.', 'error');
-      if ((data.type === 'MC' || data.type === 'MR') && data.options.filter(o => o.trim()).length < 2)
-        return this.toast('At least 2 options are required.', 'error');
-      if (data.type === 'MC' && data.correctAnswer === '')
-        return this.toast('Select a correct answer.', 'error');
+      if (validationMessage) return this.toast(validationMessage, 'error');
 
       try {
-        if (id) await API.updateQuestion(id, data);
-        else await API.createQuestion(data);
+        const payload = this.cleanQuestionDraft(data);
+        if (id) await API.updateQuestion(id, payload);
+        else await API.createQuestion(payload);
         this.closeModal();
         this.renderQuestionBank();
       } catch (err) {
@@ -599,13 +621,14 @@ export const QuestionsPage = {
 
   collectQuestionDraft() {
     const type = value('question-type');
+    const pointValue = value('question-points');
     const data = {
       categoryId: Number(value('question-category')),
       text: value('question-text'),
       type,
       difficulty: value('question-difficulty'),
       gradingType: value('question-grading-type') || 'standard',
-      points: Number(value('question-points')),
+      points: pointValue === '' ? NaN : Number(pointValue),
       options: [],
       correctAnswer: '',
       richText: value('question-richtext') || '',
@@ -615,13 +638,22 @@ export const QuestionsPage = {
     };
 
     if (type === 'MC') {
-      data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim());
-      const selected = document.querySelector('input[name="question-correct"]:checked');
-      data.correctAnswer = selected ? selected.value : '0';
+      const rows = this.collectOptionRows('input[name="question-correct"]');
+      const filledRows = rows.filter(row => row.text);
+      data.options = filledRows.map(row => row.text);
+      const selected = rows.find(row => row.checked);
+      const selectedIndex = selected ? filledRows.findIndex(row => row.index === selected.index) : -1;
+      data.correctAnswer = selectedIndex >= 0 ? String(selectedIndex) : '';
+      data._hasBlankCorrectOption = !!selected && !selected.text;
     } else if (type === 'MR') {
-      data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim());
-      const checked = Array.from(document.querySelectorAll('input[name="question-correct-mr"]:checked'));
-      data.correctAnswer = checked.map(c => c.value).join(',');
+      const rows = this.collectOptionRows('input[name="question-correct-mr"]');
+      const filledRows = rows.filter(row => row.text);
+      data.options = filledRows.map(row => row.text);
+      data.correctAnswer = filledRows
+        .map((row, index) => row.checked ? String(index) : '')
+        .filter(Boolean)
+        .join(',');
+      data._hasBlankCorrectOption = rows.some(row => row.checked && !row.text);
     } else if (type === 'OR') {
       data.options = Array.from(document.querySelectorAll('.question-option')).map(input => input.value.trim()).filter(Boolean);
       data.correctAnswer = data.options.map((_, i) => i).join(',');
@@ -639,6 +671,240 @@ export const QuestionsPage = {
       data.caseSensitive = document.getElementById('question-case-sensitive')?.checked || false;
     }
     return data;
+  },
+
+  collectOptionRows(correctSelector) {
+    return Array.from(document.querySelectorAll('.option-field')).map((row, index) => ({
+      index,
+      text: row.querySelector('.question-option')?.value.trim() || '',
+      checked: !!row.querySelector(correctSelector)?.checked
+    }));
+  },
+
+  cleanQuestionDraft(data) {
+    const payload = { ...data };
+    delete payload._hasBlankCorrectOption;
+    if (payload.tableConfig) {
+      payload.tableConfig = { ...payload.tableConfig };
+      delete payload.tableConfig._jsonErrors;
+    }
+    return payload;
+  },
+
+  validateQuestionDraft(data) {
+    const text = String(data.text || '').trim();
+    const gradingTypes = ['standard', 'negative', 'manual'];
+
+    if (!Number.isInteger(data.categoryId) || data.categoryId <= 0) return 'Category is required.';
+    if (text.length < 2) return 'Question text must be at least 2 characters.';
+    if (text.length > QUESTION_LIMITS.textMax) return `Question text must be ${QUESTION_LIMITS.textMax} characters or less.`;
+    if (!['MC', 'TF', 'FB', 'MT', 'MP', 'SA', 'ES', 'OR', 'MR'].includes(data.type)) return 'Question type is invalid.';
+    if (!['EASY', 'MEDIUM', 'HARD'].includes(data.difficulty)) return 'Difficulty is invalid.';
+    if (!gradingTypes.includes(data.gradingType || 'standard')) return 'Grading type is invalid.';
+    if (!Number.isFinite(data.points) || data.points < 0 || data.points > QUESTION_LIMITS.pointsMax) {
+      return `Points must be between 0 and ${QUESTION_LIMITS.pointsMax}.`;
+    }
+    if (String(data.richText || '').length > QUESTION_LIMITS.richTextMax) {
+      return `Extended rich text must be ${QUESTION_LIMITS.richTextMax} characters or less.`;
+    }
+    if (String(data.hintText || '').length > QUESTION_LIMITS.hintMax) {
+      return `Hint must be ${QUESTION_LIMITS.hintMax} characters or less.`;
+    }
+    if (String(data.explanationText || '').length > QUESTION_LIMITS.explanationMax) {
+      return `Explanation must be ${QUESTION_LIMITS.explanationMax} characters or less.`;
+    }
+    if (!this.isValidQuestionMediaUrl(data.mediaUrl)) {
+      return 'Image / diagram must be an http(s) URL or a safe /uploads/ path.';
+    }
+
+    if (['MC', 'MR', 'OR'].includes(data.type)) {
+      const optionLengthError = this.validateOptionLengths(data.options || []);
+      if (optionLengthError) return optionLengthError;
+    }
+
+    if (data.type === 'MC') return this.validateSingleChoiceDraft(data);
+    if (data.type === 'MR') return this.validateMultipleResponseDraft(data);
+    if (data.type === 'OR') return this.validateOrderingDraft(data);
+    if (data.type === 'TF') return this.validateTrueFalseDraft(data);
+    if (data.type === 'FB') return this.validateFillBlankDraft(data);
+    if (data.type === 'SA') return this.validateNumericDraft(data);
+    if (data.type === 'MT') return this.validateTableDraft(data.tableConfig);
+    if (data.type === 'MP') return this.validateMultiPartDraft(data.parts);
+    return '';
+  },
+
+  validateOptionLengths(options) {
+    const index = options.findIndex(option => String(option || '').length > QUESTION_LIMITS.optionTextMax);
+    return index >= 0 ? `Option ${index + 1} must be ${QUESTION_LIMITS.optionTextMax} characters or less.` : '';
+  },
+
+  validateSingleChoiceDraft(data) {
+    const options = data.options || [];
+    if (data._hasBlankCorrectOption) return 'The selected correct option must have text.';
+    if (options.length < QUESTION_LIMITS.minOptions || options.length > QUESTION_LIMITS.maxOptions) {
+      return `Multiple choice questions need ${QUESTION_LIMITS.minOptions}-${QUESTION_LIMITS.maxOptions} options.`;
+    }
+    if (data.correctAnswer === '') return 'Select a correct answer.';
+    const answerIndex = Number(data.correctAnswer);
+    if (!Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex >= options.length) {
+      return 'Correct answer must match one of the options.';
+    }
+    return '';
+  },
+
+  validateMultipleResponseDraft(data) {
+    const options = data.options || [];
+    if (data._hasBlankCorrectOption) return 'Correct answers must have option text.';
+    if (options.length < QUESTION_LIMITS.minOptions || options.length > QUESTION_LIMITS.maxMultiResponse) {
+      return `Multiple response questions need ${QUESTION_LIMITS.minOptions}-${QUESTION_LIMITS.maxMultiResponse} options.`;
+    }
+    const indexes = String(data.correctAnswer || '').split(',').map(item => item.trim()).filter(Boolean);
+    if (indexes.length === 0) return 'Select at least one correct answer.';
+    const seen = new Set();
+    for (const item of indexes) {
+      if (!/^[0-9]+$/.test(item)) return 'Correct answers must match options.';
+      const index = Number(item);
+      if (seen.has(index)) return 'Correct answers cannot contain duplicates.';
+      if (index < 0 || index >= options.length) return 'Correct answers must match options.';
+      seen.add(index);
+    }
+    return '';
+  },
+
+  validateOrderingDraft(data) {
+    const options = data.options || [];
+    if (options.length < QUESTION_LIMITS.minOptions || options.length > QUESTION_LIMITS.maxOrderItems) {
+      return `Ordering questions need ${QUESTION_LIMITS.minOptions}-${QUESTION_LIMITS.maxOrderItems} items.`;
+    }
+    return '';
+  },
+
+  validateTrueFalseDraft(data) {
+    const answer = String(data.correctAnswer || '').trim().toLowerCase();
+    return ['true', 'false'].includes(answer) ? '' : 'True/false answer must be true or false.';
+  },
+
+  validateFillBlankDraft(data) {
+    const answer = String(data.correctAnswer || '').trim();
+    if (!answer) return 'Correct answer is required.';
+    if (answer.length > QUESTION_LIMITS.optionTextMax) {
+      return `Correct answer must be ${QUESTION_LIMITS.optionTextMax} characters or less.`;
+    }
+    return '';
+  },
+
+  validateNumericDraft(data) {
+    const answer = String(data.correctAnswer || '').trim();
+    if (!answer) return 'Correct numeric answer is required.';
+    return Number.isFinite(Number(answer)) ? '' : 'Numeric correct answers must be plain numbers.';
+  },
+
+  parseJsonObjectField(id, label) {
+    const raw = document.getElementById(id)?.value.trim() || '';
+    if (!raw) return { value: {}, error: '' };
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { value: {}, error: `${label} must be a JSON object.` };
+      }
+      return { value: parsed, error: '' };
+    } catch (err) {
+      return { value: {}, error: `${label} must contain valid JSON.` };
+    }
+  },
+
+  validateTableDraft(config) {
+    if (!config) return 'Table configuration is required for math table questions.';
+    if (config._jsonErrors?.length) return config._jsonErrors[0];
+
+    const columns = Array.isArray(config.columns) ? config.columns : [];
+    if (columns.length < 1 || columns.length > QUESTION_LIMITS.maxTableCols) {
+      return `Table must have 1-${QUESTION_LIMITS.maxTableCols} columns.`;
+    }
+
+    for (let index = 0; index < columns.length; index += 1) {
+      const column = columns[index];
+      const header = String(column.header || '').trim();
+      const type = String(column.type || '').trim();
+      if (!header || header.length > QUESTION_LIMITS.optionTextMax) {
+        return `Column ${index + 1} must have a valid header.`;
+      }
+      if (!TABLE_COLUMN_TYPES.includes(type)) {
+        return `Column ${index + 1} type must be one of: ${TABLE_COLUMN_TYPES.join(', ')}.`;
+      }
+    }
+
+    const rowCount = Number(config.rowCount);
+    if (!Number.isInteger(rowCount) || rowCount < 1 || rowCount > QUESTION_LIMITS.maxTableRows) {
+      return `Table must have 1-${QUESTION_LIMITS.maxTableRows} rows.`;
+    }
+
+    return this.validateTableCellMap(config.correctData, columns, rowCount, 'Correct answers', true)
+      || this.validateTableCellMap(config.prefill, columns, rowCount, 'Pre-filled values', false);
+  },
+
+  validateTableCellMap(cellMap, columns, rowCount, label, required) {
+    if (!cellMap || typeof cellMap !== 'object' || Array.isArray(cellMap)) {
+      return `${label} must be a JSON object.`;
+    }
+    const entries = Object.entries(cellMap);
+    if (required && entries.length === 0) return 'Math table questions require at least one correct cell.';
+
+    for (const [key, cellValue] of entries) {
+      const match = /^r([0-9]+)_c([0-9]+)$/.exec(key);
+      if (!match) return `${label} cell keys must match r{row}_c{column}.`;
+      const row = Number(match[1]);
+      const column = Number(match[2]);
+      if (row < 0 || row >= rowCount || column < 0 || column >= columns.length) {
+        return `${label} cell keys must fit the configured table shape.`;
+      }
+      if (String(cellValue ?? '').length > QUESTION_LIMITS.optionTextMax) {
+        return `${label} values must be ${QUESTION_LIMITS.optionTextMax} characters or less.`;
+      }
+    }
+
+    return '';
+  },
+
+  validateMultiPartDraft(parts) {
+    if (!Array.isArray(parts) || parts.length < 1 || parts.length > QUESTION_LIMITS.maxParts) {
+      return `Multi-part questions need 1-${QUESTION_LIMITS.maxParts} parts.`;
+    }
+
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index];
+      const label = String(part.partLabel || '').trim();
+      const answerType = String(part.answerType || 'text').trim();
+      const correctAnswer = String(part.correctAnswer || '').trim();
+      const points = Number(part.points);
+      if (!label) return `Part ${index + 1} must have a label.`;
+      if (!MULTI_PART_ANSWER_TYPES.includes(answerType)) {
+        return `Part ${index + 1} answer type must be one of: ${MULTI_PART_ANSWER_TYPES.join(', ')}.`;
+      }
+      if (!correctAnswer) return `Part ${index + 1} must have a correct answer.`;
+      if (!Number.isFinite(points) || points < 0 || points > QUESTION_LIMITS.pointsMax) {
+        return `Part ${index + 1} points must be between 0 and ${QUESTION_LIMITS.pointsMax}.`;
+      }
+      for (const field of ['partLabel', 'partText', 'correctAnswer']) {
+        if (String(part[field] || '').length > QUESTION_LIMITS.optionTextMax) {
+          return `Part ${index + 1} ${field} must be ${QUESTION_LIMITS.optionTextMax} characters or less.`;
+        }
+      }
+    }
+
+    return '';
+  },
+
+  isValidQuestionMediaUrl(url) {
+    const text = String(url || '').trim();
+    if (!text) return true;
+    if (text.startsWith('/')) return text.startsWith('/uploads/') && !text.includes('\\');
+    try {
+      const parsed = new URL(text);
+      return ['http:', 'https:'].includes(parsed.protocol);
+    } catch (err) {
+      return false;
+    }
   },
 
   questionPreviewHtml(question) {
@@ -696,7 +962,7 @@ export const QuestionsPage = {
       <div class="stack table-builder">
         <label class="form-field"><span>Table Configuration</span></label>
         <div class="form-grid">
-          ${this.input('table-rows', 'Number of rows', config.rowCount, 'number')}
+          ${this.input('table-rows', 'Number of rows', config.rowCount, 'number', '', { min: '1', max: QUESTION_LIMITS.maxTableRows, step: '1', required: true })}
         </div>
         <div id="table-columns-editor">
           <label class="form-field"><span>Columns</span></label>
@@ -783,7 +1049,7 @@ export const QuestionsPage = {
           ${['text', 'numeric', 'select', 'sign'].map(t => `<option value="${t}" ${part.answerType === t ? 'selected' : ''}>${t}</option>`).join('')}
         </select>
         <input class="form-input part-correct" value="${this.esc(part.correctAnswer || '')}" placeholder="Correct answer">
-        <input class="form-input part-points" value="${part.points ?? 1}" placeholder="Pts" type="number" step="0.1" min="0" style="width:60px">
+        <input class="form-input part-points" value="${part.points ?? 1}" placeholder="Pts" type="number" step="0.1" min="0" max="${QUESTION_LIMITS.pointsMax}" style="width:60px">
         <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.part-editor-row').remove()">✕</button>
       </div>
     `;
@@ -794,14 +1060,14 @@ export const QuestionsPage = {
       header: item.querySelector('.table-col-header').value.trim(),
       type: item.querySelector('.table-col-type').value
     }));
-    let correctData = {}, prefill = {};
-    try { correctData = JSON.parse(document.getElementById('table-correct-data')?.value || '{}'); } catch (e) { /* empty */ }
-    try { prefill = JSON.parse(document.getElementById('table-prefill-data')?.value || '{}'); } catch (e) { /* empty */ }
+    const correct = this.parseJsonObjectField('table-correct-data', 'Correct answers');
+    const prefill = this.parseJsonObjectField('table-prefill-data', 'Pre-filled values');
     return {
       columns,
       rowCount: Number(value('table-rows') || 3),
-      prefill,
-      correctData
+      prefill: prefill.value,
+      correctData: correct.value,
+      _jsonErrors: [correct.error, prefill.error].filter(Boolean)
     };
   },
 
@@ -811,7 +1077,7 @@ export const QuestionsPage = {
       partText: row.querySelector('.part-text')?.value || '',
       answerType: row.querySelector('.part-answer-type')?.value || 'text',
       correctAnswer: row.querySelector('.part-correct')?.value || '',
-      points: Number(row.querySelector('.part-points')?.value || 1)
+      points: row.querySelector('.part-points')?.value === '' ? NaN : Number(row.querySelector('.part-points')?.value || 1)
     }));
   },
 

@@ -204,7 +204,7 @@ The database source of truth is `database/db.js`. On startup the app opens an in
 | `assessment` | `data/quiz.assessment.sqlite` | `questions`, `question_user_settings`, `question_parts`, `question_table_config`, `quizzes`, `quiz_questions`, `quiz_attempts`, `attempt_answers`, `assignments`, `assignment_submissions`, `grade_schemes`, `grade_thresholds`, `exam_templates` |
 | `content` | `data/quiz.content.sqlite` | `announcements`, `resources`, `week_resources`, `course_threads`, `course_thread_replies` |
 
-The diagram below uses the initialized table and column names. Relationships that cross attached SQLite contexts are logical application relationships; SQLite enforces only the foreign keys declared inside the same attached database file.
+The diagram below uses initialized table and column names, but shows representative columns rather than every column. Relationships that cross attached SQLite contexts are logical application relationships; SQLite enforces only the foreign keys declared inside the same attached database file. Week-scoped course materials are modeled through `week_resources`; `resources.weekId` may exist on migrated or initialized databases as a legacy compatibility column, but the current application does not use it as the week-resource relationship.
 
 ```mermaid
 erDiagram
@@ -400,6 +400,7 @@ erDiagram
         int courseId FK
         string name
         string status
+        bool isDefault
     }
     grade_thresholds {
         int id PK
@@ -416,7 +417,6 @@ erDiagram
     resources {
         int id PK
         int courseId FK
-        int weekId FK
         string title
         string type
     }
@@ -488,7 +488,6 @@ erDiagram
 
     courses ||--o{ announcements : publishes
     courses ||--o{ resources : provides
-    course_weeks ||--o{ resources : can_group
     course_weeks ||--o{ week_resources : has
     courses ||--o{ course_threads : discusses
     course_threads ||--o{ course_thread_replies : contains
