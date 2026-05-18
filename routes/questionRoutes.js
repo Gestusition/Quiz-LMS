@@ -4,6 +4,7 @@ const questionService = require('../services/questionService');
 const categoryService = require('../services/categoryService');
 const { validateId, requireFields, sanitizeStrings } = require('../middleware/validation');
 const { requireAuth, requireRole, canManageCourse } = require('../middleware/auth');
+const { sendError } = require('../utils/appError');
 const { parseOptionalPositiveInt, parseRequiredPositiveInt } = require('../utils/validation');
 
 router.use(requireAuth);
@@ -201,7 +202,7 @@ router.get('/:id', requireRole(['admin', 'teacher']), validateId, (req, res) => 
     if (!ensureQuestionReader(req, res, question)) return;
     res.json(question);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
