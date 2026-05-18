@@ -192,105 +192,306 @@ quiz-lms/
 
 ## Database Architecture (ER Diagram)
 
-The application uses multiple SQLite databases separated by context (Users, Learning, Assessment, etc.). Below is a simplified Entity-Relationship diagram highlighting the core data flows:
+The database source of truth is `database/db.js`. On startup the app opens an in-memory SQLite connection and attaches one SQLite file per context:
+
+| Attached schema | Default file | Tables |
+| --- | --- | --- |
+| `users` | `data/quiz.users.sqlite` | `users`, `sessions`, `system_settings`, `password_reset_codes`, `user_restrictions`, `validation_issues`, `import_batches`, `import_errors`, `audit_logs`, `resource_access_grants` |
+| `admin` | `data/quiz.admin.sqlite` | `admin_profiles` |
+| `teacher` | `data/quiz.teacher.sqlite` | `teacher_profiles` |
+| `student` | `data/quiz.student.sqlite` | `student_profiles` |
+| `learning` | `data/quiz.learning.sqlite` | `faculties`, `departments`, `class_years`, `sections`, `academic_terms`, `courses`, `course_offerings`, `course_offering_enrollments`, `enrollments`, `categories`, `attendance_sessions`, `attendance_records`, `course_weeks` |
+| `assessment` | `data/quiz.assessment.sqlite` | `questions`, `question_user_settings`, `question_parts`, `question_table_config`, `quizzes`, `quiz_questions`, `quiz_attempts`, `attempt_answers`, `assignments`, `assignment_submissions`, `grade_schemes`, `grade_thresholds`, `exam_templates` |
+| `content` | `data/quiz.content.sqlite` | `announcements`, `resources`, `week_resources`, `course_threads`, `course_thread_replies` |
+
+The diagram below uses the initialized table and column names. Relationships that cross attached SQLite contexts are logical application relationships; SQLite enforces only the foreign keys declared inside the same attached database file.
 
 ```mermaid
 erDiagram
     users {
         int id PK
+        string name
+        string username UK
+        string email UK
         string role
         string status
+    }
+    admin_profiles {
+        int id PK
+        int userId FK
+        int facultyId FK
+        int departmentId FK
     }
     student_profiles {
         int id PK
         int userId FK
         string studentNumber
+        int facultyId FK
+        int departmentId FK
+        int classYearId FK
+        int sectionId FK
     }
     teacher_profiles {
         int id PK
         int userId FK
         string staffNumber
+        int facultyId FK
+        int departmentId FK
     }
-    
+
+    faculties {
+        int id PK
+        string code UK
+        string name
+    }
+    departments {
+        int id PK
+        int facultyId FK
+        string code
+        string name
+    }
+    class_years {
+        int id PK
+        int departmentId FK
+        int yearNumber
+        string name
+    }
+    sections {
+        int id PK
+        int classYearId FK
+        string name
+    }
+    academic_terms {
+        int id PK
+        string name
+        string academicYear
+        string semesterType
+        int isActive
+    }
     courses {
         int id PK
         string code
+        string title
         int departmentId FK
+        int credits
+        string visibility
     }
     course_offerings {
         int id PK
         int courseId FK
         int termId FK
         int instructorId FK
+        int departmentId FK
+        int classYearId FK
+        int sectionId FK
+        string status
     }
-    academic_terms {
-        int id PK
-        string name
-    }
-    enrollments {
+    course_offering_enrollments {
         int id PK
         int courseOfferingId FK
         int studentId FK
+        string status
+        string finalGrade
     }
-    
-    faculties {
+    enrollments {
         int id PK
+        int courseId FK
+        int userId FK
+        string role
+        string status
+    }
+    attendance_sessions {
+        int id PK
+        int courseOfferingId FK
+        int termId FK
+        string sessionDate
+        string status
+    }
+    attendance_records {
+        int id PK
+        int sessionId FK
+        int studentId FK
+        string status
+    }
+    course_weeks {
+        int id PK
+        int courseId FK
+        int weekNumber
+        string title
+        int visible
+    }
+    categories {
+        int id PK
+        int courseId FK
         string name
     }
-    departments {
-        int id PK
-        int facultyId FK
-    }
-    
+
     quizzes {
         int id PK
         int courseId FK
+        string title
         string status
+        int durationMinutes
+        int maxAttempts
+        string gradingMode
     }
     questions {
         int id PK
         int categoryId FK
         string type
+        float points
+        string difficulty
+    }
+    question_parts {
+        int id PK
+        int questionId FK
+        string answerType
+        float points
+    }
+    question_table_config {
+        int id PK
+        int questionId FK
+        int rowCount
+    }
+    question_user_settings {
+        int id PK
+        int questionId FK
+        int userId FK
+        float points
     }
     quiz_questions {
         int id PK
         int quizId FK
         int questionId FK
+        float points
+        int position
     }
-    
     quiz_attempts {
         int id PK
         int quizId FK
         int userId FK
+        int attemptNumber
+        string status
         float score
+        float percentage
     }
     attempt_answers {
         int id PK
         int attemptId FK
         int questionId FK
+        float pointsAwarded
+    }
+    assignments {
+        int id PK
+        int courseOfferingId FK
+        int termId FK
+        string title
+        string status
+    }
+    assignment_submissions {
+        int id PK
+        int assignmentId FK
+        int studentId FK
+        string status
+        string grade
+    }
+    grade_schemes {
+        int id PK
+        int courseId FK
+        string name
+        string status
+    }
+    grade_thresholds {
+        int id PK
+        int gradeSchemeId FK
+        string letterGrade
+        float minScore
+        float maxScore
+    }
+    announcements {
+        int id PK
+        int courseId FK
+        string title
+    }
+    resources {
+        int id PK
+        int courseId FK
+        int weekId FK
+        string title
+        string type
+    }
+    week_resources {
+        int id PK
+        int weekId FK
+        string title
+        string type
+    }
+    course_threads {
+        int id PK
+        int courseId FK
+        string title
+        string status
+    }
+    course_thread_replies {
+        int id PK
+        int threadId FK
     }
 
+    users ||--o| admin_profiles : has
     users ||--o| student_profiles : has
     users ||--o| teacher_profiles : has
-    
+
     faculties ||--o{ departments : contains
+    departments ||--o{ class_years : contains
+    class_years ||--o{ sections : contains
     departments ||--o{ courses : offers
-    
+
     courses ||--o{ course_offerings : scheduled_as
     academic_terms ||--o{ course_offerings : in
-    
-    course_offerings ||--o{ enrollments : has
+    users ||--o{ course_offerings : instructs
+    departments ||--o{ course_offerings : hosts
+    class_years ||--o{ course_offerings : for_year
+    sections ||--o{ course_offerings : for_section
+
+    course_offerings ||--o{ course_offering_enrollments : has
+    users ||--o{ course_offering_enrollments : as_student
+    courses ||--o{ enrollments : has
     users ||--o{ enrollments : as_student
-    users ||--o{ course_offerings : as_instructor
-    
+
+    course_offerings ||--o{ attendance_sessions : has
+    academic_terms ||--o{ attendance_sessions : during
+    attendance_sessions ||--o{ attendance_records : contains
+    users ||--o{ attendance_records : marked_for
+
+    courses ||--o{ course_weeks : has
+    courses ||--o{ categories : groups
+    categories ||--o{ questions : contains
     courses ||--o{ quizzes : contains
-    questions ||--o{ quiz_questions : added_to
+    questions ||--o{ question_parts : has
+    questions ||--o| question_table_config : has
+    questions ||--o{ question_user_settings : customized_for
     quizzes ||--o{ quiz_questions : contains
-    
+    questions ||--o{ quiz_questions : added_to
+
     users ||--o{ quiz_attempts : makes
     quizzes ||--o{ quiz_attempts : receives
     quiz_attempts ||--o{ attempt_answers : contains
     questions ||--o{ attempt_answers : answered_in
+
+    course_offerings ||--o{ assignments : has
+    academic_terms ||--o{ assignments : during
+    assignments ||--o{ assignment_submissions : receives
+    users ||--o{ assignment_submissions : submits
+
+    courses ||--o{ grade_schemes : grades_with
+    grade_schemes ||--o{ grade_thresholds : defines
+
+    courses ||--o{ announcements : publishes
+    courses ||--o{ resources : provides
+    course_weeks ||--o{ resources : can_group
+    course_weeks ||--o{ week_resources : has
+    courses ||--o{ course_threads : discusses
+    course_threads ||--o{ course_thread_replies : contains
 ```
 
 ## Security Notes
