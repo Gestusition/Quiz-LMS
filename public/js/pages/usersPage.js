@@ -210,6 +210,12 @@ export const UsersPage = {
 
       document.getElementById('restriction-form').addEventListener('submit', async event => {
         event.preventDefault();
+
+        if (!value('restriction-type')) return this.toast('Restriction type is required.', 'error');
+        if (!value('restriction-scope-type')) return this.toast('Restriction scope type is required.', 'error');
+        if (value('restriction-scope-type') !== 'global' && !value('restriction-scope-id')) return this.toast('Scope ID is required for non-global restrictions.', 'error');
+        if (!value('restriction-reason').trim()) return this.toast('Reason is required.', 'error');
+
         try {
           await API.createRestriction({
             userId: id,
@@ -310,7 +316,15 @@ export const UsersPage = {
         role: value('user-role'),
         status: value('user-status')
       };
+
+      if (!data.name.trim()) return this.toast('Name is required.', 'error');
+      if (!data.username.trim()) return this.toast('Username is required.', 'error');
+      if (!data.email.trim() || !data.email.includes('@')) return this.toast('Valid email is required.', 'error');
+      if (!data.role) return this.toast('Role is required.', 'error');
+
       const newPassword = value('user-password');
+      if (!id && !newPassword) return this.toast('Password is required for new users.', 'error');
+
       if (newPassword) {
         data.password = newPassword;
       }

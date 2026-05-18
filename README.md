@@ -190,6 +190,109 @@ quiz-lms/
 `-- server.js       Express app entry point
 ```
 
+## Database Architecture (ER Diagram)
+
+The application uses multiple SQLite databases separated by context (Users, Learning, Assessment, etc.). Below is a simplified Entity-Relationship diagram highlighting the core data flows:
+
+```mermaid
+erDiagram
+    users {
+        int id PK
+        string role
+        string status
+    }
+    student_profiles {
+        int id PK
+        int userId FK
+        string studentNumber
+    }
+    teacher_profiles {
+        int id PK
+        int userId FK
+        string staffNumber
+    }
+    
+    courses {
+        int id PK
+        string code
+        int departmentId FK
+    }
+    course_offerings {
+        int id PK
+        int courseId FK
+        int termId FK
+        int instructorId FK
+    }
+    academic_terms {
+        int id PK
+        string name
+    }
+    enrollments {
+        int id PK
+        int courseOfferingId FK
+        int studentId FK
+    }
+    
+    faculties {
+        int id PK
+        string name
+    }
+    departments {
+        int id PK
+        int facultyId FK
+    }
+    
+    quizzes {
+        int id PK
+        int courseId FK
+        string status
+    }
+    questions {
+        int id PK
+        int categoryId FK
+        string type
+    }
+    quiz_questions {
+        int id PK
+        int quizId FK
+        int questionId FK
+    }
+    
+    quiz_attempts {
+        int id PK
+        int quizId FK
+        int userId FK
+        float score
+    }
+    attempt_answers {
+        int id PK
+        int attemptId FK
+        int questionId FK
+    }
+
+    users ||--o| student_profiles : has
+    users ||--o| teacher_profiles : has
+    
+    faculties ||--o{ departments : contains
+    departments ||--o{ courses : offers
+    
+    courses ||--o{ course_offerings : scheduled_as
+    academic_terms ||--o{ course_offerings : in
+    
+    course_offerings ||--o{ enrollments : has
+    users ||--o{ enrollments : as_student
+    users ||--o{ course_offerings : as_instructor
+    
+    courses ||--o{ quizzes : contains
+    questions ||--o{ quiz_questions : added_to
+    quizzes ||--o{ quiz_questions : contains
+    
+    users ||--o{ quiz_attempts : makes
+    quizzes ||--o{ quiz_attempts : receives
+    quiz_attempts ||--o{ attempt_answers : contains
+    questions ||--o{ attempt_answers : answered_in
+```
+
 ## Security Notes
 
 - Passwords are stored as salted and peppered `scrypt` hashes, never plaintext.

@@ -267,6 +267,13 @@ export const QuizzesPage = {
       const data = this._getStep1Data();
       if (!data) return;
 
+      if (!data.title.trim()) return this.toast('Title is required.', 'error');
+      if (data.durationMinutes <= 0) return this.toast('Duration must be greater than 0.', 'error');
+      if (data.maxAttempts < 1) return this.toast('Max attempts must be at least 1.', 'error');
+      if (data.weight < 0 || data.weight > 100) return this.toast('Weight must be between 0 and 100.', 'error');
+      if (data.startAt && data.endAt && new Date(data.startAt) >= new Date(data.endAt))
+        return this.toast('Close date must be after open date.', 'error');
+
       try {
         if (!id && data.status === 'published') {
           this.toast('Create the quiz as a draft, assign questions, then publish.', 'error');

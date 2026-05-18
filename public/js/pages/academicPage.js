@@ -170,6 +170,7 @@ export const AcademicPage = {
       event.preventDefault();
       try {
         const data = { name: value('faculty-name'), code: value('faculty-code') };
+        if (!data.name.trim() || !data.code.trim()) return this.toast('Name and Code are required.', 'error');
         id ? await API.updateFaculty(id, data) : await API.createFaculty(data);
         this.closeModal();
         this.renderAcademic();
@@ -192,6 +193,7 @@ export const AcademicPage = {
       event.preventDefault();
       try {
         const data = { facultyId: Number(value('department-faculty')), name: value('department-name'), code: value('department-code') };
+        if (!data.facultyId || !data.name.trim() || !data.code.trim()) return this.toast('Faculty, Name, and Code are required.', 'error');
         id ? await API.updateDepartment(id, data) : await API.createDepartment(data);
         this.closeModal();
         this.renderAcademic();
@@ -218,6 +220,7 @@ export const AcademicPage = {
           yearNumber: Number(value('class-year-number')),
           name: value('class-year-name')
         };
+        if (!data.departmentId || data.yearNumber <= 0 || !data.name.trim()) return this.toast('Valid Department, Year number, and Name are required.', 'error');
         id ? await API.updateClassYear(id, data) : await API.createClassYear(data);
         this.closeModal();
         this.renderAcademic();
@@ -239,6 +242,7 @@ export const AcademicPage = {
       event.preventDefault();
       try {
         const data = { classYearId: Number(value('section-class-year')), name: value('section-name') };
+        if (!data.classYearId || !data.name.trim()) return this.toast('Class Year and Section name are required.', 'error');
         id ? await API.updateSection(id, data) : await API.createSection(data);
         this.closeModal();
         this.renderAcademic();
@@ -274,6 +278,8 @@ export const AcademicPage = {
           endDate: value('term-end'),
           isActive: document.getElementById('term-active').checked
         };
+        if (!data.name.trim() || !data.academicYear.trim()) return this.toast('Term name and Academic year are required.', 'error');
+        if (data.startDate && data.endDate && new Date(data.startDate) > new Date(data.endDate)) return this.toast('End date must be after start date.', 'error');
         id ? await API.updateTerm(id, data) : await API.createTerm(data);
         this.closeModal();
         this.renderAcademic();
@@ -396,6 +402,8 @@ export const AcademicPage = {
           capacity: Number(value('offering-capacity')),
           status: value('offering-status')
         };
+        if (!data.courseId || !data.termId) return this.toast('Course and Term are required.', 'error');
+        if (data.capacity < 1) return this.toast('Capacity must be at least 1.', 'error');
         id ? await API.updateCourseOffering(id, data) : await API.createCourseOffering(data);
         this.closeModal();
         this.renderAcademic();

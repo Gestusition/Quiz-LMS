@@ -143,6 +143,13 @@ export const CoursesPage = {
         startDate: value('course-start-date'),
         endDate: value('course-end-date')
       };
+
+      if (!data.code.trim()) return this.toast('Course code is required.', 'error');
+      if (!data.title.trim()) return this.toast('Course title is required.', 'error');
+      if (data.credits <= 0) return this.toast('Credits must be greater than 0.', 'error');
+      if (data.startDate && data.endDate && new Date(data.startDate) > new Date(data.endDate))
+        return this.toast('End date must be after start date.', 'error');
+
       try {
         if (isEdit) await API.updateCourse(id, data);
         else await API.createCourse(data);

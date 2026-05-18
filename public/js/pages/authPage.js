@@ -86,8 +86,11 @@ export const AuthPage = {
 
     document.getElementById('reset-request-form').addEventListener('submit', async event => {
       event.preventDefault();
+      const identifier = value('reset-request-username');
+      if (!identifier.trim()) return this.toast('Email or Academic ID is required.', 'error');
+
       try {
-        const result = await API.requestPasswordReset(value('reset-request-username'));
+        const result = await API.requestPasswordReset(identifier);
         this.closeModal();
         this.toast(result.message, 'success');
       } catch (err) {
@@ -113,8 +116,14 @@ export const AuthPage = {
 
     document.getElementById('reset-complete-form').addEventListener('submit', async event => {
       event.preventDefault();
-        const username = value('reset-username');
+      const username = value('reset-username');
+      const code = value('reset-code');
       const newPassword = value('reset-new-password');
+
+      if (!username.trim()) return this.toast('Email or Academic ID is required.', 'error');
+      if (!code.trim()) return this.toast('Reset code is required.', 'error');
+      if (!newPassword) return this.toast('New password is required.', 'error');
+
       if (newPassword !== value('reset-confirm-password')) {
         this.toast('New password confirmation does not match.', 'error');
         return;
@@ -162,7 +171,14 @@ export const AuthPage = {
 
     document.getElementById('credential-form').addEventListener('submit', async event => {
       event.preventDefault();
+      const newUsername = value('new-username');
+      const currentPassword = value('current-password');
       const newPassword = value('new-password');
+
+      if (!newUsername.trim()) return this.toast('New username is required.', 'error');
+      if (!currentPassword) return this.toast('Current password is required.', 'error');
+      if (!newPassword) return this.toast('New password is required.', 'error');
+
       if (newPassword !== value('confirm-password')) {
         this.toast('New password confirmation does not match.', 'error');
         return;
@@ -170,8 +186,8 @@ export const AuthPage = {
 
       try {
         const user = await API.changeCredentials({
-          username: value('new-username'),
-          currentPassword: value('current-password'),
+          username: newUsername,
+          currentPassword: currentPassword,
           newPassword
         });
         this.user = user;

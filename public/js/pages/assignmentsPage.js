@@ -158,14 +158,18 @@ export const AssignmentsPage = {
     `);
     document.getElementById('assignment-form').addEventListener('submit', async event => {
       event.preventDefault();
+      const data = {
+        courseOfferingId: Number(value('assignment-offering')),
+        title: value('assignment-title'),
+        description: value('assignment-description'),
+        dueDate: value('assignment-due'),
+        status: value('assignment-status')
+      };
+
+      if (!data.courseOfferingId) return this.toast('Course offering is required.', 'error');
+      if (!data.title.trim()) return this.toast('Title is required.', 'error');
+
       try {
-        const data = {
-          courseOfferingId: Number(value('assignment-offering')),
-          title: value('assignment-title'),
-          description: value('assignment-description'),
-          dueDate: value('assignment-due'),
-          status: value('assignment-status')
-        };
         id ? await API.updateAssignment(id, data) : await API.createAssignment(data);
         this.closeModal();
         this.renderAssignments();
@@ -192,11 +196,21 @@ export const AssignmentsPage = {
       event.preventDefault();
       const form = event.currentTarget;
       if (form.dataset.submitting === 'true') return;
+
+      const payload = this.submissionPayload();
+      const isFile = value('submission-type') === 'file';
+      if (isFile && !payload.get('file') && !payload.get('submissionText').trim()) {
+         return this.toast('Please provide a file or submission text.', 'error');
+      }
+      if (!isFile && !payload.submissionUrl.trim() && !payload.submissionText.trim()) {
+         return this.toast('Please provide a link or submission text.', 'error');
+      }
+
       const submitButton = form.querySelector('button[type="submit"]');
       form.dataset.submitting = 'true';
       if (submitButton) submitButton.disabled = true;
       try {
-        await API.submitAssignment(assignmentId, this.submissionPayload());
+        await API.submitAssignment(assignmentId, payload);
         this.closeModal();
         this.route();
         this.toast('Submission saved.', 'success');
@@ -257,12 +271,18 @@ export const AssignmentsPage = {
     `);
     document.getElementById('grade-form').addEventListener('submit', async event => {
       event.preventDefault();
+      const gradeData = {
+        grade: value('submission-grade'),
+        feedback: value('submission-feedback'),
+        status: value('submission-status')
+      };
+
+      if (!gradeData.grade.trim() && gradeData.status === 'graded') {
+        return this.toast('Grade is required when status is graded.', 'error');
+      }
+
       try {
-        await API.gradeSubmission(submissionId, {
-          grade: value('submission-grade'),
-          feedback: value('submission-feedback'),
-          status: value('submission-status')
-        });
+        await API.gradeSubmission(submissionId, gradeData);
         this.showSubmissions(assignmentId);
         this.toast('Submission graded.', 'success');
       } catch (err) { this.toast(err.message, 'error'); }

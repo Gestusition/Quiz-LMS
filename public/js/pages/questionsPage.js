@@ -542,6 +542,14 @@ export const QuestionsPage = {
       event.preventDefault();
       const data = this.collectQuestionDraft();
 
+      if (!data.text.trim()) return this.toast('Question text is required.', 'error');
+      if (!data.categoryId) return this.toast('Category is required.', 'error');
+      if (data.points <= 0) return this.toast('Points must be greater than 0.', 'error');
+      if ((data.type === 'MC' || data.type === 'MR') && data.options.filter(o => o.trim()).length < 2)
+        return this.toast('At least 2 options are required.', 'error');
+      if (data.type === 'MC' && data.correctAnswer === '')
+        return this.toast('Select a correct answer.', 'error');
+
       try {
         if (id) await API.updateQuestion(id, data);
         else await API.createQuestion(data);
