@@ -431,22 +431,26 @@ export const QuestionsPage = {
         const options = question.type === 'MC' ? question.options : ['', '', '', ''];
         container.innerHTML = `
           <div class="stack"><label class="form-field"><span>Options & correct answer</span></label>
-            ${options.map((option, index) => `
-              <label class="option-field">
-                <input type="radio" name="question-correct" value="${index}" ${String(question.correctAnswer) === String(index) ? 'checked' : ''}>
-                <input class="form-input question-option" value="${this.esc(option)}" placeholder="Option ${index + 1}">
-              </label>
-            `).join('')}
+            <div class="options-list stack">
+              ${options.map((option, index) => `
+                <label class="option-field" style="display: flex; gap: 0.5rem; align-items: center;">
+                  <input type="radio" name="question-correct" value="${index}" ${String(question.correctAnswer) === String(index) ? 'checked' : ''} title="Mark as correct answer">
+                  <input class="form-input question-option" value="${this.esc(option)}" placeholder="Option ${index + 1}" style="flex: 1;">
+                  <button type="button" class="btn btn-ghost btn-sm btn-remove-option" style="padding: 0.25rem 0.5rem;" title="Remove option">✕</button>
+                </label>
+              `).join('')}
+            </div>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-add-option">+ Add option</button>
           </div>`;
         document.getElementById('btn-add-option')?.addEventListener('click', () => {
           const opts = document.querySelectorAll('.question-option');
-          if (opts.length >= 6) return;
+          if (opts.length >= 10) return;
           const newIndex = opts.length;
           const wrapper = document.createElement('label');
           wrapper.className = 'option-field';
-          wrapper.innerHTML = `<input type="radio" name="question-correct" value="${newIndex}"><input class="form-input question-option" placeholder="Option ${newIndex + 1}">`;
-          document.getElementById('btn-add-option').before(wrapper);
+          wrapper.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
+          wrapper.innerHTML = `<input type="radio" name="question-correct" value="${newIndex}" title="Mark as correct answer"><input class="form-input question-option" placeholder="Option ${newIndex + 1}" style="flex: 1;"><button type="button" class="btn btn-ghost btn-sm btn-remove-option" style="padding: 0.25rem 0.5rem;" title="Remove option">✕</button>`;
+          container.querySelector('.options-list').appendChild(wrapper);
         });
       } else if (type === 'TF') {
         container.innerHTML = `<label class="form-field"><span>Correct answer</span><select class="form-select" id="question-answer"><option value="true">true</option><option value="false" ${question.correctAnswer === 'false' ? 'selected' : ''}>false</option></select></label>`;
@@ -465,32 +469,37 @@ export const QuestionsPage = {
         const correctSet = new Set(String(question.type === 'MR' ? question.correctAnswer : '').split(',').filter(Boolean));
         container.innerHTML = `
           <div class="stack"><label class="form-field"><span>Options (check all correct)</span></label>
-            ${options.map((option, index) => `
-              <label class="option-field">
-                <input type="checkbox" name="question-correct-mr" value="${index}" ${correctSet.has(String(index)) ? 'checked' : ''}>
-                <input class="form-input question-option" value="${this.esc(option)}" placeholder="Option ${index + 1}">
-              </label>
-            `).join('')}
+            <div class="options-list stack">
+              ${options.map((option, index) => `
+                <label class="option-field" style="display: flex; gap: 0.5rem; align-items: center;">
+                  <input type="checkbox" name="question-correct-mr" value="${index}" ${correctSet.has(String(index)) ? 'checked' : ''} title="Mark as a correct answer">
+                  <input class="form-input question-option" value="${this.esc(option)}" placeholder="Option ${index + 1}" style="flex: 1;">
+                  <button type="button" class="btn btn-ghost btn-sm btn-remove-option" style="padding: 0.25rem 0.5rem;" title="Remove option">✕</button>
+                </label>
+              `).join('')}
+            </div>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-add-mr-option">+ Add option</button>
           </div>`;
         document.getElementById('btn-add-mr-option')?.addEventListener('click', () => {
           const opts = document.querySelectorAll('.question-option');
-          if (opts.length >= 10) return;
+          if (opts.length >= 15) return;
           const newIndex = opts.length;
           const wrapper = document.createElement('label');
           wrapper.className = 'option-field';
-          wrapper.innerHTML = `<input type="checkbox" name="question-correct-mr" value="${newIndex}"><input class="form-input question-option" placeholder="Option ${newIndex + 1}">`;
-          document.getElementById('btn-add-mr-option').before(wrapper);
+          wrapper.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
+          wrapper.innerHTML = `<input type="checkbox" name="question-correct-mr" value="${newIndex}" title="Mark as a correct answer"><input class="form-input question-option" placeholder="Option ${newIndex + 1}" style="flex: 1;"><button type="button" class="btn btn-ghost btn-sm btn-remove-option" style="padding: 0.25rem 0.5rem;" title="Remove option">✕</button>`;
+          container.querySelector('.options-list').appendChild(wrapper);
         });
       } else if (type === 'OR') {
         const options = question.type === 'OR' ? question.options : ['Step 1', 'Step 2', 'Step 3'];
         container.innerHTML = `
           <div class="stack"><label class="form-field"><span>Items in correct order (drag to reorder)</span></label>
-            <div id="ordering-items">
+            <div id="ordering-items" class="ordering-list stack">
               ${options.map((item, index) => `
-                <div class="ordering-item" draggable="true" data-index="${index}">
-                  <span class="ordering-handle">☰</span>
-                  <input class="form-input question-option" value="${this.esc(item)}" placeholder="Item ${index + 1}">
+                <div class="ordering-item" draggable="true" data-index="${index}" style="display: flex; gap: 0.5rem; align-items: center;">
+                  <span class="ordering-handle" style="cursor: grab;">☰</span>
+                  <input class="form-input question-option" value="${this.esc(item)}" placeholder="Item ${index + 1}" style="flex: 1;">
+                  <button type="button" class="btn btn-ghost btn-sm btn-remove-option" style="padding: 0.25rem 0.5rem;" title="Remove item">✕</button>
                 </div>
               `).join('')}
             </div>
@@ -503,8 +512,9 @@ export const QuestionsPage = {
           wrapper.className = 'ordering-item';
           wrapper.draggable = true;
           wrapper.dataset.index = items.length;
-          wrapper.innerHTML = `<span class="ordering-handle">☰</span><input class="form-input question-option" placeholder="Item ${items.length + 1}">`;
-          document.getElementById('btn-add-order-item').before(wrapper);
+          wrapper.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
+          wrapper.innerHTML = `<span class="ordering-handle" style="cursor: grab;">☰</span><input class="form-input question-option" placeholder="Item ${items.length + 1}" style="flex: 1;"><button type="button" class="btn btn-ghost btn-sm btn-remove-option" style="padding: 0.25rem 0.5rem;" title="Remove item">✕</button>`;
+          container.querySelector('.ordering-list').appendChild(wrapper);
         });
       } else if (type === 'ES') {
         container.innerHTML = `<p class="form-hint">Essay questions require manual grading. Students will see a large text area.</p>`;
@@ -513,6 +523,32 @@ export const QuestionsPage = {
       } else if (type === 'MP') {
         this.renderMultiPartBuilder(container, question);
       }
+      
+      container.onclick = e => {
+        const btn = e.target.closest('.btn-remove-option');
+        if (btn) {
+          const field = btn.closest('.option-field') || btn.closest('.ordering-item');
+          if (field) {
+            const list = field.parentElement;
+            field.remove();
+            
+            if (list.classList.contains('options-list')) {
+              list.querySelectorAll('.option-field').forEach((el, idx) => {
+                const check = el.querySelector('input[type="radio"], input[type="checkbox"]');
+                if (check) check.value = idx;
+                const inp = el.querySelector('.question-option');
+                if (inp) inp.placeholder = `Option ${idx + 1}`;
+              });
+            } else if (list.classList.contains('ordering-list')) {
+              list.querySelectorAll('.ordering-item').forEach((el, idx) => {
+                el.dataset.index = idx;
+                const inp = el.querySelector('.question-option');
+                if (inp) inp.placeholder = `Item ${idx + 1}`;
+              });
+            }
+          }
+        }
+      };
     };
 
     renderAnswerFields();
