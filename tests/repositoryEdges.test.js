@@ -133,6 +133,7 @@ beforeAll(() => {
     visibility: 'published'
   }, teacher);
   courseService.enroll(course.id, student.id, 'student');
+  courseService.enroll(course.id, otherTeacher.id, 'teacher');
 
   const category = categoryService.create({
     name: `Repository Category ${batch}`,

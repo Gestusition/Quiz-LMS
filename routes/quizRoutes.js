@@ -31,6 +31,9 @@ function requireQuizAccess(req, res, next) {
       if (!canAccessCourse(req.user, req.quiz.courseId)) {
         return res.status(403).json({ error: 'Course access required.' });
       }
+      if (!['published', 'closed'].includes(req.quiz.status)) {
+        return res.status(404).json({ error: 'Quiz not found.' });
+      }
       return next();
     }
     quizService.assertCanReadQuiz(req.quiz, req.user);
@@ -690,13 +693,15 @@ router.put('/grade-schemes/:id/thresholds', (req, res) => {
 router.get('/:id', loadQuiz, requireQuizAccess, (req, res) => {
   try {
     let includeCorrect = false;
+    let includeQuestions = req.user.role !== 'student';
     try {
       quizService.assertCanWriteQuiz(req.quiz, req.user);
       includeCorrect = true;
+      includeQuestions = true;
     } catch (err) {
       includeCorrect = req.user.role !== 'student';
     }
-    res.json(quizService.getById(req.quizId, { includeQuestions: true, includeCorrect, user: req.user }));
+    res.json(quizService.getById(req.quizId, { includeQuestions, includeCorrect, user: req.user }));
   } catch (err) {
     sendError(res, err, 500);
   }

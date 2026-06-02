@@ -1,5 +1,6 @@
 const categoryRepository = require('../repositories/categoryRepository');
 const courseRepository = require('../repositories/courseRepository');
+const enrollmentRepository = require('../repositories/enrollmentRepository');
 const questionRepository = require('../repositories/questionRepository');
 const resourceAccessRepository = require('../repositories/resourceAccessRepository');
 const { validateCategory } = require('../validators/categoryValidators');
@@ -24,6 +25,9 @@ class CategoryService {
       if (!course) {
         throw new Error('Course not found.');
       }
+    }
+    if (user && user.role === 'teacher' && payload.courseId && !enrollmentRepository.canManageCourse(user, payload.courseId)) {
+      throw forbiddenError('Teacher course category required.');
     }
 
     const existing = categoryRepository.findDuplicateName(payload.name, payload.courseId);
@@ -53,6 +57,14 @@ class CategoryService {
       if (!course) {
         throw new Error('Course not found.');
       }
+    }
+    if (
+      user &&
+      user.role === 'teacher' &&
+      Number(payload.courseId || 0) !== Number(existing.courseId || 0) &&
+      (!payload.courseId || !enrollmentRepository.canManageCourse(user, payload.courseId))
+    ) {
+      throw forbiddenError('Teacher course category required.');
     }
 
     const duplicate = categoryRepository.findDuplicateName(payload.name, payload.courseId, id);

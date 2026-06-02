@@ -152,6 +152,33 @@ describe('course route CRUD and content edges', () => {
       .send({ userId: ctx.student.id, role: 'student' })
       .expect(201)).body;
 
+    await request(app)
+      .post(`/api/courses/${course.id}/announcements`)
+      .set('Cookie', cookie(ctx.studentSession))
+      .send({ title: 'Student announcement', body: 'Should not be accepted.' })
+      .expect(403);
+
+    await request(app)
+      .post(`/api/courses/${course.id}/resources`)
+      .set('Cookie', cookie(ctx.studentSession))
+      .send({
+        title: 'Student resource',
+        type: 'link',
+        url: 'https://example.com/student-resource'
+      })
+      .expect(403);
+
+    await request(app)
+      .get(`/api/courses/${course.id}/gradebook`)
+      .set('Cookie', cookie(ctx.studentSession))
+      .expect(403);
+
+    await request(app)
+      .put(`/api/courses/${course.id}`)
+      .set('Cookie', cookie(ctx.studentSession))
+      .send({ title: 'Student edited course' })
+      .expect(403);
+
     const teacherEnrollment = (await request(app)
       .post(`/api/courses/${course.id}/enrollments`)
       .set('Cookie', cookie(ctx.teacherSession))
@@ -409,6 +436,12 @@ describe('category and question route edges', () => {
       .expect(403);
 
     await request(app)
+      .put(`/api/categories/${category.id}`)
+      .set('Cookie', cookie(ctx.teacherSession))
+      .send({ courseId: '' })
+      .expect(403);
+
+    await request(app)
       .post(`/api/categories/${category.id}/share`)
       .set('Cookie', cookie(ctx.teacherSession))
       .send({ teacherEmail: 'missing@example.com', accessLevel: 'read' })
@@ -635,9 +668,13 @@ describe('quiz route edges', () => {
         text: 'Quiz route question?',
         type: 'TF',
         correctAnswer: 'true',
-        points: 1
+        points: 1,
+        createdBy: ctx.otherTeacher.id
       })
-      .expect(201)).body;
+      .expect(201)
+      .expect(response => {
+        expect(response.body.createdBy).toBe(ctx.teacher.id);
+      })).body;
 
     await request(app)
       .get('/api/quizzes?courseId=bad')
@@ -652,6 +689,12 @@ describe('quiz route edges', () => {
 
     await request(app)
       .post('/api/quizzes')
+      .set('Cookie', cookie(ctx.studentSession))
+      .send(quizPayload(course.id, 'Student Managed Quiz'))
+      .expect(403);
+
+    await request(app)
+      .post('/api/quizzes')
       .set('Cookie', cookie(ctx.outsiderSession))
       .send(quizPayload(course.id, 'Forbidden Quiz'))
       .expect(403);
@@ -661,6 +704,11 @@ describe('quiz route edges', () => {
       .set('Cookie', cookie(ctx.teacherSession))
       .send(quizPayload(course.id, `Route Quiz ${stamp('quiz')}`))
       .expect(201)).body;
+
+    await request(app)
+      .get(`/api/quizzes/${quiz.id}`)
+      .set('Cookie', cookie(ctx.studentSession))
+      .expect(404);
 
     await request(app)
       .get('/api/quizzes/attempts/not-number')
@@ -798,7 +846,10 @@ describe('quiz route edges', () => {
     await request(app)
       .get(`/api/quizzes/${quiz.id}`)
       .set('Cookie', cookie(ctx.studentSession))
-      .expect(200);
+      .expect(200)
+      .expect(response => {
+        expect(response.body.questions).toBeUndefined();
+      });
 
     await request(app)
       .get(`/api/quizzes/${quiz.id}`)

@@ -153,6 +153,26 @@ describe('auth middleware edge branches', () => {
     expect(allowedAuthRoute.next).toHaveBeenCalled();
   });
 
+  test('authorization uses the current database role instead of the stale JWT role', () => {
+    const stamp = String(Date.now()).slice(-6);
+    const demoted = authService.createUser({
+      name: `Middleware Demoted ${stamp}`,
+      username: `mw-demoted-${stamp}`,
+      email: `mw-demoted-${stamp}@example.com`,
+      role: 'teacher',
+      password: 'Middleware123!',
+      staffNumber: `MWR-${stamp}`
+    });
+    const session = authService.login(demoted.email, 'Middleware123!');
+    getDatabase().prepare("UPDATE users SET role = 'student' WHERE id = ?").run(demoted.id);
+
+    const authenticated = runMiddleware(authenticate, { headers: { cookie: cookieFor(session) } });
+    expect(authenticated.next).toHaveBeenCalled();
+    expect(authenticated.req.user.role).toBe('student');
+    expect(authenticated.req.userRole).toBe('student');
+    expect(runMiddleware(requireRole('teacher'), { userRole: authenticated.req.userRole }).res.statusCode).toBe(403);
+  });
+
   test('authenticate revokes expired and inactive-user sessions', () => {
     const expiredSession = authService.login(ctx.teacher.email, 'Middleware123!');
     const expiredDecoded = verifyJwt(expiredSession.token);

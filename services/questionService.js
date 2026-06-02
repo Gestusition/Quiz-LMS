@@ -52,7 +52,7 @@ class QuestionService {
       throw new Error('Category not found.');
     }
 
-    const actorUserId = data.createdBy || (user ? user.id : null);
+    const actorUserId = user ? user.id : data.createdBy;
     const result = questionRepository.insert(payload, actorUserId);
     const questionId = Number(result.lastInsertRowid);
 

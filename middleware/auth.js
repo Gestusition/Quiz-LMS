@@ -65,12 +65,12 @@ function resolveUserFromDecoded(decoded) {
 function attachUserToRequest(req, user, decoded, token) {
   req.user = user;
   req.userId = user.id;
-  req.userRole = decoded ? (decoded.role || user.role) : user.role;
+  req.userRole = user.role;
   req.token = token;
   req.ctx = {
     user,
     userId: user.id,
-    userRole: decoded ? (decoded.role || user.role) : user.role,
+    userRole: user.role,
     ...(decoded && decoded.jti ? { sessionId: Number(decoded.jti) } : {})
   };
 }
