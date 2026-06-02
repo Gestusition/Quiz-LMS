@@ -40,6 +40,26 @@ describe('QuizService pure grading and policy helpers', () => {
     }, '0,2,1', {
       penaltyPerWrong: 1
     })).toEqual({ isCorrect: false, pointsAwarded: -0 });
+    expect(quizService.evaluateAnswer({
+      type: 'OR',
+      points: 4,
+      correctAnswer: '0,1,2'
+    }, '', {})).toEqual({ isCorrect: false, pointsAwarded: 0 });
+    expect(quizService.evaluateAnswer({
+      type: 'OR',
+      points: 4,
+      correctAnswer: '0,1,2'
+    }, '0,1', {})).toEqual({ isCorrect: false, pointsAwarded: -0 });
+    expect(quizService.evaluateAnswer({
+      type: 'OR',
+      points: 4,
+      correctAnswer: '0,1,2'
+    }, '0,1,1', {})).toEqual({ isCorrect: false, pointsAwarded: -0 });
+    expect(quizService.evaluateAnswer({
+      type: 'OR',
+      points: 4,
+      correctAnswer: '0,1,2'
+    }, '0,1,2', {})).toEqual({ isCorrect: true, pointsAwarded: 4 });
   });
 
   test('applies negative marking only for negative-grading questions', () => {

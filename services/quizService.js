@@ -918,7 +918,14 @@ class QuizService {
 
     // OR (Ordering): compare ordered sequences
     if (question.type === 'OR') {
-      return userAnswer.trim() === correctAnswer.trim();
+      const userItems = parseOrderingSequence(userAnswer);
+      const correctItems = parseOrderingSequence(correctAnswer);
+      if (userItems.length !== correctItems.length) return false;
+      if (new Set(userItems).size !== userItems.length) return false;
+      if (new Set(correctItems).size !== correctItems.length) return false;
+      const correctSet = new Set(correctItems);
+      if (!userItems.every(item => correctSet.has(item))) return false;
+      return userItems.every((item, index) => item === correctItems[index]);
     }
 
     return userAnswer.trim() === correctAnswer.trim();
@@ -1168,6 +1175,10 @@ function parseJson(value, fallback) {
   } catch (e) {
     return fallback;
   }
+}
+
+function parseOrderingSequence(value) {
+  return String(value || '').split(',').map(item => item.trim()).filter(Boolean);
 }
 
 function roundScore(value) {

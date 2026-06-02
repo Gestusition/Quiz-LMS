@@ -23,6 +23,7 @@ export const AttemptPage = {
         this._attemptId = attemptId;
         this._attemptStart = Date.now();
         this._autoSubmitted = false;
+        this._orderingInitialOrders = {};
         Object.entries(savedAnswers).forEach(([qId, answer]) => {
           this._attemptAnswers[qId] = answer.answer || '';
         });
@@ -218,7 +219,7 @@ export const AttemptPage = {
 
       case 'OR': {
         const items = question.options || [];
-        const currentOrder = answeredValue ? answeredValue.split(',') : items.map((_, i) => String(i));
+        const currentOrder = this.getOrderingDisplayOrder(question, answeredValue, isInProgress);
         return `
           <div class="ordering-answer" data-qid="${question.id}">
             ${currentOrder.map((idx, pos) => `
@@ -310,6 +311,38 @@ export const AttemptPage = {
       default:
         return `<input class="form-input answer-input" data-qid="${question.id}" value="${this.esc(answeredValue)}" ${disabled ? 'disabled' : ''}>`;
     }
+  },
+
+  getOrderingDisplayOrder(question, answeredValue, isInProgress) {
+    const items = question.options || [];
+    const canonical = items.map((_, index) => String(index));
+    const answeredOrder = String(answeredValue || '').split(',').map(item => item.trim()).filter(Boolean);
+    if (this.isValidOrderingOrder(answeredOrder, items.length)) return answeredOrder;
+    if (!isInProgress) return canonical;
+
+    this._orderingInitialOrders = this._orderingInitialOrders || {};
+    if (!this._orderingInitialOrders[question.id]) {
+      this._orderingInitialOrders[question.id] = this.buildInitialOrderingOrder(canonical, question.id);
+    }
+    return this._orderingInitialOrders[question.id];
+  },
+
+  buildInitialOrderingOrder(canonical, questionId) {
+    if (canonical.length <= 1) return canonical;
+    const offset = (Number(questionId) % (canonical.length - 1)) + 1;
+    return canonical.slice(offset).concat(canonical.slice(0, offset));
+  },
+
+  isValidOrderingOrder(order, itemCount) {
+    if (!Array.isArray(order) || order.length !== itemCount) return false;
+    const seen = new Set();
+    return order.every(value => {
+      if (!/^\d+$/.test(value)) return false;
+      const index = Number(value);
+      if (index < 0 || index >= itemCount || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
   },
 
   renderLatexAll() {
@@ -453,9 +486,6 @@ export const AttemptPage = {
 
     const answers = {};
     questions.forEach(q => {
-      if (q.type === 'OR' && this._attemptAnswers[q.id] === undefined) {
-        this._attemptAnswers[q.id] = (q.options || []).map((_, index) => String(index)).join(',');
-      }
       if (this._attemptAnswers[q.id] !== undefined) {
         answers[q.id] = this._attemptAnswers[q.id];
       }
@@ -465,6 +495,7 @@ export const AttemptPage = {
     try {
       await API.submitAttempt(attemptId, answers, timeSpentSeconds);
       this._attemptAnswers = {};
+      this._orderingInitialOrders = {};
       this.renderAttempt(attemptId);
     } catch (err) {
       this.toast(err.message, 'error');

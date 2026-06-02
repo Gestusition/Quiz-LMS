@@ -809,4 +809,23 @@ describe('Auth and quiz attempt flow', () => {
     expect(result.maxScore).toBeGreaterThan(0);
     expect(result.percentage).toBeGreaterThanOrEqual(0);
   });
+
+  test('blank full demo exam submission scores zero', () => {
+    const session = authService.login('STU-0003', 'Student123!');
+    const quiz = getDatabase().prepare(`
+      SELECT id
+      FROM quizzes
+      WHERE LOWER(title) LIKE 'numerical methods%full demo exam'
+    `).get();
+    expect(quiz).toBeDefined();
+
+    const attempt = quizService.startAttempt(quiz.id, session.user);
+    expect(attempt.questions).toHaveLength(45);
+
+    const result = quizService.submitAttempt(attempt.id, session.user, { answers: {} });
+
+    expect(result.score).toBe(0);
+    expect(result.percentage).toBe(0);
+    expect((result.answers || []).filter(answer => Number(answer.isCorrect) === 1)).toHaveLength(0);
+  });
 });
