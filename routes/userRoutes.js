@@ -285,7 +285,7 @@ router.post('/:id/password-reset-code', validateId, (req, res) => {
  * @swagger
  * /api/users/{id}:
  *   delete:
- *     summary: Delete a user (Admin only)
+ *     summary: Delete a user (Admin only; initial admin is protected)
  *     tags: [Users]
  *     parameters:
  *       - in: path
@@ -302,6 +302,8 @@ router.post('/:id/password-reset-code', validateId, (req, res) => {
  *               $ref: '#/components/schemas/MessageResponse'
  *       400:
  *         $ref: '#/components/responses/400BadRequest'
+ *       403:
+ *         $ref: '#/components/responses/403Forbidden'
  *       404:
  *         $ref: '#/components/responses/404NotFound'
  */

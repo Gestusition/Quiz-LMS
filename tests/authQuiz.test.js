@@ -763,7 +763,7 @@ describe('Auth and quiz attempt flow', () => {
   test('course participants include studentNumber', async () => {
     const db = getDatabase();
     const adminSession = createAdminSession();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
 
     await request(app)
       .get(`/api/courses/${course.id}/participants`)
@@ -778,7 +778,7 @@ describe('Auth and quiz attempt flow', () => {
   test('gradebook includes studentNumber', async () => {
     const db = getDatabase();
     const adminSession = createAdminSession();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
 
     await request(app)
       .get(`/api/courses/${course.id}/gradebook`)

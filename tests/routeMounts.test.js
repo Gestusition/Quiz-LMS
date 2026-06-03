@@ -140,7 +140,7 @@ describe('API route mounts', () => {
 
   test('every mounted API group has a reachable smoke endpoint', async () => {
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const session = createAdminSession();
     const authCookie = `auth_token=${session.token}`;
 

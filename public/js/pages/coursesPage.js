@@ -107,7 +107,7 @@ export const CoursesPage = {
 
     this.openModal(isEdit ? 'Edit course' : 'New course', `
       <form id="course-form" class="stack">
-        ${this.input('course-code', 'Code', course.code, 'text', 'WEB101')}
+        ${this.input('course-code', 'Code', course.code, 'text', 'DEMO101')}
         ${this.input('course-title', 'Title', course.title)}
         ${this.textarea('course-description', 'Description', course.description)}
         <div class="form-grid">

@@ -671,6 +671,7 @@ router.put('/grade-schemes/:id/thresholds', (req, res) => {
  * /api/quizzes/{id}:
  *   get:
  *     summary: Get a quiz by ID (Course Access)
+ *     description: Students can only read published or closed quiz metadata; course managers receive question details and correct answers.
  *     tags: [Quizzes]
  *     parameters:
  *       - in: path

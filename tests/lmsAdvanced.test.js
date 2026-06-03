@@ -41,7 +41,7 @@ afterAll(() => {
 describe('Advanced LMS controls', () => {
   test('enrolled student can post in course discussion; non-enrolled cannot', async () => {
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const studentSession = authService.login('STU-0003', 'Student123!');
 
     await request(app)
@@ -70,7 +70,7 @@ describe('Advanced LMS controls', () => {
 
   test('teacher question and quiz banks are owner scoped with explicit sharing', async () => {
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const ownerSession = authService.login('teacher@example.com', 'Teacher123!');
     const ownerQuestion = db.prepare(`
       SELECT q.id, q.points
@@ -354,7 +354,7 @@ describe('Advanced LMS controls', () => {
       WHERE c.code = ?
       ORDER BY co.id ASC
       LIMIT 1
-    `).get('WEB101');
+    `).get('DEMO101');
     const stamp = String(Date.now()).slice(-8);
     const otherTeacher = authService.createUser({
       name: `Other Lecture Teacher ${stamp}`,
@@ -402,7 +402,7 @@ describe('Advanced LMS controls', () => {
 
   test('chat muted restriction blocks discussion posting', async () => {
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const student = authService.login('STU-0003', 'Student123!').user;
     const admin = authService.createUser({
       name: `Restriction Admin ${Date.now()}`,
@@ -455,7 +455,7 @@ describe('Advanced LMS controls', () => {
 
   test('course_access_blocked restriction prevents course access', async () => {
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const stamp = String(Date.now()).slice(-8);
     const blockedStudent = authService.createUser({
       name: `Course Blocked ${stamp}`,
@@ -489,7 +489,7 @@ describe('Advanced LMS controls', () => {
       SELECT co.id
       FROM course_offerings co
       JOIN courses c ON c.id = co.courseId
-      WHERE c.code = 'WEB101'
+      WHERE c.code = 'DEMO101'
       ORDER BY co.id ASC
       LIMIT 1
     `).get();
@@ -528,7 +528,7 @@ describe('Advanced LMS controls', () => {
 
   test('teachers can only manage validation issues for their courses or own issues', async () => {
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
     const stamp = String(Date.now()).slice(-8);
     const otherTeacher = authService.createUser({
@@ -730,7 +730,7 @@ describe('Advanced LMS controls', () => {
 
   test('course and week file resources accept real uploaded documents', async () => {
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const week = db.prepare('SELECT id FROM course_weeks WHERE courseId = ? ORDER BY id ASC LIMIT 1').get(course.id) ||
       (await request(app)
         .post(`/api/weeks/courses/${course.id}/weeks`)
@@ -848,7 +848,7 @@ describe('Advanced LMS controls', () => {
     const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
     const studentSession = authService.login('STU-0003', 'Student123!');
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const question = db.prepare(`
       SELECT q.id
       FROM questions q
@@ -891,7 +891,7 @@ describe('Advanced LMS controls', () => {
     const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
     const studentSession = authService.login('STU-0003', 'Student123!');
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
     const question = db.prepare(`
       SELECT q.id
       FROM questions q
@@ -952,7 +952,7 @@ describe('Advanced LMS controls', () => {
   test('published quiz creation is rejected until questions are assigned', () => {
     const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
 
     expect(() => quizService.create({
       courseId: course.id,
@@ -981,7 +981,7 @@ describe('Advanced LMS controls', () => {
   test('invalid grade scheme keeps numeric score but sets letter grade pending review', () => {
     const teacherSession = authService.login('teacher@example.com', 'Teacher123!');
     const db = getDatabase();
-    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+    const course = db.prepare('SELECT id FROM courses WHERE code = ?').get('DEMO101');
 
     const scheme = gradeSchemeService.ensureDefault(course.id, teacherSession.user.id);
     gradeSchemeService.markSchemeInvalid(scheme.id);

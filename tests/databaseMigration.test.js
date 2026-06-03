@@ -308,7 +308,7 @@ describe('database helper and migration coverage', () => {
     const courseId = Number(database.prepare(`
       INSERT INTO courses (code, title, visibility)
       VALUES (?, ?, ?)
-    `).run('WEB101', 'Existing Question Bank Course', 'published').lastInsertRowid);
+    `).run('DEMO101', 'Existing Question Bank Course', 'published').lastInsertRowid);
     const categoryId = Number(database.prepare(`
       INSERT INTO categories (courseId, name, description)
       VALUES (?, ?, ?)
@@ -387,6 +387,37 @@ describe('database helper and migration coverage', () => {
     dbModule.closeDatabase();
   });
 
+  test('demo course and quizzes are not recreated after first-run seed markers exist', () => {
+    let dbModule = freshDbModule();
+    removeDbFiles(dbModule);
+    dbModule.initDatabase(TEST_DB);
+
+    dbModule.seedDatabase();
+    const database = dbModule.getDatabase();
+    expect(database.prepare("SELECT id FROM courses WHERE code = 'DEMO101'").get()).toBeDefined();
+    expect(database.prepare("SELECT id FROM quizzes WHERE title = 'Programming Basics Quiz'").get()).toBeDefined();
+    expect(database.prepare("SELECT id FROM quizzes WHERE LOWER(title) LIKE 'numerical methods%full demo exam'").get())
+      .toBeDefined();
+
+    database.prepare("DELETE FROM quizzes WHERE title = 'Programming Basics Quiz'").run();
+    database.prepare("DELETE FROM quizzes WHERE LOWER(title) LIKE 'numerical methods%full demo exam'").run();
+    dbModule.seedDatabase();
+    expect(database.prepare("SELECT id FROM quizzes WHERE title = 'Programming Basics Quiz'").get()).toBeUndefined();
+    expect(database.prepare("SELECT id FROM quizzes WHERE LOWER(title) LIKE 'numerical methods%full demo exam'").get())
+      .toBeUndefined();
+
+    database.prepare('DELETE FROM quiz_questions').run();
+    database.prepare('DELETE FROM question_table_config').run();
+    database.prepare('DELETE FROM question_parts').run();
+    database.prepare('DELETE FROM questions').run();
+    database.prepare('DELETE FROM categories').run();
+    database.prepare('DELETE FROM courses').run();
+    dbModule.seedDatabase();
+    expect(database.prepare("SELECT id FROM courses WHERE code = 'DEMO101'").get()).toBeUndefined();
+
+    dbModule.closeDatabase();
+  });
+
   test('advanced full demo seed stays idempotent with legacy advanced questions', () => {
     let dbModule = freshDbModule();
     removeDbFiles(dbModule);
@@ -396,7 +427,7 @@ describe('database helper and migration coverage', () => {
     const courseId = Number(database.prepare(`
       INSERT INTO courses (code, title, visibility)
       VALUES (?, ?, ?)
-    `).run('WEB101', 'Legacy Advanced Demo Course', 'published').lastInsertRowid);
+    `).run('DEMO101', 'Legacy Advanced Demo Course', 'published').lastInsertRowid);
     const categoryId = Number(database.prepare(`
       INSERT INTO categories (courseId, name, description)
       VALUES (?, ?, ?)
@@ -452,7 +483,7 @@ describe('database helper and migration coverage', () => {
     const course = database.prepare(`
       INSERT INTO courses (code, title, visibility)
       VALUES (?, ?, ?)
-    `).run('WEB101', 'Pre-existing Course', 'published');
+    `).run('DEMO101', 'Pre-existing Course', 'published');
     const courseId = Number(course.lastInsertRowid);
     const category = database.prepare(`
       INSERT INTO categories (courseId, name, description)

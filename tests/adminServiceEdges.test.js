@@ -235,6 +235,10 @@ describe('user service update and cleanup edges', () => {
     expect(userService.deleteUser(deleteMe.id)).toBe(true);
     expect(userService.getUserById(deleteMe.id)).toBeNull();
     expect(() => userService.deleteUser(deleteMe.id)).toThrow(/not found/i);
+
+    const initialAdmin = getDatabase().prepare("SELECT id FROM users WHERE username = 'admin'").get();
+    expect(initialAdmin).toBeDefined();
+    expect(() => userService.deleteUser(initialAdmin.id)).toThrow(/initial admin/i);
   });
 
   test('auth service delegates user mutations through wrapper methods', () => {

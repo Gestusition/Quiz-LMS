@@ -15,6 +15,7 @@ const contentRepository = require('../repositories/contentRepository');
 const restrictionRepository = require('../repositories/restrictionRepository');
 const validationIssueRepository = require('../repositories/validationIssueRepository');
 const resourceAccessRepository = require('../repositories/resourceAccessRepository');
+const settingsRepository = require('../repositories/settingsRepository');
 const { roleValues } = require('../constants/enums');
 const {
   validatePassword,
@@ -22,7 +23,7 @@ const {
 } = require('../validators/userValidators');
 const { hashPassword, nowIso } = require('../utils/security');
 const { serializeUser } = require('../serializers/userSerializer');
-const { conflictError, notFoundError } = require('../utils/appError');
+const { conflictError, forbiddenError, notFoundError } = require('../utils/appError');
 const { removeUploadedSubmissionByUrl } = require('../middleware/upload');
 const auditService = require('./auditService');
 
@@ -242,6 +243,10 @@ class UserService {
     const existing = userRepository.findById(id);
     if (!existing) {
       throw notFoundError('User not found.');
+    }
+    const initialAdmin = settingsRepository.findByKey('seed.initial_admin_user_id');
+    if (initialAdmin && Number(initialAdmin.value) === Number(id)) {
+      throw forbiddenError('The initial admin account cannot be deleted.');
     }
 
     const submissionFilesToRemove = academicRepository.listSubmissionsByStudent(id)

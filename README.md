@@ -73,7 +73,7 @@ Default admin:
 - username: `admin`
 - password: `Admin123!`
 
-After first login, the default admin must change the username and password. Then open `Maintenance` from the admin navbar and turn maintenance mode off. Teacher and student logins will work after that.
+After first login, the default admin must change the username and password. This initial admin account is protected from deletion. Then open `Maintenance` from the admin navbar and turn maintenance mode off. Teacher and student logins will work after that.
 
 Default seeded demo users:
 
@@ -128,13 +128,13 @@ Use these steps to reproduce the running program from a fresh local checkout:
 4. On the first admin login, change the default admin username and password when prompted.
 5. Open `Maintenance` from the admin navbar and turn maintenance mode off.
 6. Sign out, then sign in as the seeded teacher: `teacher@example.com` / `Teacher123!`.
-7. Open `Courses`, select `WEB101 - Web Programming Fundamentals`, then create or inspect categories, questions, and quizzes.
+7. Open `Courses`, select `DEMO101 - Demo Programming Fundamentals`, then create or inspect categories, questions, and quizzes.
 8. Create a quiz as a draft, assign at least one valid question, publish it, then sign out.
 9. Sign in as the seeded student: `STU-0003` / `Student123!`.
 10. Open the published quiz, start an attempt, submit answers, and review the result according to the quiz result policy.
 11. Optional verification: run `npm test` and `npm run test:api-docs` to reproduce the automated checks.
 
-The first startup seeds demo users, a demo course, categories, question banks, and published demo quizzes. Existing SQLite files in `data/` are reused on later runs, so use a clean checkout or remove local demo database files only if you intentionally want a fresh seed.
+The first startup seeds demo users, `DEMO101 - Demo Programming Fundamentals`, categories, question banks, `Programming Basics Quiz`, and `Numerical Methods Full Demo Exam`. Seed completion is recorded in system settings, so deleting `DEMO101` or either demo quiz later will not recreate them on restart. Existing SQLite files in `data/` are reused on later runs, so use a clean checkout or remove local demo database files only if you intentionally want a fresh seed.
 
 ## Environment
 

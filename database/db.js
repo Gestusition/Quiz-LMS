@@ -16,6 +16,17 @@ const DATABASE_CONTEXTS = {
 let db;
 let activeFiles;
 
+const DEMO_COURSE_CODE = 'DEMO101';
+const SEED_KEYS = {
+  defaultUsers: 'seed.default_users.completed',
+  demoLms: 'seed.demo_lms.completed',
+  questionBank: 'seed.demo_question_bank.completed',
+  programmingQuiz: 'seed.programming_quiz.completed',
+  quizLinkRepair: 'seed.quiz_link_repair.completed',
+  advancedDemo: 'seed.advanced_demo.completed',
+  initialAdminUserId: 'seed.initial_admin_user_id'
+};
+
 function initDatabase(dbPath) {
   activeFiles = resolveDatabaseFiles(dbPath);
   ensureDatabaseDirectory(activeFiles);
@@ -1467,28 +1478,87 @@ function seedDatabase() {
   const database = getDatabase();
 
   const userCount = database.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  if (userCount === 0) {
-    seedUsers(database);
+  if (!isSeedComplete(database, SEED_KEYS.defaultUsers)) {
+    if (userCount === 0) {
+      seedUsers(database);
+    }
+    markSeedComplete(database, SEED_KEYS.defaultUsers);
   }
+  ensureInitialAdminMarker(database);
   ensureRoleProfiles(database);
   normalizeAcademicProfileState(database);
 
   const courseCount = database.prepare('SELECT COUNT(*) as count FROM courses').get().count;
-  if (courseCount === 0) {
-    seedLmsData(database);
+  if (!isSeedComplete(database, SEED_KEYS.demoLms)) {
+    if (courseCount === 0) {
+      seedLmsData(database);
+    }
+    markSeedComplete(database, SEED_KEYS.demoLms);
   }
   ensureAcademicSeed(database);
 
   const categoryCount = database.prepare('SELECT COUNT(*) as count FROM categories').get().count;
-  if (categoryCount === 0) {
-    seedQuestionBank(database);
-  } else {
-    attachLegacyDataToDemoCourse(database);
+  if (!isSeedComplete(database, SEED_KEYS.questionBank)) {
+    if (categoryCount === 0) {
+      seedQuestionBank(database);
+    } else {
+      attachLegacyDataToDemoCourse(database);
+    }
+    markSeedComplete(database, SEED_KEYS.questionBank);
   }
 
-  ensureDemoQuiz(database);
-  repairMissingQuizQuestionLinks(database);
-  ensureAdvancedDemoSeed(database);
+  if (!isSeedComplete(database, SEED_KEYS.programmingQuiz)) {
+    ensureDemoQuiz(database);
+    markSeedComplete(database, SEED_KEYS.programmingQuiz);
+  }
+  if (!isSeedComplete(database, SEED_KEYS.quizLinkRepair)) {
+    repairMissingQuizQuestionLinks(database);
+    markSeedComplete(database, SEED_KEYS.quizLinkRepair);
+  }
+  if (!isSeedComplete(database, SEED_KEYS.advancedDemo)) {
+    ensureAdvancedDemoSeed(database);
+    markSeedComplete(database, SEED_KEYS.advancedDemo);
+  }
+}
+
+function isSeedComplete(database, key) {
+  const setting = database.prepare('SELECT value FROM users.system_settings WHERE key = ?').get(key);
+  return setting && setting.value === 'true';
+}
+
+function seedValue(database, key) {
+  const setting = database.prepare('SELECT value FROM users.system_settings WHERE key = ?').get(key);
+  return setting ? setting.value : '';
+}
+
+function markSeedComplete(database, key) {
+  setSeedValue(database, key, 'true');
+}
+
+function setSeedValue(database, key, value, options = {}) {
+  const overwrite = options.overwrite !== false;
+  if (!overwrite && seedValue(database, key)) return;
+  database.prepare(`
+    INSERT INTO users.system_settings (key, value, updatedAt)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updatedAt = datetime('now')
+  `).run(key, String(value));
+}
+
+function ensureInitialAdminMarker(database) {
+  if (seedValue(database, SEED_KEYS.initialAdminUserId)) return;
+  const initialAdmin = database.prepare(`
+    SELECT id
+    FROM users
+    WHERE role = 'admin'
+    ORDER BY CASE WHEN username = 'admin' THEN 0 ELSE 1 END, id ASC
+    LIMIT 1
+  `).get();
+  if (initialAdmin) {
+    setSeedValue(database, SEED_KEYS.initialAdminUserId, initialAdmin.id, { overwrite: false });
+  }
 }
 
 function seedUsers(database) {
@@ -1555,8 +1625,8 @@ function seedLmsData(database) {
     INSERT INTO courses (code, title, description, visibility, createdBy)
     VALUES (?, ?, ?, ?, ?)
   `).run(
-    'WEB101',
-    'Web Programming Fundamentals',
+    DEMO_COURSE_CODE,
+    'Demo Programming Fundamentals',
     'Demo course with quiz, resources, announcements, and a gradebook.',
     'published',
     admin ? admin.id : null
@@ -1576,7 +1646,7 @@ function seedLmsData(database) {
     database.prepare(`
       INSERT INTO announcements (courseId, title, body, createdBy)
       VALUES (?, ?, ?, ?)
-    `).run(courseId, 'Welcome to WEB101', 'Read the resources and complete the first quiz.', teacher.id);
+    `).run(courseId, `Welcome to ${DEMO_COURSE_CODE}`, 'Read the resources and complete the first quiz.', teacher.id);
 
     database.prepare(`
       INSERT INTO resources (courseId, title, type, url, description, createdBy)
@@ -1731,9 +1801,10 @@ function ensureAcademicSeed(database) {
 }
 
 function seedQuestionBank(database) {
-  const demoCourse = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+  const demoCourse = database.prepare('SELECT id FROM courses WHERE code = ?').get(DEMO_COURSE_CODE);
+  if (!demoCourse) return;
   const teacher = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('teacher');
-  const courseId = demoCourse ? demoCourse.id : null;
+  const courseId = demoCourse.id;
   const teacherId = teacher ? teacher.id : null;
 
   const insertCategory = database.prepare(
@@ -1828,7 +1899,7 @@ function seedQuestionBank(database) {
 }
 
 function attachLegacyDataToDemoCourse(database) {
-  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get(DEMO_COURSE_CODE);
   if (!course) return;
 
   database.prepare('UPDATE categories SET courseId = ? WHERE courseId IS NULL').run(course.id);
@@ -1839,7 +1910,7 @@ function getQuestionSeedSignature(type, text) {
 }
 
 function ensureAdvancedDemoSeed(database) {
-  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get(DEMO_COURSE_CODE);
   if (!course) return;
 
   const teacher = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('teacher');
@@ -2257,7 +2328,7 @@ function ensureDemoQuiz(database) {
   const quizCount = database.prepare('SELECT COUNT(*) as count FROM quizzes').get().count;
   if (quizCount > 0) return;
 
-  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get('WEB101');
+  const course = database.prepare('SELECT id FROM courses WHERE code = ?').get(DEMO_COURSE_CODE);
   const teacher = database.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('teacher');
   if (!course) return;
 
