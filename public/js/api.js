@@ -204,6 +204,21 @@ export const API = {
   },
   getMaintenanceMode() { return this.request('/settings/maintenance'); },
   updateMaintenanceMode(enabled) { return this.request('/settings/maintenance', { method: 'PUT', body: { enabled } }); },
+  getAiSettingsStatus() { return this.request('/ai/settings/status'); },
+  saveAiSettings(data) { return this.request('/ai/settings', { method: 'POST', body: data }); },
+  getAiMaterials(courseId) { return this.request(`/courses/${courseId}/ai/materials`); },
+  uploadAiMaterial(courseId, file) {
+    const form = new FormData();
+    form.append('file', file);
+    return this.request(`/courses/${courseId}/ai/materials`, { method: 'POST', body: form });
+  },
+  generateAiQuiz(courseId, data) { return this.request(`/courses/${courseId}/ai/generate-quiz`, { method: 'POST', body: data }); },
+  regenerateAiQuestion(courseId, data) { return this.request(`/courses/${courseId}/ai/regenerate-question`, { method: 'POST', body: data }); },
+  generateAiExplanation(courseId, data) { return this.request(`/courses/${courseId}/ai/generate-explanation`, { method: 'POST', body: data }); },
+  getAiDrafts(courseId) { return this.request(`/courses/${courseId}/ai/drafts`); },
+  getAiDraft(courseId, draftId) { return this.request(`/courses/${courseId}/ai/drafts/${draftId}`); },
+  updateAiDraft(courseId, draftId, data) { return this.request(`/courses/${courseId}/ai/drafts/${draftId}`, { method: 'PUT', body: data }); },
+  publishAiDraft(courseId, draftId) { return this.request(`/courses/${courseId}/ai/drafts/${draftId}/publish`, { method: 'POST' }); },
   async getHealth() {
     const response = await fetch(`${this.BASE}/health`, { credentials: 'same-origin' });
     const contentType = response.headers.get('content-type') || '';

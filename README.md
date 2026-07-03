@@ -12,6 +12,7 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 - Database-backed CRUD: SQLite stores users, courses, categories, questions, quizzes, attempts, enrollments, academic records, audit logs, settings, and more.
 - REST/JSON API: endpoints use standard HTTP methods and JSON request/response bodies.
 - Validation: backend validators and service checks protect academic identifiers, question formats, quiz settings, uploads, passwords, and scoped access rules.
+- AI Quiz Assistant: teachers and admins can generate reviewable Azure OpenAI drafts from a topic or indexed course material without exposing credentials to the browser.
 - Modular code quality: `routes -> services -> repositories`, plus `validators`, `serializers`, `constants`, and middleware.
 - Swagger: admin-only interactive API documentation is available at `http://localhost:3000/api-docs`.
 - Tests: Jest covers auth, maintenance mode, quiz attempts, academic workflows, validators, rate limiting, route mounts, and LMS regressions.
@@ -148,6 +149,16 @@ Development works without a `.env` file. Production should set these:
 
 Session cookies are `HttpOnly` and `SameSite=Strict`. They use the `Secure` attribute in production so HTTPS deployments stay protected, while local `http://localhost:3000` browser testing keeps sessions across refreshes.
 
+### AI Quiz Assistant setup
+
+The LMS works normally without Azure credentials. To enable the assistant, sign in as a teacher or admin, open **AI Assistant**, and enter your own Azure OpenAI endpoint, API key, chat deployment, embeddings deployment, and API version. The key is sent only to this LMS backend, encrypted at rest with a local server key, masked in the UI, and never returned by an API response.
+
+For local environment configuration instead, copy `.env.example` to `.env`, replace the placeholders on your own machine, and load those values into the server process. Never commit `.env`, the generated `data/.ai-credentials.key`, or real API keys. `.env.example` must contain placeholders only.
+
+All Azure calls are server-side. Course-material files are restricted to PDF, TXT, Markdown, and DOCX, held in memory during extraction, split into chunks, embedded, and linked to the selected course. When material mode is enabled, retrieval supplies only the most relevant chunks and the prompt requires material-grounded questions.
+
+The review flow is: **Generate → Preview/Edit → Save Draft → Publish**. Generated output is validated as structured JSON and always stored as a private AI draft first. Publishing is a separate teacher action that converts the reviewed questions into the LMS question bank and quiz tables.
+
 ## Tests
 
 ```bash
@@ -179,6 +190,7 @@ The main suite includes backend unit/integration tests for auth, maintenance mod
 - `/api/weeks`
 - `/api/audit`
 - `/api/settings`
+- `/api/ai` and `/api/courses/:courseId/ai`
 
 ## Example API Requests
 
@@ -660,6 +672,7 @@ erDiagram
 - Protected upload directories are not directly browsable; course, week, and submission downloads go through authenticated endpoints and are forced to download with `attachment`, `application/octet-stream`, `nosniff`, sandbox, and `noopen` headers.
 - Course resource and submission uploads allow educational files: `pdf`, `txt`, `doc`, `docx`, `ppt`, `pptx`, `xls`, `xlsx`, `csv`, `png`, `jpg`, `jpeg`, `gif`, `webp`, `md`, `html`, `htm`, `rtf`, and `zip`.
 - Production startup fails fast if required crypto secrets are missing.
+- Azure API keys are never logged or returned to the frontend. UI-provided keys use AES-256-GCM encryption with `AI_CREDENTIALS_ENCRYPTION_KEY` or a generated, gitignored local key.
 
 ## SEB Compatibility Note
 

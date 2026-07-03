@@ -114,6 +114,28 @@ const importUpload = multer({
   limits: { fileSize: LIMITS.imports.fileSizeMaxBytes }
 });
 
+const aiMaterialFileFilter = (req, file, cb) => {
+  const extension = path.extname(file.originalname || '').toLowerCase();
+  const allowed = new Map([
+    ['.pdf', ['application/pdf', 'application/octet-stream']],
+    ['.txt', ['text/plain', 'application/octet-stream']],
+    ['.md', ['text/markdown', 'text/plain', 'application/octet-stream']],
+    ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/octet-stream']]
+  ]);
+  const mimeTypes = allowed.get(extension);
+  if (!mimeTypes || !mimeTypes.includes(file.mimetype)) {
+    return cb(new Error('Upload a PDF, TXT, Markdown, or DOCX course material file.'));
+  }
+  cb(null, true);
+};
+
+// AI material stays in memory only long enough to extract text; raw uploads are not persisted.
+const aiMaterialUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: aiMaterialFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 5, parts: 6 }
+});
+
 function removeUploadedFile(file) {
   if (!file || !file.path) return;
   try {
@@ -235,6 +257,8 @@ module.exports = {
   resourceUpload,
   submissionUpload,
   importUpload,
+  aiMaterialUpload,
+  aiMaterialFileFilter,
   removeUploadedFile,
   removeUploadedResourceByUrl,
   removeUploadedSubmissionByUrl,

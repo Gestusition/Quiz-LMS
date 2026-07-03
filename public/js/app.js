@@ -21,6 +21,7 @@ import { AcademicPage } from './pages/academicPage.js';
 import { AssignmentsPage } from './pages/assignmentsPage.js';
 import { AttendancePage } from './pages/attendancePage.js';
 import { AnalyticsPage } from './pages/analyticsPage.js';
+import { AiQuizPage } from './pages/aiQuizPage.js';
 
 const App = {
   ...state,
@@ -41,6 +42,7 @@ const App = {
   ...AssignmentsPage,
   ...AttendancePage,
   ...AnalyticsPage,
+  ...AiQuizPage,
 
   async init() {
     document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
@@ -92,7 +94,7 @@ const App = {
       ['#/attendance', 'Attendance']
     ];
     if (this.user.role !== 'student') items.splice(3, 0, ['#/academic', 'Academic']);
-    if (this.canManageLearning()) items.push(['#/questions', 'Question Bank']);
+    if (this.canManageLearning()) items.push(['#/ai-quiz', 'AI Assistant'], ['#/questions', 'Question Bank']);
     if (this.user.role === 'admin') items.push(['#/users', 'Users'], ['#/analytics', 'Analytics'], ['#/maintenance', 'Maintenance']);
 
     const adminLinks = this.user.role === 'admin'

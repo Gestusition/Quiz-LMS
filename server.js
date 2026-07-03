@@ -1,3 +1,4 @@
+require('dotenv').config({ quiet: true });
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -19,6 +20,7 @@ const discussionRoutes = require('./routes/discussionRoutes');
 const courseWeekRoutes = require('./routes/courseWeekRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const aiQuizRoutes = require('./routes/aiQuizRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -75,6 +77,8 @@ app.use('/api/discussion', discussionRoutes);
 app.use('/api/weeks', courseWeekRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/ai', aiQuizRoutes.settingsRouter);
+app.use('/api/courses', aiQuizRoutes.courseRouter);
 
 // Swagger API Documentation
 setupSwagger(app);
@@ -174,7 +178,8 @@ app.get('/api', requireAuth, requireRole('admin'), (req, res) => {
       discussion: '/api/discussion',
       weeks: '/api/weeks',
       audit: '/api/audit',
-      settings: '/api/settings/maintenance'
+      settings: '/api/settings/maintenance',
+      ai: '/api/ai/settings/status'
     }
   });
 });

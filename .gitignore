@@ -77,6 +77,7 @@ web_modules/
 .env.test
 .env.production
 .env.local
+.env.*.local
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -138,6 +139,8 @@ SAD_Requirements (2).pdf
 
 # Uploads
 public/uploads/
+uploads/tmp/
+tmp/uploads/
 
 # Test outputs
 test_output.txt

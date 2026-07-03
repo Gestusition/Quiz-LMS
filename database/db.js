@@ -126,6 +126,20 @@ function createTables() {
       updatedAt TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS users.ai_user_settings (
+      userId INTEGER PRIMARY KEY,
+      endpoint TEXT NOT NULL,
+      encryptedApiKey TEXT NOT NULL,
+      keyIv TEXT NOT NULL,
+      keyAuthTag TEXT NOT NULL,
+      chatDeployment TEXT NOT NULL,
+      embeddingDeployment TEXT DEFAULT '',
+      apiVersion TEXT NOT NULL,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS users.password_reset_codes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,
@@ -302,6 +316,32 @@ function createTables() {
       FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE SET NULL
     );
 
+    CREATE TABLE IF NOT EXISTS learning.ai_course_materials (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      originalName TEXT NOT NULL,
+      mimeType TEXT NOT NULL,
+      byteSize INTEGER NOT NULL,
+      chunkCount INTEGER NOT NULL DEFAULT 0,
+      uploadedBy INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS learning.ai_material_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      materialId INTEGER NOT NULL,
+      courseId INTEGER NOT NULL,
+      chunkIndex INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      embeddingJson TEXT NOT NULL,
+      sourceLabel TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(materialId, chunkIndex),
+      FOREIGN KEY (materialId) REFERENCES ai_course_materials(id) ON DELETE CASCADE,
+      FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS learning.attendance_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       courseOfferingId INTEGER NOT NULL,
@@ -423,6 +463,18 @@ function createTables() {
       updatedBy INTEGER,
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.ai_quiz_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      courseId INTEGER NOT NULL,
+      createdBy INTEGER NOT NULL,
+      dataJson TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'added_to_quiz')),
+      quizId INTEGER,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      publishedAt TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS assessment.quiz_questions (
