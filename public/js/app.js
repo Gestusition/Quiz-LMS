@@ -22,6 +22,7 @@ import { AssignmentsPage } from './pages/assignmentsPage.js';
 import { AttendancePage } from './pages/attendancePage.js';
 import { AnalyticsPage } from './pages/analyticsPage.js';
 import { AiQuizPage } from './pages/aiQuizPage.js';
+import { AiQuizReactPage } from './pages/aiQuizReactPage.js';
 
 const App = {
   ...state,
@@ -43,6 +44,7 @@ const App = {
   ...AttendancePage,
   ...AnalyticsPage,
   ...AiQuizPage,
+  ...AiQuizReactPage,
 
   async init() {
     document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
@@ -125,11 +127,31 @@ const App = {
   },
 
   route() {
+    this.cleanupActivePage();
     return routeTo(this);
   },
 
   setApp(html) {
+    this.cleanupActivePage();
     setHtml('app', html);
+  },
+
+  registerPageCleanup(cleanup) {
+    this.cleanupActivePage();
+    this._activePageCleanup = typeof cleanup === 'function' ? cleanup : null;
+  },
+
+  cleanupActivePage() {
+    const cleanup = this._activePageCleanup;
+    this._activePageCleanup = null;
+    if (typeof cleanup === 'function') {
+      try {
+        cleanup();
+      } catch (error) {
+        console.warn('Page cleanup did not finish cleanly.');
+      }
+    }
+    document.getElementById('app')?.classList.remove('ai-assistant-page-host');
   },
 
   esc,

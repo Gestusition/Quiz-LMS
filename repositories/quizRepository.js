@@ -429,15 +429,23 @@ function clearCreatedBy(userId) {
   db.prepare('UPDATE exam_templates SET createdBy = NULL WHERE createdBy = ?').run(userId);
 }
 
+let savepointSequence = 0;
+
 function withTransaction(work) {
   const db = getDatabase();
-  db.exec('BEGIN TRANSACTION');
+  savepointSequence += 1;
+  const savepoint = `quiz_repo_${savepointSequence}`;
+  db.exec(`SAVEPOINT ${savepoint}`);
   try {
     const result = work();
-    db.exec('COMMIT');
+    db.exec(`RELEASE SAVEPOINT ${savepoint}`);
     return result;
   } catch (error) {
-    db.exec('ROLLBACK');
+    try {
+      db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    } finally {
+      db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+    }
     throw error;
   }
 }

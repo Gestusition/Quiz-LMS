@@ -324,7 +324,13 @@ function createTables() {
       byteSize INTEGER NOT NULL,
       chunkCount INTEGER NOT NULL DEFAULT 0,
       uploadedBy INTEGER,
+      sourceType TEXT NOT NULL DEFAULT 'file' CHECK(sourceType IN ('file', 'pasted_text')),
+      status TEXT NOT NULL DEFAULT 'ready' CHECK(status IN ('pending', 'indexing', 'ready', 'failed')),
+      errorMessage TEXT DEFAULT '',
+      characterCount INTEGER NOT NULL DEFAULT 0,
+      contentHash TEXT DEFAULT '',
       createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE
     );
 
@@ -475,6 +481,140 @@ function createTables() {
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now')),
       publishedAt TEXT DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.ai_conversations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ownerUserId INTEGER NOT NULL,
+      ownerRole TEXT NOT NULL CHECK(ownerRole IN ('admin', 'teacher')),
+      courseId INTEGER,
+      title TEXT NOT NULL DEFAULT 'New quiz conversation',
+      status TEXT NOT NULL DEFAULT 'gathering_requirements' CHECK(status IN (
+        'gathering_requirements',
+        'ready_to_generate',
+        'generating',
+        'generation_failed',
+        'review_required',
+        'draft_saved',
+        'published'
+      )),
+      draftId INTEGER,
+      lastMessageAt TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (draftId) REFERENCES ai_quiz_drafts(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.ai_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversationId INTEGER NOT NULL,
+      senderType TEXT NOT NULL CHECK(senderType IN ('user', 'assistant', 'system')),
+      senderUserId INTEGER,
+      content TEXT NOT NULL,
+      messageType TEXT NOT NULL DEFAULT 'message' CHECK(messageType IN (
+        'message',
+        'greeting',
+        'clarification',
+        'plan_update',
+        'status',
+        'revision',
+        'error'
+      )),
+      metadataJson TEXT NOT NULL DEFAULT '{}',
+      clientRequestId TEXT NOT NULL DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (conversationId) REFERENCES ai_conversations(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.ai_quiz_plans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversationId INTEGER NOT NULL UNIQUE,
+      planJson TEXT NOT NULL DEFAULT '{}',
+      missingRequiredFieldsJson TEXT NOT NULL DEFAULT '[]',
+      readinessStatus TEXT NOT NULL DEFAULT 'gathering_requirements' CHECK(readinessStatus IN (
+        'gathering_requirements',
+        'ready_to_generate'
+      )),
+      version INTEGER NOT NULL DEFAULT 1,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (conversationId) REFERENCES ai_conversations(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.ai_generation_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversationId INTEGER NOT NULL,
+      requestedBy INTEGER NOT NULL,
+      idempotencyKey TEXT NOT NULL,
+      inputHash TEXT DEFAULT '',
+      planSnapshotJson TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN (
+        'queued',
+        'generating',
+        'completed',
+        'failed',
+        'cancel_requested',
+        'cancelled'
+      )),
+      progressStage TEXT DEFAULT '',
+      draftId INTEGER,
+      deploymentName TEXT DEFAULT '',
+      providerRequestId TEXT DEFAULT '',
+      errorCode TEXT DEFAULT '',
+      errorMessage TEXT DEFAULT '',
+      cancellationRequestedBy INTEGER,
+      cancellationRequestedAt TEXT DEFAULT '',
+      metadataJson TEXT NOT NULL DEFAULT '{}',
+      createdAt TEXT DEFAULT (datetime('now')),
+      startedAt TEXT DEFAULT '',
+      completedAt TEXT DEFAULT '',
+      updatedAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(conversationId, idempotencyKey),
+      FOREIGN KEY (conversationId) REFERENCES ai_conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (draftId) REFERENCES ai_quiz_drafts(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.ai_generation_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      generationRunId INTEGER NOT NULL,
+      questionIndex INTEGER CHECK(questionIndex IS NULL OR questionIndex >= 0),
+      materialId INTEGER,
+      chunkId INTEGER NOT NULL,
+      sourceLabel TEXT DEFAULT '',
+      excerpt TEXT DEFAULT '',
+      relevanceScore REAL,
+      metadataJson TEXT NOT NULL DEFAULT '{}',
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (generationRunId) REFERENCES ai_generation_runs(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS assessment.ai_draft_revisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      draftId INTEGER NOT NULL,
+      conversationId INTEGER,
+      generationRunId INTEGER,
+      revisionNumber INTEGER NOT NULL,
+      requestedBy INTEGER NOT NULL,
+      revisionType TEXT NOT NULL CHECK(revisionType IN (
+        'initial_generation',
+        'manual_edit',
+        'chat_revision',
+        'regenerate_question',
+        'regenerate_selected',
+        'whole_quiz_revision',
+        'restore_revision'
+      )),
+      requestText TEXT DEFAULT '',
+      beforeDataJson TEXT NOT NULL DEFAULT '{}',
+      afterDataJson TEXT NOT NULL DEFAULT '{}',
+      metadataJson TEXT NOT NULL DEFAULT '{}',
+      idempotencyKey TEXT NOT NULL DEFAULT '',
+      appliedAt TEXT DEFAULT '',
+      createdAt TEXT DEFAULT (datetime('now')),
+      UNIQUE(draftId, revisionNumber),
+      FOREIGN KEY (draftId) REFERENCES ai_quiz_drafts(id) ON DELETE CASCADE,
+      FOREIGN KEY (conversationId) REFERENCES ai_conversations(id) ON DELETE SET NULL,
+      FOREIGN KEY (generationRunId) REFERENCES ai_generation_runs(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS assessment.quiz_questions (
@@ -804,6 +944,27 @@ function migrateExistingTables() {
   ensureColumn('learning', 'categories', 'createdBy', 'createdBy INTEGER');
   ensureColumn('learning', 'categories', 'updatedBy', 'updatedBy INTEGER');
   ensureColumn('learning', 'categories', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
+  ensureColumn('learning', 'ai_course_materials', 'sourceType', 'sourceType TEXT NOT NULL DEFAULT \'file\'');
+  ensureColumn('learning', 'ai_course_materials', 'status', 'status TEXT NOT NULL DEFAULT \'ready\'');
+  ensureColumn('learning', 'ai_course_materials', 'errorMessage', 'errorMessage TEXT DEFAULT \'\'');
+  ensureColumn('learning', 'ai_course_materials', 'characterCount', 'characterCount INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('learning', 'ai_course_materials', 'contentHash', 'contentHash TEXT DEFAULT \'\'');
+  ensureColumn('learning', 'ai_course_materials', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
+  db.exec(`
+    UPDATE learning.ai_course_materials
+    SET sourceType = CASE
+        WHEN sourceType IN ('file', 'pasted_text') THEN sourceType
+        ELSE 'file'
+      END,
+      status = CASE
+        WHEN status IN ('pending', 'indexing', 'ready', 'failed') THEN status
+        ELSE 'ready'
+      END,
+      updatedAt = CASE
+        WHEN TRIM(COALESCE(updatedAt, '')) = '' THEN COALESCE(createdAt, datetime('now'))
+        ELSE updatedAt
+      END
+  `);
   migrateCategoryUniqueness();
   ensureColumn('learning', 'attendance_sessions', 'status', 'status TEXT NOT NULL DEFAULT \'open\'');
   ensureColumn('learning', 'attendance_sessions', 'openedAt', 'openedAt TEXT DEFAULT \'\'');
@@ -826,6 +987,7 @@ function migrateExistingTables() {
   ensureColumn('assessment', 'questions', 'gradingType', 'gradingType TEXT NOT NULL DEFAULT \'standard\'');
   ensureColumn('assessment', 'questions', 'updatedBy', 'updatedBy INTEGER');
   ensureColumn('assessment', 'questions', 'updatedAt', 'updatedAt TEXT DEFAULT \'\'');
+  ensureColumn('assessment', 'ai_draft_revisions', 'appliedAt', 'appliedAt TEXT DEFAULT \'\'');
   ensureQuestionSettingsTable();
 
   ensureColumn('assessment', 'attempt_answers', 'answerJson', 'answerJson TEXT DEFAULT \'{}\'');
@@ -943,6 +1105,110 @@ function ensureAdvancedIndexes() {
   database.exec(`
     CREATE INDEX IF NOT EXISTS assessment.idx_question_user_settings_lookup
     ON question_user_settings(questionId, userId)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS learning.idx_ai_materials_course_status
+    ON ai_course_materials(courseId, status, createdAt)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS learning.idx_ai_materials_owner_course
+    ON ai_course_materials(uploadedBy, courseId, createdAt)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS learning.idx_ai_materials_content_hash
+    ON ai_course_materials(courseId, contentHash)
+    WHERE TRIM(contentHash) != ''
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS learning.idx_ai_chunks_course_material
+    ON ai_material_chunks(courseId, materialId, chunkIndex)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_drafts_owner_course_status
+    ON ai_quiz_drafts(createdBy, courseId, status, updatedAt)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_conversations_owner_updated
+    ON ai_conversations(ownerUserId, updatedAt, id)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_conversations_owner_status
+    ON ai_conversations(ownerUserId, status, updatedAt)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_conversations_course_owner
+    ON ai_conversations(courseId, ownerUserId, updatedAt)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_messages_conversation
+    ON ai_messages(conversationId, id)
+  `);
+
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS assessment.idx_ai_messages_client_request
+    ON ai_messages(conversationId, clientRequestId)
+    WHERE TRIM(clientRequestId) != ''
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_plans_readiness
+    ON ai_quiz_plans(readinessStatus, updatedAt)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_generation_conversation
+    ON ai_generation_runs(conversationId, createdAt, id)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_generation_status
+    ON ai_generation_runs(status, updatedAt)
+  `);
+
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS assessment.idx_ai_generation_one_active
+    ON ai_generation_runs(conversationId)
+    WHERE status IN ('queued', 'generating', 'cancel_requested')
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_generation_sources_run_question
+    ON ai_generation_sources(generationRunId, questionIndex, id)
+  `);
+
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS assessment.idx_ai_generation_source_unique
+    ON ai_generation_sources(generationRunId, COALESCE(questionIndex, -1), chunkId)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_generation_sources_chunk
+    ON ai_generation_sources(chunkId, materialId)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_revisions_draft
+    ON ai_draft_revisions(draftId, revisionNumber)
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS assessment.idx_ai_revisions_conversation
+    ON ai_draft_revisions(conversationId, id)
+  `);
+
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS assessment.idx_ai_revisions_idempotency
+    ON ai_draft_revisions(draftId, idempotencyKey)
+    WHERE TRIM(idempotencyKey) != ''
   `);
 }
 

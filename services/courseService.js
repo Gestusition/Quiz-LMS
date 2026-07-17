@@ -11,6 +11,8 @@ const restrictionRepository = require('../repositories/restrictionRepository');
 const userRepository = require('../repositories/userRepository');
 const validationIssueRepository = require('../repositories/validationIssueRepository');
 const aiQuizDraftRepository = require('../repositories/aiQuizDraftRepository');
+const aiConversationRepository = require('../repositories/aiConversationRepository');
+const aiMaterialRepository = require('../repositories/aiMaterialRepository');
 const restrictionService = require('./restrictionService');
 const { courseVisibilityValues, enrollmentStatusValues } = require('../constants/enums');
 const { validateCourse } = require('../validators/courseValidators');
@@ -104,7 +106,9 @@ class CourseService {
       gradeSchemeRepository.deleteByCourseId(id);
       restrictionRepository.deleteByScope('course', id);
       validationIssueRepository.deleteByCourseId(id);
+      aiConversationRepository.deleteByCourseId(id);
       aiQuizDraftRepository.deleteByCourseId(id);
+      aiMaterialRepository.deleteByCourseId(id);
       courseRepository.deleteById(id);
     });
 

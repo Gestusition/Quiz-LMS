@@ -69,7 +69,8 @@ describe('API route mounts', () => {
           courses: '/api/courses',
           users: '/api/users',
           analytics: '/api/analytics/admin',
-          settings: '/api/settings/maintenance'
+          settings: '/api/settings/maintenance',
+          ai: '/api/ai/settings/status'
         }));
       });
   });
@@ -97,8 +98,9 @@ describe('API route mounts', () => {
           }));
           expect(new Date(response.body.timestamp).toString()).not.toBe('Invalid Date');
           expect(response.body.routes).toEqual(expect.objectContaining({
-            auth: '/api/auth/login',
-            settings: '/api/settings/maintenance'
+          auth: '/api/auth/login',
+          settings: '/api/settings/maintenance',
+          ai: '/api/ai/settings/status'
           }));
         });
     } finally {
@@ -161,7 +163,9 @@ describe('API route mounts', () => {
       { name: 'discussion', path: `/api/discussion/courses/${course.id}/threads`, auth: true },
       { name: 'weeks', path: `/api/weeks/courses/${course.id}/weeks`, auth: true },
       { name: 'audit', path: '/api/audit?limit=1', auth: true },
-      { name: 'settings', path: '/api/settings/maintenance', auth: true }
+      { name: 'settings', path: '/api/settings/maintenance', auth: true },
+      { name: 'ai', path: '/api/ai/settings/status', auth: true },
+      { name: 'ai-conversations', path: '/api/ai/conversations', auth: true }
     ];
 
     for (const route of mountedRoutes) {
@@ -229,7 +233,7 @@ describe('API route mounts', () => {
       .expect('Content-Type', /html/);
   });
 
-  test('Swagger docs are admin-only and expose maintenance settings and maintenance login errors', async () => {
+  test('Swagger docs are admin-only and expose maintenance plus conversational AI contracts', async () => {
     const session = createAdminSession();
     const authCookie = `auth_token=${session.token}`;
 
@@ -259,6 +263,29 @@ describe('API route mounts', () => {
         expect(paths['/api/settings/maintenance']?.put).toBeDefined();
         expect(paths['/api/auth/login']?.post?.responses?.['403']).toBeDefined();
         expect(JSON.stringify(paths['/api/auth/login'].post.responses['403'])).toContain('MAINTENANCE_MODE');
+        [
+          ['post', '/api/ai/conversations'],
+          ['get', '/api/ai/conversations'],
+          ['get', '/api/ai/conversations/{id}'],
+          ['post', '/api/ai/conversations/{id}/messages'],
+          ['patch', '/api/ai/conversations/{id}/plan'],
+          ['post', '/api/ai/conversations/{id}/generate'],
+          ['get', '/api/ai/conversations/{id}/generation-status'],
+          ['post', '/api/ai/conversations/{id}/cancel'],
+          ['post', '/api/ai/conversations/{id}/revise'],
+          ['post', '/api/ai/conversations/{id}/revisions/{revisionId}/apply'],
+          ['post', '/api/ai/conversations/{id}/regenerate-questions'],
+          ['put', '/api/ai/conversations/{id}/draft'],
+          ['post', '/api/ai/settings/test'],
+          ['post', '/api/courses/{courseId}/ai/materials/paste'],
+          ['delete', '/api/courses/{courseId}/ai/materials/{materialId}'],
+          ['get', '/api/courses/{courseId}/ai/source-chunks/{chunkId}']
+        ].forEach(([method, routePath]) => {
+          expect(paths[routePath]?.[method]).toBeDefined();
+        });
+        expect(response.body.tags).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: 'AI Assistant' })
+        ]));
       });
   });
 
@@ -271,6 +298,8 @@ describe('API route mounts', () => {
     expect(appSource.indexOf('href="/api"')).toBeLessThan(appSource.indexOf('href="/api-docs"'));
     expect(apiSource).toContain('getHealth()');
     expect(apiSource).toContain("`${this.BASE}/health`");
+    expect(apiSource).toContain('body: { questionIndexes: indexes, ...(instruction ? { instruction } : {}) }');
+    expect(apiSource).toContain('`/courses/${courseId}/ai/source-chunks/${chunkId}`');
     expect(apiSource).toContain("database: data.database || (data.status === 'ok' && response.ok ? 'ok' : 'not_ok')");
     expect(dashboardSource).toContain('API.getHealth()');
     expect(dashboardSource).toContain('API Health');

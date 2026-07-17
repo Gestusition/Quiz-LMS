@@ -27,7 +27,7 @@ export function routeTo(app) {
   if (root === 'questions' && !app.canManageLearning()) return app.renderForbidden();
   if (root === 'questions') return app.renderQuestionBank();
   if (root === 'ai-quiz' && !app.canManageLearning()) return app.renderForbidden();
-  if (root === 'ai-quiz') return app.renderAiQuizAssistant();
+  if (root === 'ai-quiz') return app.renderAiQuizAssistantReact();
   if (root === 'users' && app.user.role !== 'admin') return app.renderForbidden();
   if (root === 'users') return app.renderUsers();
   if (root === 'analytics' && app.user.role !== 'admin') return app.renderForbidden();

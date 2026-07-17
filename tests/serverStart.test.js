@@ -29,7 +29,31 @@ describe('server startup and fallback handlers', () => {
 
     expect(response.statusCode).toBe(500);
     expect(response.body).toEqual({ error: 'Internal server error.' });
-    expect(errorSpy).toHaveBeenCalledWith('Unhandled error:', expect.any(Error));
+    expect(errorSpy).toHaveBeenCalledWith('Unhandled error:', {
+      name: 'Error',
+      code: 'UNEXPECTED_ERROR',
+      status: 500
+    });
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('private failure');
+  });
+
+  test('oversized request errors return a safe 413 without logging payload details', () => {
+    const response = fakeResponse();
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    app.handleUnhandledError(
+      Object.assign(new Error('private oversized body'), { type: 'entity.too.large', status: 413 }),
+      {},
+      response,
+      jest.fn()
+    );
+
+    expect(response.statusCode).toBe(413);
+    expect(response.body).toEqual({
+      error: 'Request payload too large.',
+      message: 'Reduce the request size and try again.'
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   test('startServer initializes the database and registers the HTTP listener', () => {

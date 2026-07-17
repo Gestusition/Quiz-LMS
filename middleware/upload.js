@@ -1,6 +1,7 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { AI_LIMITS } = require('../constants/ai');
 const { LIMITS } = require('../constants/limits');
 
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
@@ -133,7 +134,7 @@ const aiMaterialFileFilter = (req, file, cb) => {
 const aiMaterialUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: aiMaterialFileFilter,
-  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 5, parts: 6 }
+  limits: { fileSize: AI_LIMITS.materialFileBytesMax, files: 1, fields: 5, parts: 6 }
 });
 
 function removeUploadedFile(file) {

@@ -198,7 +198,17 @@ app.get('*', (req, res) => {
 
 // Error handling middleware
 function handleUnhandledError(err, req, res, next) {
-  console.error('Unhandled error:', err);
+  if (err?.type === 'entity.too.large' || err?.status === 413) {
+    return res.status(413).json({
+      error: 'Request payload too large.',
+      message: 'Reduce the request size and try again.'
+    });
+  }
+  console.error('Unhandled error:', {
+    name: String(err?.name || 'Error').slice(0, 80),
+    code: String(err?.code || 'UNEXPECTED_ERROR').slice(0, 80),
+    status: Number(err?.status) || 500
+  });
   res.status(500).json({ error: 'Internal server error.' });
 }
 

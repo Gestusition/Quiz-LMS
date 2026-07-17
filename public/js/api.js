@@ -206,11 +206,56 @@ export const API = {
   updateMaintenanceMode(enabled) { return this.request('/settings/maintenance', { method: 'PUT', body: { enabled } }); },
   getAiSettingsStatus() { return this.request('/ai/settings/status'); },
   saveAiSettings(data) { return this.request('/ai/settings', { method: 'POST', body: data }); },
+  testAiSettings(data) { return this.request('/ai/settings/test', { method: 'POST', body: data }); },
+  getAiConversations() { return this.request('/ai/conversations'); },
+  createAiConversation(data = {}) { return this.request('/ai/conversations', { method: 'POST', body: data }); },
+  getAiConversation(id) { return this.request(`/ai/conversations/${id}`); },
+  sendAiConversationMessage(id, content) {
+    return this.request(`/ai/conversations/${id}/messages`, { method: 'POST', body: { content } });
+  },
+  updateAiConversationPlan(id, patch) {
+    return this.request(`/ai/conversations/${id}/plan`, { method: 'PATCH', body: patch });
+  },
+  generateAiConversationDraft(id, idempotencyKey) {
+    return this.request(`/ai/conversations/${id}/generate`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: {}
+    });
+  },
+  getAiConversationGenerationStatus(id) { return this.request(`/ai/conversations/${id}/generation-status`); },
+  cancelAiConversationGeneration(id) {
+    return this.request(`/ai/conversations/${id}/cancel`, { method: 'POST', body: {} });
+  },
+  reviseAiConversationDraft(id, instruction) {
+    return this.request(`/ai/conversations/${id}/revise`, { method: 'POST', body: { instruction } });
+  },
+  applyAiConversationRevision(id, revisionId) {
+    return this.request(`/ai/conversations/${id}/revisions/${revisionId}/apply`, { method: 'POST', body: {} });
+  },
+  regenerateAiConversationQuestions(id, indexes, instruction = '') {
+    return this.request(`/ai/conversations/${id}/regenerate-questions`, {
+      method: 'POST',
+      body: { questionIndexes: indexes, ...(instruction ? { instruction } : {}) }
+    });
+  },
+  saveAiConversationDraft(id, draft) {
+    return this.request(`/ai/conversations/${id}/draft`, { method: 'PUT', body: draft });
+  },
   getAiMaterials(courseId) { return this.request(`/courses/${courseId}/ai/materials`); },
   uploadAiMaterial(courseId, file) {
     const form = new FormData();
     form.append('file', file);
     return this.request(`/courses/${courseId}/ai/materials`, { method: 'POST', body: form });
+  },
+  pasteAiMaterial(courseId, data) {
+    return this.request(`/courses/${courseId}/ai/materials/paste`, { method: 'POST', body: data });
+  },
+  deleteAiMaterial(courseId, materialId) {
+    return this.request(`/courses/${courseId}/ai/materials/${materialId}`, { method: 'DELETE' });
+  },
+  getAiMaterialChunk(courseId, materialId, chunkId) {
+    return this.request(`/courses/${courseId}/ai/source-chunks/${chunkId}`);
   },
   generateAiQuiz(courseId, data) { return this.request(`/courses/${courseId}/ai/generate-quiz`, { method: 'POST', body: data }); },
   regenerateAiQuestion(courseId, data) { return this.request(`/courses/${courseId}/ai/regenerate-question`, { method: 'POST', body: data }); },

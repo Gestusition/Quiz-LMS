@@ -44,6 +44,24 @@ const options = {
           description: 'Resource not found',
           content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
         },
+        '409Conflict': {
+          description: 'The request conflicts with the current resource state',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+        },
+        '413PayloadTooLarge': {
+          description: 'The request body or uploaded content exceeds a configured safety limit',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+        },
+        '429TooManyRequests': {
+          description: 'The caller exceeded a route-specific request limit',
+          headers: {
+            'Retry-After': {
+              description: 'Seconds until another request may be attempted',
+              schema: { type: 'integer', minimum: 1 }
+            }
+          },
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+        },
         '500ServerError': {
           description: 'Internal server error',
           content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
@@ -1649,6 +1667,516 @@ const options = {
             details: { type: 'object' },
             createdAt: { type: 'string', format: 'date-time' }
           }
+        },
+        AiQuestionTypeDistribution: {
+          type: 'object',
+          required: ['multipleChoice', 'trueFalse', 'shortAnswer', 'essay', 'coding'],
+          properties: {
+            multipleChoice: { type: 'integer', minimum: 0, maximum: 20 },
+            trueFalse: { type: 'integer', minimum: 0, maximum: 20 },
+            shortAnswer: { type: 'integer', minimum: 0, maximum: 20 },
+            essay: { type: 'integer', minimum: 0, maximum: 20 },
+            coding: { type: 'integer', minimum: 0, maximum: 20 }
+          }
+        },
+        AiQuizPlan: {
+          type: 'object',
+          required: ['learningObjectives', 'questionTypeDistribution', 'tags', 'missingRequiredFields', 'readinessStatus'],
+          properties: {
+            courseId: { type: 'integer', nullable: true },
+            topic: { type: 'string', maxLength: 500 },
+            learningObjectives: {
+              type: 'array',
+              maxItems: 20,
+              items: { type: 'string', maxLength: 500 }
+            },
+            difficulty: {
+              type: 'string',
+              nullable: true,
+              enum: ['easy', 'medium', 'hard']
+            },
+            questionCount: { type: 'integer', nullable: true, minimum: 1, maximum: 20 },
+            language: { type: 'string', maxLength: 60 },
+            questionTypeDistribution: { $ref: '#/components/schemas/AiQuestionTypeDistribution' },
+            materialMode: {
+              type: 'string',
+              enum: ['course_material_only', 'course_material_preferred', 'general_model_knowledge_allowed']
+            },
+            useIndexedMaterialOnly: { type: 'boolean' },
+            includeExplanations: { type: 'boolean' },
+            timeLimitMinutes: { type: 'integer', nullable: true, minimum: 5, maximum: 240 },
+            tags: {
+              type: 'array',
+              maxItems: 20,
+              items: { type: 'string', maxLength: 64 }
+            },
+            gradingPreferences: { type: 'string', maxLength: 2000 },
+            specialInstructions: { type: 'string', maxLength: 8000 },
+            materialIds: {
+              type: 'array',
+              maxItems: 50,
+              uniqueItems: true,
+              items: { type: 'integer', minimum: 1 }
+            },
+            missingRequiredFields: {
+              type: 'array',
+              uniqueItems: true,
+              items: { type: 'string' }
+            },
+            readinessStatus: {
+              type: 'string',
+              enum: ['gathering_requirements', 'ready_to_generate']
+            }
+          }
+        },
+        AiMessage: {
+          type: 'object',
+          required: ['id', 'conversationId', 'senderType', 'content', 'messageType', 'createdAt'],
+          properties: {
+            id: { type: 'integer' },
+            conversationId: { type: 'integer' },
+            senderType: { type: 'string', enum: ['user', 'assistant', 'system'] },
+            senderUserId: { type: 'integer', nullable: true },
+            content: { type: 'string', maxLength: 12000 },
+            messageType: {
+              type: 'string',
+              enum: ['message', 'greeting', 'clarification', 'plan_update', 'status', 'revision', 'error']
+            },
+            metadata: { type: 'object', additionalProperties: true },
+            clientRequestId: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        AiSuggestedReply: {
+          type: 'object',
+          required: ['label', 'value'],
+          properties: {
+            label: {
+              type: 'string',
+              maxLength: 80,
+              description: 'Concise context-aware label rendered as a suggestion chip.'
+            },
+            value: {
+              type: 'string',
+              maxLength: 240,
+              description: 'Full natural-language direction sent when the suggestion is selected.'
+            }
+          }
+        },
+        AiConversation: {
+          type: 'object',
+          required: [
+            'id',
+            'title',
+            'status',
+            'plan',
+            'createdAt',
+            'updatedAt'
+          ],
+          properties: {
+            id: { type: 'integer' },
+            courseId: { type: 'integer', nullable: true },
+            title: { type: 'string', maxLength: 160 },
+            status: {
+              type: 'string',
+              enum: [
+                'gathering_requirements',
+                'ready_to_generate',
+                'generating',
+                'generation_failed',
+                'review_required',
+                'draft_saved',
+                'published'
+              ]
+            },
+            draftId: { type: 'integer', nullable: true },
+            plan: { $ref: '#/components/schemas/AiQuizPlan' },
+            planVersion: { type: 'integer', minimum: 1 },
+            lastMessageAt: { type: 'string' },
+            messages: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AiMessage' }
+            },
+            suggestedReplies: {
+              type: 'array',
+              maxItems: 4,
+              description: 'Live suggestions recomputed from the current plan, authorized course, material themes, and recent conversation direction.',
+              items: { $ref: '#/components/schemas/AiSuggestedReply' }
+            },
+            draft: {
+              allOf: [{ $ref: '#/components/schemas/AiQuizDraft' }],
+              nullable: true
+            },
+            generation: { type: 'object', nullable: true, additionalProperties: true },
+            revisions: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AiDraftRevision' }
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        AiConversationList: {
+          type: 'object',
+          required: ['items'],
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AiConversation' }
+            }
+          }
+        },
+        AiCreateConversationRequest: {
+          type: 'object',
+          properties: {
+            courseId: { type: 'integer', minimum: 1 },
+            initialMessage: { type: 'string', maxLength: 12000 }
+          }
+        },
+        AiAddMessageRequest: {
+          type: 'object',
+          required: ['content'],
+          properties: {
+            content: { type: 'string', minLength: 1, maxLength: 12000 },
+            clientRequestId: { type: 'string', minLength: 8, maxLength: 128 }
+          }
+        },
+        AiPlanningResponse: {
+          type: 'object',
+          required: ['userMessage', 'assistantMessage', 'plan', 'conversation'],
+          properties: {
+            userMessage: { $ref: '#/components/schemas/AiMessage' },
+            assistantMessage: { $ref: '#/components/schemas/AiMessage' },
+            plan: { $ref: '#/components/schemas/AiQuizPlan' },
+            conversation: { $ref: '#/components/schemas/AiConversation' }
+          }
+        },
+        AiPlanPatchRequest: {
+          type: 'object',
+          additionalProperties: false,
+          description: 'Partial quiz-plan fields. The server recomputes missingRequiredFields and readinessStatus.',
+          properties: {
+            courseId: { type: 'integer', nullable: true },
+            topic: { type: 'string', maxLength: 500 },
+            learningObjectives: {
+              type: 'array',
+              maxItems: 20,
+              items: { type: 'string', maxLength: 500 }
+            },
+            difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+            questionCount: { type: 'integer', nullable: true, minimum: 1, maximum: 20 },
+            language: { type: 'string', maxLength: 60 },
+            questionTypeDistribution: { $ref: '#/components/schemas/AiQuestionTypeDistribution' },
+            materialMode: {
+              type: 'string',
+              enum: ['course_material_only', 'course_material_preferred', 'general_model_knowledge_allowed']
+            },
+            useIndexedMaterialOnly: { type: 'boolean' },
+            includeExplanations: { type: 'boolean' },
+            timeLimitMinutes: { type: 'integer', nullable: true, minimum: 5, maximum: 240 },
+            tags: {
+              type: 'array',
+              maxItems: 20,
+              items: { type: 'string', maxLength: 64 }
+            },
+            gradingPreferences: { type: 'string', maxLength: 2000 },
+            specialInstructions: { type: 'string', maxLength: 8000 },
+            materialIds: {
+              type: 'array',
+              maxItems: 50,
+              uniqueItems: true,
+              items: { type: 'integer', minimum: 1 }
+            }
+          }
+        },
+        AiGeneratedQuestion: {
+          type: 'object',
+          required: [
+            'type',
+            'text',
+            'options',
+            'correctAnswer',
+            'difficulty',
+            'points',
+            'sourceReferences',
+            'validationStatus'
+          ],
+          properties: {
+            id: { type: 'string', description: 'Stable draft-local question identifier' },
+            type: {
+              type: 'string',
+              enum: ['multiple_choice', 'true_false', 'short_answer', 'essay', 'coding']
+            },
+            text: {
+              type: 'string',
+              maxLength: 2000
+            },
+            prompt: {
+              type: 'string',
+              maxLength: 2000,
+              deprecated: true,
+              description: 'Client-side compatibility alias; persisted drafts use text'
+            },
+            options: {
+              type: 'array',
+              maxItems: 5,
+              items: { type: 'string', maxLength: 500 }
+            },
+            correctAnswer: { type: 'string', maxLength: 1000 },
+            explanation: { type: 'string', maxLength: 5000 },
+            difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+            learningObjective: { type: 'string', maxLength: 500 },
+            points: { type: 'number', minimum: 0, exclusiveMinimum: true, maximum: 100 },
+            sourceReferences: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['chunkId', 'label'],
+                properties: {
+                  chunkId: { type: 'integer' },
+                  label: { type: 'string' },
+                  excerpt: { type: 'string', maxLength: 8000 }
+                }
+              }
+            },
+            validationStatus: { type: 'string', enum: ['valid', 'repaired', 'invalid'] }
+          }
+        },
+        AiQuizDraft: {
+          type: 'object',
+          required: ['id', 'status', 'title', 'questions', 'updatedAt'],
+          properties: {
+            id: { type: 'integer' },
+            courseId: { type: 'integer' },
+            status: {
+              type: 'string',
+              enum: ['draft'],
+              description: 'AI generation never returns a published quiz'
+            },
+            title: { type: 'string', maxLength: 120 },
+            description: { type: 'string', maxLength: 4000 },
+            questions: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 20,
+              items: { $ref: '#/components/schemas/AiGeneratedQuestion' }
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        AiGenerationRequest: {
+          type: 'object',
+          properties: {
+            idempotencyKey: {
+              type: 'string',
+              minLength: 8,
+              maxLength: 128,
+              description: 'Body fallback when the Idempotency-Key header is not supplied'
+            },
+            expectedPlanVersion: { type: 'integer', minimum: 1 }
+          }
+        },
+        AiGenerationStatus: {
+          type: 'object',
+          required: ['conversationId', 'status', 'progressStage', 'canCancel'],
+          properties: {
+            id: { type: 'integer' },
+            conversationId: { type: 'integer' },
+            status: {
+              type: 'string',
+              enum: ['', 'queued', 'generating', 'completed', 'failed', 'cancel_requested', 'cancelled']
+            },
+            progressStage: {
+              type: 'string',
+              enum: [
+                '',
+                'validating_quiz_plan',
+                'retrieving_course_material',
+                'selecting_source_passages',
+                'generating_questions',
+                'validating_generated_output',
+                'saving_draft',
+                'opening_review_workspace',
+                'failed',
+                'cancelled'
+              ]
+            },
+            canCancel: { type: 'boolean' },
+            generation: { type: 'object', nullable: true, additionalProperties: true },
+            draftId: { type: 'integer', nullable: true },
+            errorCode: { type: 'string', nullable: true },
+            startedAt: { type: 'string', format: 'date-time', nullable: true },
+            completedAt: { type: 'string', format: 'date-time', nullable: true }
+          }
+        },
+        AiRevisionRequest: {
+          type: 'object',
+          required: ['instruction'],
+          properties: {
+            instruction: { type: 'string', minLength: 1, maxLength: 8000 },
+            revisionType: {
+              type: 'string',
+              enum: [
+                'initial_generation',
+                'manual_edit',
+                'chat_revision',
+                'regenerate_question',
+                'regenerate_selected',
+                'whole_quiz_revision',
+                'restore_revision'
+              ]
+            },
+            idempotencyKey: { type: 'string', minLength: 8, maxLength: 128 }
+          }
+        },
+        AiDraftRevision: {
+          type: 'object',
+          required: [
+            'id',
+            'draftId',
+            'revisionNumber',
+            'revisionType',
+            'requestText',
+            'status',
+            'createdAt'
+          ],
+          properties: {
+            id: { type: 'integer' },
+            draftId: { type: 'integer' },
+            conversationId: { type: 'integer', nullable: true },
+            generationRunId: { type: 'integer', nullable: true },
+            revisionNumber: { type: 'integer', minimum: 1 },
+            requestedBy: { type: 'integer' },
+            revisionType: {
+              type: 'string',
+              enum: [
+                'initial_generation',
+                'manual_edit',
+                'chat_revision',
+                'regenerate_question',
+                'regenerate_selected',
+                'whole_quiz_revision',
+                'restore_revision'
+              ]
+            },
+            requestText: { type: 'string', maxLength: 8000 },
+            status: { type: 'string', enum: ['preview', 'applied'] },
+            beforeSnapshot: {
+              type: 'object',
+              description: 'Draft content before this revision; empty for the initial generation',
+              additionalProperties: true
+            },
+            proposedSnapshot: {
+              type: 'object',
+              description: 'Draft content produced by this revision',
+              additionalProperties: true
+            },
+            metadata: { type: 'object', additionalProperties: true },
+            idempotencyKey: { type: 'string' },
+            appliedAt: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        AiRegenerateQuestionsRequest: {
+          type: 'object',
+          required: ['questionIndexes'],
+          properties: {
+            questionIndexes: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 20,
+              uniqueItems: true,
+              items: { type: 'integer', minimum: 0 }
+            },
+            instruction: { type: 'string', maxLength: 8000 },
+            idempotencyKey: { type: 'string', minLength: 8, maxLength: 128 }
+          }
+        },
+        AiSaveDraftRequest: {
+          type: 'object',
+          required: ['title', 'questions'],
+          properties: {
+            title: { type: 'string', minLength: 1, maxLength: 120 },
+            description: { type: 'string', maxLength: 4000 },
+            questions: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 20,
+              items: { $ref: '#/components/schemas/AiGeneratedQuestion' }
+            }
+          }
+        },
+        AiSettingsTestRequest: {
+          type: 'object',
+          properties: {
+            testChat: { type: 'boolean', default: true },
+            testEmbeddings: { type: 'boolean', default: true }
+          }
+        },
+        AiSettingsTestResult: {
+          type: 'object',
+          required: ['chat', 'embeddings'],
+          properties: {
+            chat: {
+              type: 'object',
+              required: ['ok', 'message'],
+              properties: {
+                ok: { type: 'boolean' },
+                message: { type: 'string' }
+              }
+            },
+            embeddings: {
+              type: 'object',
+              required: ['ok', 'skipped', 'message'],
+              properties: {
+                ok: { type: 'boolean' },
+                skipped: { type: 'boolean' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        AiCourseMaterial: {
+          type: 'object',
+          required: ['id', 'courseId', 'originalName', 'status', 'sourceType', 'createdAt', 'updatedAt'],
+          properties: {
+            id: { type: 'integer' },
+            courseId: { type: 'integer' },
+            originalName: { type: 'string', maxLength: 180 },
+            mimeType: { type: 'string' },
+            byteSize: { type: 'integer', minimum: 0 },
+            chunkCount: { type: 'integer', minimum: 0, maximum: 250 },
+            status: { type: 'string', enum: ['pending', 'indexing', 'ready', 'failed'] },
+            errorMessage: { type: 'string' },
+            sourceType: { type: 'string', enum: ['file', 'pasted_text'] },
+            characterCount: { type: 'integer', minimum: 0 },
+            contentHash: { type: 'string' },
+            uploadedBy: { type: 'integer', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        AiPasteMaterialRequest: {
+          type: 'object',
+          required: ['title', 'content'],
+          properties: {
+            title: { type: 'string', minLength: 1, maxLength: 180 },
+            content: { type: 'string', minLength: 1, maxLength: 200000 }
+          }
+        },
+        AiSourceChunk: {
+          type: 'object',
+          required: ['id', 'materialId', 'courseId', 'chunkIndex', 'content', 'sourceLabel'],
+          properties: {
+            id: { type: 'integer' },
+            materialId: { type: 'integer' },
+            courseId: { type: 'integer' },
+            chunkIndex: { type: 'integer', minimum: 0 },
+            content: { type: 'string', maxLength: 2000 },
+            excerpt: { type: 'string', maxLength: 2000 },
+            sourceLabel: { type: 'string' }
+          }
         }
       }
     },
@@ -1669,6 +2197,10 @@ const options = {
       { name: 'Weeks', description: 'Weekly course material and resources' },
       { name: 'Audit', description: 'Audit log activity endpoints' },
       { name: 'Settings', description: 'Admin system settings endpoints' },
+      {
+        name: 'AI Assistant',
+        description: 'Teacher/admin conversational quiz planning, material grounding, draft generation, and controlled revision endpoints'
+      },
       { name: 'System', description: 'API index, health, and platform metadata endpoints' }
     ]
   },

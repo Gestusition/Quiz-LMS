@@ -1,25 +1,47 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROUTE_PREFIXES = {
-  'academicRoutes.js': '/api/academic',
-  'analyticsRoutes.js': '/api/analytics',
-  'auditRoutes.js': '/api/audit',
-  'authRoutes.js': '/api/auth',
-  'categoryRoutes.js': '/api/categories',
-  'courseRoutes.js': '/api/courses',
-  'courseWeekRoutes.js': '/api/weeks',
-  'discussionRoutes.js': '/api/discussion',
-  'importRoutes.js': '/api/imports',
-  'issueRoutes.js': '/api/issues',
-  'questionRoutes.js': '/api/questions',
-  'quizRoutes.js': '/api/quizzes',
-  'restrictionRoutes.js': '/api/restrictions',
-  'settingsRoutes.js': '/api/settings',
-  'userRoutes.js': '/api/users'
+const ROUTE_MOUNTS = {
+  'academicRoutes.js': { router: '/api/academic' },
+  'aiQuizRoutes.js': {
+    settingsRouter: '/api/ai',
+    courseRouter: '/api/courses'
+  },
+  'analyticsRoutes.js': { router: '/api/analytics' },
+  'auditRoutes.js': { router: '/api/audit' },
+  'authRoutes.js': { router: '/api/auth' },
+  'categoryRoutes.js': { router: '/api/categories' },
+  'courseRoutes.js': { router: '/api/courses' },
+  'courseWeekRoutes.js': { router: '/api/weeks' },
+  'discussionRoutes.js': { router: '/api/discussion' },
+  'importRoutes.js': { router: '/api/imports' },
+  'issueRoutes.js': { router: '/api/issues' },
+  'questionRoutes.js': { router: '/api/questions' },
+  'quizRoutes.js': { router: '/api/quizzes' },
+  'restrictionRoutes.js': { router: '/api/restrictions' },
+  'settingsRoutes.js': { router: '/api/settings' },
+  'userRoutes.js': { router: '/api/users' }
 };
 
 const SERVER_API_ROUTES = new Set(['/api', '/api/health']);
+const REQUIRED_CONVERSATIONAL_AI_OPERATIONS = new Set([
+  'POST /api/ai/conversations',
+  'GET /api/ai/conversations',
+  'GET /api/ai/conversations/{id}',
+  'POST /api/ai/conversations/{id}/messages',
+  'PATCH /api/ai/conversations/{id}/plan',
+  'POST /api/ai/conversations/{id}/generate',
+  'GET /api/ai/conversations/{id}/generation-status',
+  'POST /api/ai/conversations/{id}/cancel',
+  'POST /api/ai/conversations/{id}/revise',
+  'POST /api/ai/conversations/{id}/revisions/{revisionId}/apply',
+  'POST /api/ai/conversations/{id}/regenerate-questions',
+  'PUT /api/ai/conversations/{id}/draft',
+  'POST /api/ai/settings/test',
+  'POST /api/courses/{courseId}/ai/materials/paste',
+  'DELETE /api/courses/{courseId}/ai/materials/{materialId}',
+  'GET /api/courses/{courseId}/ai/source-chunks/{chunkId}'
+]);
 
 function expressPathToOpenApi(routePrefix, routePath) {
   const joined = routePath === '/' ? routePrefix : `${routePrefix}${routePath}`;
@@ -27,15 +49,17 @@ function expressPathToOpenApi(routePrefix, routePath) {
 }
 
 function routeMethodsFor(fileName, source) {
-  const prefix = ROUTE_PREFIXES[fileName];
+  const mounts = ROUTE_MOUNTS[fileName] || {};
   const methods = [];
-  const pattern = /router\.(get|post|put|delete|patch)\(\s*['"]([^'"]*)/g;
+  const pattern = /([A-Za-z_$][A-Za-z0-9_$]*)\.(get|post|put|delete|patch)\(\s*['"]([^'"]*)/g;
   let match;
 
   while ((match = pattern.exec(source)) !== null) {
+    const prefix = mounts[match[1]];
+    if (!prefix) continue;
     methods.push({
-      method: match[1],
-      path: expressPathToOpenApi(prefix, match[2])
+      method: match[2],
+      path: expressPathToOpenApi(prefix, match[3])
     });
   }
 
@@ -89,7 +113,7 @@ function routeInventory() {
   const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   const routes = appMethodsFor(serverSource).map(route => ({ ...route, source: 'server.js' }));
 
-  Object.keys(ROUTE_PREFIXES).forEach(fileName => {
+  Object.keys(ROUTE_MOUNTS).forEach(fileName => {
     const source = fs.readFileSync(path.join(routesDir, fileName), 'utf8');
     routeMethodsFor(fileName, source).forEach(route => {
       routes.push({ ...route, source: fileName });
@@ -103,7 +127,7 @@ function swaggerInventory() {
   const routesDir = path.join(__dirname, '..', 'routes');
   const sources = [
     ['server.js', fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8')],
-    ...Object.keys(ROUTE_PREFIXES).map(fileName => [
+    ...Object.keys(ROUTE_MOUNTS).map(fileName => [
       fileName,
       fs.readFileSync(path.join(routesDir, fileName), 'utf8')
     ])
@@ -225,6 +249,38 @@ describe('Swagger route coverage', () => {
     expect(index?.responses?.['403']).toBeDefined();
     expect(index?.responses?.['503']?.content?.['application/json']?.schema).toEqual({
       $ref: '#/components/schemas/ApiIndex'
+    });
+  });
+
+  test('conversational AI routes are inventoried and documented as one protected contract', () => {
+    const { swaggerSpec } = require('../swagger/swagger');
+    const routeKeys = new Set(routeInventory().map(keyFor));
+    const documentedKeys = new Set(swaggerInventory().map(item => item.key));
+    const missingRoutes = [];
+    const missingDocs = [];
+
+    REQUIRED_CONVERSATIONAL_AI_OPERATIONS.forEach(key => {
+      if (!routeKeys.has(key)) missingRoutes.push(key);
+      if (!documentedKeys.has(key)) missingDocs.push(key);
+    });
+
+    expect(missingRoutes).toEqual([]);
+    expect(missingDocs).toEqual([]);
+    expect(swaggerSpec.tags).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'AI Assistant' })
+    ]));
+    [
+      'AiConversation',
+      'AiMessage',
+      'AiQuizPlan',
+      'AiPlanningResponse',
+      'AiGenerationStatus',
+      'AiQuizDraft',
+      'AiDraftRevision',
+      'AiCourseMaterial',
+      'AiSourceChunk'
+    ].forEach(schemaName => {
+      expect(swaggerSpec.components?.schemas?.[schemaName]).toBeDefined();
     });
   });
 });
