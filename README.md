@@ -1,6 +1,7 @@
 # Quiz LMS
 
 [![Node.js CI](https://github.com/Gestusition/Quiz-LMS/actions/workflows/nodejs.yml/badge.svg)](https://github.com/Gestusition/Quiz-LMS/actions/workflows/nodejs.yml)
+**Documentation:** [README.md](README.md) | [AI-Assistant.md](AI-Assistant.md)
 Quiz LMS is a full-stack AI course and quiz management system. The existing single-page frontend remains vanilla JavaScript, with an incremental React/TypeScript island for the conversational AI Assistant. An Express REST API and attached SQLite databases provide the layered backend.
 
 The project is intentionally backend-heavy: routes stay thin, business rules live in services, SQL lives in repositories, and tests exercise the academic workflows instead of only checking that pages render.
