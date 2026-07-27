@@ -217,11 +217,11 @@ export const API = {
   updateAiConversationPlan(id, patch) {
     return this.request(`/ai/conversations/${id}/plan`, { method: 'PATCH', body: patch });
   },
-  generateAiConversationDraft(id, idempotencyKey) {
+  generateAiConversationDraft(id, idempotencyKey, draftTitle) {
     return this.request(`/ai/conversations/${id}/generate`, {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey },
-      body: {}
+      body: draftTitle ? { draftTitle } : {}
     });
   },
   getAiConversationGenerationStatus(id) { return this.request(`/ai/conversations/${id}/generation-status`); },

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { isDeepStrictEqual } = require('util');
 const aiSettingsRepository = require('../repositories/aiSettingsRepository');
 const aiQuizDraftRepository = require('../repositories/aiQuizDraftRepository');
 const aiConversationRepository = require('../repositories/aiConversationRepository');
@@ -437,35 +438,42 @@ async function testConnection(userId, input = {}) {
 }
 
 function updateQuizDraft(draftId, data, actor = null) {
-  const existing = aiQuizDraftRepository.getById(draftId);
-  if (!existing) throw notFoundError('AI quiz draft not found.');
-  assertDraftOwner(existing, actor);
-  if (existing.status !== 'draft') throw conflictError('draft', 'Only draft AI quizzes can be edited.');
-  const draftData = {
-    ...data,
-    difficulty: data?.difficulty ||
-      existing.draft.difficulty ||
-      existing.draft.questions?.[0]?.difficulty ||
-      'medium'
-  };
-  const expectedCount = Array.isArray(draftData.questions) ? draftData.questions.length : undefined;
-  const sourceValidation = validateDraftSourceScope(draftData, existing.courseId);
-  const validated = parseAndValidateAIQuiz(draftData, {
-    questionCount: expectedCount,
-    questionType: 'mixed',
-    includeExplanations: false,
-    ...sourceValidation
+  return quizRepository.withTransaction(() => {
+    let existing = aiQuizDraftRepository.getById(draftId);
+    if (!existing) throw notFoundError('AI quiz draft not found.');
+    assertDraftOwner(existing, actor);
+    if (existing.status !== 'draft') throw conflictError('draft', 'Only draft AI quizzes can be edited.');
+    const effectiveActor = actor || { id: existing.createdBy, role: 'admin' };
+    if (!existing.quizId) existing = ensureLmsQuizDraft(existing.id, effectiveActor);
+    const draftData = {
+      ...data,
+      difficulty: data?.difficulty ||
+        existing.draft.difficulty ||
+        existing.draft.questions?.[0]?.difficulty ||
+        'medium'
+    };
+    const expectedCount = Array.isArray(draftData.questions) ? draftData.questions.length : undefined;
+    const sourceValidation = validateDraftSourceScope(draftData, existing.courseId);
+    const validated = parseAndValidateAIQuiz(draftData, {
+      questionCount: expectedCount,
+      questionType: 'mixed',
+      includeExplanations: false,
+      ...sourceValidation
+    });
+    const payload = { ...validated, generation: existing.draft.generation || {} };
+    if (isDeepStrictEqual(payload, existing.draft)) return existing;
+    const updated = actor && actor.role !== 'admin'
+      ? aiQuizDraftRepository.updateDraftForOwner(draftId, actor.id, payload)
+      : aiQuizDraftRepository.updateDraft(draftId, payload);
+    syncLinkedLmsDraft(updated, effectiveActor);
+    return updated;
   });
-  const payload = { ...validated, generation: existing.draft.generation || {} };
-  return actor && actor.role !== 'admin'
-    ? aiQuizDraftRepository.updateDraftForOwner(draftId, actor.id, payload)
-    : aiQuizDraftRepository.updateDraft(draftId, payload);
 }
 
 function publishQuizDraft(draftId, actor) {
   return quizRepository.withTransaction(() => {
-    const draftRecord = requireEditableDraft(draftId, actor);
-    const quiz = materializeDraft(draftRecord, actor);
+    const draftRecord = ensureLmsQuizDraft(draftId, actor);
+    const quiz = syncLinkedLmsDraft(draftRecord, actor);
     const published = quizService.update(quiz.id, { status: 'published' }, actor);
     if (actor?.role !== 'admin') {
       const converted = aiQuizDraftRepository.markConvertedForOwner(
@@ -486,6 +494,12 @@ function publishQuizDraft(draftId, actor) {
 function addDraftQuestionsToQuiz(draftId, quizId, actor) {
   return quizRepository.withTransaction(() => {
     const draftRecord = requireEditableDraft(draftId, actor);
+    if (draftRecord.quizId) {
+      throw conflictError(
+        'draft',
+        'This AI draft already has its own editable quiz in the Quizzes workspace.'
+      );
+    }
     const quiz = quizRepository.findById(quizId);
     if (!quiz) throw notFoundError('Quiz not found.');
     quizService.assertCanWriteQuiz(quiz, actor);
@@ -543,7 +557,6 @@ function validateDraftSourceScope(data, courseId) {
 }
 
 function materializeDraft(draftRecord, actor) {
-  const questionIds = createLmsQuestions(draftRecord, actor);
   const quiz = quizService.create({
     courseId: draftRecord.courseId,
     title: draftRecord.draft.title,
@@ -553,36 +566,140 @@ function materializeDraft(draftRecord, actor) {
     maxAttempts: 1,
     showCorrectAnswers: true
   }, actor);
-  return quizService.setQuestions(quiz.id, questionIds, actor);
+  return syncLmsQuizQuestions(draftRecord, quiz.id, actor);
+}
+
+function ensureLmsQuizDraft(draftId, actor, options = {}) {
+  return quizRepository.withTransaction(() => {
+    let draftRecord = requireEditableDraft(draftId, actor);
+    if (draftRecord.quizId) {
+      const linkedQuiz = quizRepository.findById(draftRecord.quizId);
+      if (
+        linkedQuiz &&
+        Number(linkedQuiz.courseId) === Number(draftRecord.courseId) &&
+        linkedQuiz.status === 'draft'
+      ) {
+        quizService.assertCanWriteQuiz(linkedQuiz, actor);
+        return draftRecord;
+      }
+      if (linkedQuiz && linkedQuiz.status !== 'draft') {
+        if (options.reconcileLinkedStatus) {
+          const transitioned = aiQuizDraftRepository.transitionForLinkedQuiz(
+            linkedQuiz.id,
+            linkedQuiz.status
+          );
+          if (transitioned) {
+            aiConversationRepository.setConversationStatusByDraftId(draftRecord.id, 'published');
+            return transitioned;
+          }
+        }
+        throw conflictError('draft', 'The linked quiz is no longer editable as a draft.');
+      }
+      aiQuizDraftRepository.clearQuizLink(draftRecord.id, draftRecord.quizId);
+      draftRecord = requireEditableDraft(draftRecord.id, actor);
+    }
+    const quiz = materializeDraft(draftRecord, actor);
+    const linked = aiQuizDraftRepository.linkQuiz(draftRecord.id, quiz.id);
+    if (!linked.linked || Number(linked.draft?.quizId) !== Number(quiz.id)) {
+      throw conflictError('draft', 'The generated quiz draft could not be linked safely.');
+    }
+    return linked.draft;
+  });
+}
+
+function syncLinkedLmsDraft(draftRecord, actor) {
+  if (!draftRecord?.quizId) {
+    const linked = ensureLmsQuizDraft(draftRecord.id, actor);
+    return quizService.getById(linked.quizId, {
+      includeQuestions: true,
+      includeCorrect: true,
+      user: actor
+    });
+  }
+  const quiz = quizRepository.findById(draftRecord.quizId);
+  if (!quiz) {
+    aiQuizDraftRepository.clearQuizLink(draftRecord.id, draftRecord.quizId);
+    const linked = ensureLmsQuizDraft(draftRecord.id, actor);
+    return quizService.getById(linked.quizId, {
+      includeQuestions: true,
+      includeCorrect: true,
+      user: actor
+    });
+  }
+  quizService.assertCanWriteQuiz(quiz, actor);
+  if (Number(quiz.courseId) !== Number(draftRecord.courseId)) {
+    throw conflictError('draft', 'The linked LMS quiz belongs to a different course.');
+  }
+  if (quiz.status !== 'draft') {
+    throw conflictError('draft', 'The linked LMS quiz is no longer editable as a draft.');
+  }
+  quizService.update(quiz.id, {
+    title: draftRecord.draft.title,
+    description: draftRecord.draft.description,
+    durationMinutes: Math.max(5, draftRecord.draft.questions.length * 2)
+  }, actor);
+  return syncLmsQuizQuestions(draftRecord, quiz.id, actor);
+}
+
+function syncLmsQuizQuestions(draftRecord, quizId, actor) {
+  const categoryId = ensureAiCategory(draftRecord.courseId, actor.id);
+  const currentQuestions = quizRepository.getQuestions(quizId);
+  const hasAttempts = quizRepository.getAttemptsForQuiz(quizId, actor).length > 0;
+  const questionIds = draftRecord.draft.questions.map((question, index) => {
+    const payload = toLmsQuestion(question, draftRecord.draft, categoryId);
+    const current = currentQuestions[index];
+    const canSafelyUpdate = current &&
+      !hasAttempts &&
+      quizRepository.countQuestionAssignments(current.id) === 1 &&
+      (actor.role === 'admin' || Number(current.createdBy) === Number(actor.id));
+    if (canSafelyUpdate) {
+      return {
+        id: questionService.update(current.id, payload, actor).id,
+        points: payload.points
+      };
+    }
+    return {
+      id: questionService.create(payload, actor).id,
+      points: payload.points
+    };
+  });
+  return quizService.setQuestions(quizId, questionIds, actor);
 }
 
 function createLmsQuestions(draftRecord, actor) {
   const categoryId = ensureAiCategory(draftRecord.courseId, actor.id);
-  return draftRecord.draft.questions.map(question => {
-    const type = question.type === 'multiple_choice'
-      ? 'MC'
-      : question.type === 'true_false'
-        ? 'TF'
-        : question.type === 'essay'
-          ? 'ES'
-          : 'FB';
-    const correctAnswer = type === 'MC'
-      ? String(question.options.findIndex(option => option === question.correctAnswer))
-      : type === 'TF'
-        ? String(question.correctAnswer).toLowerCase()
-        : String(question.correctAnswer);
-    return questionService.create({
-      categoryId,
-      text: question.text,
-      type,
-      options: type === 'MC' ? question.options : [],
-      correctAnswer,
-      difficulty: String(question.difficulty || draftRecord.draft.difficulty || 'medium').toUpperCase(),
-      points: Number(question.points || 1),
-      explanationText: question.explanation || '',
-      hintText: question.sourceHint || formatSourceHint(question.sourceReferences)
-    }, actor).id;
-  });
+  return draftRecord.draft.questions.map(question =>
+    questionService.create(
+      toLmsQuestion(question, draftRecord.draft, categoryId),
+      actor
+    ).id
+  );
+}
+
+function toLmsQuestion(question, draft, categoryId) {
+  const type = question.type === 'multiple_choice'
+    ? 'MC'
+    : question.type === 'true_false'
+      ? 'TF'
+      : question.type === 'essay' || question.type === 'coding'
+        ? 'ES'
+        : 'FB';
+  const correctAnswer = type === 'MC'
+    ? String(question.options.findIndex(option => option === question.correctAnswer))
+    : type === 'TF'
+      ? String(question.correctAnswer).toLowerCase()
+      : String(question.correctAnswer);
+  return {
+    categoryId,
+    text: question.text,
+    type,
+    options: type === 'MC' ? question.options : [],
+    correctAnswer,
+    difficulty: String(question.difficulty || draft.difficulty || 'medium').toUpperCase(),
+    points: Number(question.points || 1),
+    explanationText: question.explanation || '',
+    hintText: question.sourceHint || formatSourceHint(question.sourceReferences)
+  };
 }
 
 function ensureAiCategory(courseId, actorUserId) {
@@ -839,8 +956,10 @@ module.exports = {
   getConfigForUser,
   getQuizDraft,
   getSettingsStatus,
+  ensureLmsQuizDraft,
   listQuizDrafts,
   maskSecret,
+  materializeDraft,
   parseAndValidateAIQuiz: parseAndValidateAIQuizResponse,
   publishQuizDraft,
   regenerateQuestion,

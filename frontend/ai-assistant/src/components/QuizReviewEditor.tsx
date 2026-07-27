@@ -8,6 +8,7 @@ interface QuizReviewEditorProps {
   regenerating: boolean;
   onSave: (draft: QuizDraft, showToast?: boolean) => Promise<boolean>;
   onRegenerate: (indexes: number[], instruction?: string) => Promise<void>;
+  onOpenQuiz: (quizId: number) => void;
   onOpenSource: (source: SourceReference) => void;
 }
 
@@ -268,6 +269,7 @@ export function QuizReviewEditor({
   regenerating,
   onSave,
   onRegenerate,
+  onOpenQuiz,
   onOpenSource
 }: QuizReviewEditorProps) {
   const [editable, setEditable] = useState(() => cloneDraft(draft));
@@ -275,13 +277,17 @@ export function QuizReviewEditor({
   const [saveConfirmed, setSaveConfirmed] = useState(draftSaved);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const busy = saving || regenerating;
+  const readOnly = draft.status !== 'draft';
+  const controlsDisabled = busy || readOnly;
+  const draftSnapshot = JSON.stringify(draft);
 
   useEffect(() => {
-    setEditable(cloneDraft(draft));
-    setSavedSnapshot(JSON.stringify(draft));
+    const incoming = JSON.parse(draftSnapshot) as QuizDraft;
+    setEditable(incoming);
+    setSavedSnapshot(draftSnapshot);
     setSaveConfirmed(draftSaved);
     setSelected(new Set());
-  }, [draft, draftSaved]);
+  }, [draftSnapshot, draftSaved]);
 
   const dirty = useMemo(() => JSON.stringify(editable) !== savedSnapshot, [editable, savedSnapshot]);
 
@@ -348,12 +354,20 @@ export function QuizReviewEditor({
     <section className="aiw-review" aria-labelledby="aiw-review-heading">
       <header className="aiw-review__header">
         <div>
-          <span className="aiw-eyebrow">Review required</span>
-          <h3 id="aiw-review-heading">Edit quiz draft</h3>
-          <p>Review every question before saving. The quiz remains private.</p>
+          <span className="aiw-eyebrow">{readOnly ? 'Published quiz' : 'Review required'}</span>
+          <h3 id="aiw-review-heading">{readOnly ? 'Quiz review' : 'Edit quiz draft'}</h3>
+          <p>{readOnly
+            ? 'This quiz is read-only here. Open it in Quizzes to manage its published version.'
+            : 'Review every question before saving. The quiz remains private.'}</p>
         </div>
         <span className={`aiw-save-state ${dirty ? 'is-unsaved' : ''}`} role="status">
-          {dirty ? 'Unsaved changes' : 'All changes saved'}
+          {readOnly
+            ? 'Published in Quizzes'
+            : dirty
+              ? 'Unsaved changes'
+              : saveConfirmed
+                ? 'All changes saved'
+                : 'Ready to save as draft'}
         </span>
       </header>
 
@@ -362,9 +376,9 @@ export function QuizReviewEditor({
           <span>Quiz title</span>
           <input
             value={editable.title}
-            maxLength={160}
+            maxLength={120}
             onChange={event => setEditable(current => ({ ...current, title: event.target.value }))}
-            disabled={busy}
+            disabled={controlsDisabled}
           />
         </label>
         <label className="aiw-field">
@@ -374,7 +388,7 @@ export function QuizReviewEditor({
             value={editable.description}
             maxLength={2000}
             onChange={event => setEditable(current => ({ ...current, description: event.target.value }))}
-            disabled={busy}
+            disabled={controlsDisabled}
           />
         </label>
       </div>
@@ -387,7 +401,7 @@ export function QuizReviewEditor({
             onChange={event => setSelected(event.target.checked
               ? new Set(editable.questions.map((_, index) => index))
               : new Set())}
-            disabled={busy || !editable.questions.length}
+            disabled={controlsDisabled || !editable.questions.length}
           />
           Select all
         </label>
@@ -395,7 +409,7 @@ export function QuizReviewEditor({
         <button
           className="aiw-button aiw-button--quiet aiw-button--small"
           type="button"
-          disabled={!selected.size || busy}
+          disabled={!selected.size || controlsDisabled}
           onClick={() => regenerate([...selected].sort((a, b) => a - b))}
         >
           {regenerating ? 'Regenerating…' : `Regenerate selected (${selected.size})`}
@@ -410,7 +424,7 @@ export function QuizReviewEditor({
             index={index}
             total={editable.questions.length}
             selected={selected.has(index)}
-            disabled={busy}
+            disabled={controlsDisabled}
             onSelect={checked => setSelected(current => {
               const next = new Set(current);
               checked ? next.add(index) : next.delete(index);
@@ -433,19 +447,31 @@ export function QuizReviewEditor({
       </div>
 
       <footer className="aiw-review__footer">
-        <button
-          className="aiw-button aiw-button--quiet"
-          type="button"
-          disabled={busy || editable.questions.length >= 20}
-          onClick={() => setEditable(current => ({ ...current, questions: [...current.questions, newQuestion()] }))}
-        >
-          ＋ Add manual question
-        </button>
+        <div className="aiw-review__footer-actions">
+          <button
+            className="aiw-button aiw-button--quiet"
+            type="button"
+            disabled={controlsDisabled || editable.questions.length >= 20}
+            onClick={() => setEditable(current => ({ ...current, questions: [...current.questions, newQuestion()] }))}
+          >
+            ＋ Add manual question
+          </button>
+          {draft.quizId ? (
+            <button
+              className="aiw-button aiw-button--quiet"
+              type="button"
+              disabled={busy}
+              onClick={() => onOpenQuiz(draft.quizId as number)}
+            >
+              Open in Quizzes
+            </button>
+          ) : null}
+        </div>
         <button
           className="aiw-button aiw-button--primary"
           type="button"
           onClick={() => save(true)}
-          disabled={(!dirty && saveConfirmed) || busy || !editable.title.trim() || !editable.questions.length}
+          disabled={readOnly || (!dirty && saveConfirmed) || busy || !editable.title.trim() || !editable.questions.length}
         >
           {saving ? 'Saving…' : 'Save as draft'}
         </button>

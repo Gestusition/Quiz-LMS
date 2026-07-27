@@ -187,7 +187,9 @@ function Workspace({
   });
   const coursesQuery = useQuery({
     queryKey: ['ai', 'courses'],
-    queryFn: client.listCourses
+    queryFn: client.listCourses,
+    retry: 1,
+    retryDelay: 100
   });
   const settingsQuery = useQuery({
     queryKey: ['ai', 'settings'],
@@ -212,6 +214,19 @@ function Workspace({
   const detail = detailQuery.data || null;
   const plan = detail?.plan || DEFAULT_PLAN;
   const courses = coursesQuery.data || [];
+  const conversationItems = conversationsQuery.data || [];
+  const selectedSummary = selectedId
+    ? conversationItems.find(item => item.id === selectedId) || null
+    : !isComposingNew
+      ? conversationItems[0] || null
+      : null;
+  const workspaceLoading = conversationsQuery.isLoading ||
+    coursesQuery.isLoading ||
+    Boolean(
+      conversationItems.length &&
+      !isComposingNew &&
+      (!selectedId || detailQuery.isLoading)
+    );
   const materialsQuery = useQuery({
     queryKey: ['ai', 'materials', plan.courseId],
     queryFn: () => client.listMaterials(plan.courseId as number),
@@ -252,12 +267,18 @@ function Workspace({
       toast('Start a conversation before editing the Quiz Plan.', 'info');
       return;
     }
+    const currentDetail = queryClient.getQueryData<ConversationDetail>(
+      ['ai', 'conversation', selectedId]
+    );
+    const scopedPatch = patch.courseId === undefined && currentDetail?.plan.courseId
+      ? { ...patch, courseId: currentDetail.plan.courseId }
+      : patch;
     queryClient.setQueryData<ConversationDetail>(
       ['ai', 'conversation', selectedId],
       current => current
         ? {
             ...current,
-            plan: mergePlan(current.plan, patch),
+            plan: mergePlan(current.plan, scopedPatch),
             suggestedReplies: []
           }
         : current
@@ -265,7 +286,7 @@ function Workspace({
     const queued = queuedPlanPatch.current;
     queuedPlanPatch.current = {
       id: selectedId,
-      patch: queued?.id === selectedId ? { ...queued.patch, ...patch } : patch
+      patch: queued?.id === selectedId ? { ...queued.patch, ...scopedPatch } : scopedPatch
     };
     if (planSaveTimer.current) window.clearTimeout(planSaveTimer.current);
     planSaveTimer.current = window.setTimeout(() => void flushPlanPatch(), 450);
@@ -370,7 +391,8 @@ function Workspace({
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => client.generateDraft(selectedId as number, createIdempotencyKey()),
+    mutationFn: (draftTitle?: string) =>
+      client.generateDraft(selectedId as number, createIdempotencyKey(), draftTitle),
     onSuccess: async result => {
       if (result.conversation && selectedId) {
         queryClient.setQueryData(['ai', 'conversation', selectedId], result.conversation);
@@ -421,7 +443,7 @@ function Workspace({
         queryClient.invalidateQueries({ queryKey: ['ai', 'conversations'] })
       ]);
       if (status === 'completed') {
-        toast('Quiz draft is ready for review.', 'success');
+        toast('Quiz draft is ready for review and available in Quizzes.', 'success');
       }
     }
   }, [generationStatusQuery.data?.status, queryClient, selectedId, toast]);
@@ -523,6 +545,14 @@ function Workspace({
     }
   };
 
+  const openQuizzes = () => {
+    if (onNavigate) {
+      onNavigate('#/quizzes');
+    } else {
+      location.hash = '#/quizzes';
+    }
+  };
+
   const focusCourseSelection = () => {
     setMobilePanel('chat');
     window.setTimeout(() => document.getElementById('aiw-start-course')?.focus(), 0);
@@ -556,6 +586,7 @@ function Workspace({
       onRegenerate={async (indexes, instruction) => {
         await regenerateMutation.mutateAsync({ indexes, instruction });
       }}
+      onOpenQuiz={openQuizzes}
       onOpenSource={setSource}
     />
   ) : null;
@@ -696,7 +727,7 @@ function Workspace({
             coursesLoading={coursesQuery.isLoading}
             coursesError={coursesQuery.isError}
             courseSelectionPending={courseMutation.isPending}
-            loading={detailQuery.isLoading}
+            loading={workspaceLoading}
             error={detailQuery.isError}
             isSending={sendMutation.isPending}
             generation={effectiveGeneration}
@@ -734,8 +765,8 @@ function Workspace({
             courses={courses}
             coursesLoading={coursesQuery.isLoading}
             coursesError={coursesQuery.isError}
-            courseSelectionPending={courseMutation.isPending}
-            courseLocked={Boolean(detail?.draft)}
+            courseSelectionPending={courseMutation.isPending || workspaceLoading}
+            courseLocked={Boolean(detail?.draft || selectedSummary?.draftId)}
             conversationId={selectedId}
             conversationStatus={conversationStatus}
             generation={effectiveGeneration}
@@ -750,7 +781,7 @@ function Workspace({
             }}
             onOpenCourses={openCourses}
             onPatch={patchPlan}
-            onGenerate={() => generateMutation.mutate()}
+            onGenerate={draftTitle => generateMutation.mutate(draftTitle)}
           />
         </div>
       </div>

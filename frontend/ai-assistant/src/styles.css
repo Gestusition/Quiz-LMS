@@ -1201,6 +1201,22 @@
   padding: 9px 10px;
 }
 
+.aiw-draft-title {
+  margin: 4px 14px 11px;
+}
+
+.aiw-composer__validation {
+  color: var(--aiw-danger);
+  font-size: 12px;
+  margin: 6px 2px 0;
+}
+
+.aiw-review__footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .aiw-plan-note--success {
   background: var(--aiw-success-soft);
   border-color: #bbf7d0;

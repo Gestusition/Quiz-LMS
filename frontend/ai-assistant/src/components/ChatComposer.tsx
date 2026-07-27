@@ -20,15 +20,24 @@ export function ChatComposer({
   onPasteMaterial
 }: ChatComposerProps) {
   const [content, setContent] = useState('');
+  const [validationMessage, setValidationMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerDisabled = disabled || startRequired;
 
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
     const next = content.trim();
-    if (!next || composerDisabled || isSending) return;
+    if (composerDisabled || isSending) return;
+    if (!next) {
+      if (hasDraft) {
+        setValidationMessage('Describe what you want to change first.');
+        textareaRef.current?.focus();
+      }
+      return;
+    }
     onSend(next);
     setContent('');
+    setValidationMessage('');
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -47,7 +56,10 @@ export function ChatComposer({
         ref={textareaRef}
         id="aiw-chat-message"
         value={content}
-        onChange={event => setContent(event.target.value)}
+        onChange={event => {
+          setContent(event.target.value);
+          if (validationMessage) setValidationMessage('');
+        }}
         onKeyDown={onKeyDown}
         rows={3}
         maxLength={8000}
@@ -57,7 +69,13 @@ export function ChatComposer({
             ? 'Ask for a controlled revision, for example “Make question 3 harder”…'
             : 'Describe the course, topic, outcomes, difficulty, question types, and special instructions…'
         }
+        aria-describedby={validationMessage ? 'aiw-composer-validation' : undefined}
       />
+      {validationMessage ? (
+        <p id="aiw-composer-validation" className="aiw-composer__validation" role="status">
+          {validationMessage}
+        </p>
+      ) : null}
       <div className="aiw-composer__footer">
         <div className="aiw-composer__tools">
           <button type="button" onClick={onAttach} disabled={disabled} aria-label="Upload course material">
@@ -72,7 +90,7 @@ export function ChatComposer({
           <button
             className="aiw-button aiw-button--primary"
             type="submit"
-            disabled={!content.trim() || composerDisabled || isSending}
+            disabled={(!hasDraft && !content.trim()) || composerDisabled || isSending}
           >
             {isSending ? 'Sending…' : hasDraft ? 'Request revision' : 'Send'}
           </button>

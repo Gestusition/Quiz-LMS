@@ -82,6 +82,10 @@ export function ChatWorkspace({
   );
   const showReplies = Boolean(plan.courseId) && !coursesLoading && !coursesError && courses.length > 0;
   const hasDraft = Boolean(detail?.draft);
+  const draftEditable = !hasDraft || detail?.draft?.status === 'draft';
+  const generationBusy = Boolean(
+    generation && ['queued', 'generating', 'cancel_requested'].includes(generation.status)
+  );
   const missing = useMemo(() => getMissingPlanFields(plan), [plan]);
 
   useEffect(() => {
@@ -219,7 +223,7 @@ export function ChatWorkspace({
       <SuggestedReplies
         replies={showReplies ? replies : []}
         onSelect={onSend}
-        disabled={isSending || Boolean(generation) || courseSelectionPending}
+        disabled={isSending || generationBusy || courseSelectionPending || !draftEditable}
       />
 
       {revision ? (
@@ -235,18 +239,21 @@ export function ChatWorkspace({
         <GenerationProgress generation={generation} cancelling={cancelling} onCancel={onCancelGeneration} />
       ) : null}
 
-      <ChatComposer
-        disabled={
-          courseSelectionPending ||
-          Boolean(generation && ['queued', 'generating', 'cancel_requested'].includes(generation.status))
-        }
-        startRequired={!detail && !plan.courseId}
-        isSending={isSending}
-        hasDraft={hasDraft}
-        onSend={onSend}
-        onAttach={onAttach}
-        onPasteMaterial={onPasteMaterial}
-      />
+      {!loading ? (
+        <ChatComposer
+          disabled={
+            courseSelectionPending ||
+            generationBusy ||
+            !draftEditable
+          }
+          startRequired={!detail && !plan.courseId}
+          isSending={isSending}
+          hasDraft={hasDraft}
+          onSend={onSend}
+          onAttach={onAttach}
+          onPasteMaterial={onPasteMaterial}
+        />
+      ) : null}
 
       {review}
     </section>

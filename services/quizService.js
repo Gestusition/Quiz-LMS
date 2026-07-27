@@ -3,7 +3,10 @@ const enrollmentRepository = require('../repositories/enrollmentRepository');
 const questionRepository = require('../repositories/questionRepository');
 const quizRepository = require('../repositories/quizRepository');
 const resourceAccessRepository = require('../repositories/resourceAccessRepository');
+const aiConversationRepository = require('../repositories/aiConversationRepository');
+const aiQuizDraftRepository = require('../repositories/aiQuizDraftRepository');
 const { quizStatusValues } = require('../constants/enums');
+const { AI_CONVERSATION_STATUS } = require('../constants/ai');
 const { validateQuiz } = require('../validators/quizValidators');
 const {
   serializeQuiz,
@@ -79,6 +82,7 @@ class QuizService {
     if (!existing) {
       throw notFoundError('Quiz not found.');
     }
+    this.assertCanWriteQuiz(existing, user);
 
     const payload = this.applyTemplate(validateQuiz({
       courseId: data.courseId !== undefined ? data.courseId : existing.courseId,
@@ -110,7 +114,10 @@ class QuizService {
       this.assertQuizPublishable(this.buildPublishableCandidate(id, payload));
     }
 
-    quizRepository.update(id, payload, nowIso(), user ? user.id : null);
+    quizRepository.withTransaction(() => {
+      quizRepository.update(id, payload, nowIso(), user ? user.id : null);
+      this.syncLinkedAiDraftLifecycle(existing, quizRepository.findById(id));
+    });
     const quiz = this.getById(id, { includeQuestions: true, includeCorrect: true, user });
 
     if (quiz.status === 'published') {
@@ -135,8 +142,17 @@ class QuizService {
       throw forbiddenError('Only the quiz owner or an admin can delete this quiz.');
     }
 
-    resourceAccessRepository.deleteForResource('quiz', id);
-    quizRepository.deleteById(id);
+    quizRepository.withTransaction(() => {
+      resourceAccessRepository.deleteForResource('quiz', id);
+      quizRepository.deleteById(id);
+      const detachedDraftIds = aiQuizDraftRepository.detachQuiz(id);
+      detachedDraftIds.forEach(draftId => {
+        aiConversationRepository.setConversationStatusByDraftId(
+          draftId,
+          AI_CONVERSATION_STATUS.draftSaved
+        );
+      });
+    });
     return true;
   }
 
@@ -186,6 +202,7 @@ class QuizService {
     if (!quiz) {
       throw notFoundError('Quiz not found.');
     }
+    this.assertCanWriteQuiz(quiz, actorUser);
 
     const questions = questionRepository.findByIdsWithCourse(uniqueIds, actorUser);
     if (questions.length !== uniqueIds.length) {
@@ -529,6 +546,28 @@ class QuizService {
     const grant = resourceAccessRepository.findGrant('quiz', quiz.id, user.id);
     if (grant && grant.accessLevel === 'write') return;
     throw forbiddenError('Full quiz access is required.');
+  }
+
+  syncLinkedAiDraftLifecycle(previousQuiz, quiz) {
+    const linkedDraft = aiQuizDraftRepository.getByQuizId(quiz.id);
+    if (!linkedDraft || linkedDraft.status === 'added_to_quiz') return;
+
+    aiQuizDraftRepository.updateLinkedDraftMetadata(quiz.id, {
+      title: quiz.title,
+      description: quiz.description
+    });
+
+    const desiredDraftStatus = quiz.status === 'draft' ? 'draft' : 'published';
+    if (linkedDraft.status === desiredDraftStatus && previousQuiz.status === quiz.status) return;
+
+    const transitioned = aiQuizDraftRepository.transitionForLinkedQuiz(quiz.id, quiz.status);
+    if (!transitioned) return;
+    aiConversationRepository.setConversationStatusByDraftId(
+      transitioned.id,
+      quiz.status === 'draft'
+        ? AI_CONVERSATION_STATUS.draftSaved
+        : AI_CONVERSATION_STATUS.published
+    );
   }
 
   getGradebook(courseId) {

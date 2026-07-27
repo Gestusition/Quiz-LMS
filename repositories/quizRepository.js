@@ -183,6 +183,12 @@ function getQuestions(quizId) {
   `).all(quizId);
 }
 
+function countQuestionAssignments(questionId) {
+  return Number(getDatabase().prepare(`
+    SELECT COUNT(*) AS count FROM quiz_questions WHERE questionId = ?
+  `).get(questionId).count);
+}
+
 function replaceQuestions(quizId, questions, parsedQuestions) {
   const db = getDatabase();
   db.prepare('DELETE FROM quiz_questions WHERE quizId = ?').run(quizId);
@@ -453,6 +459,7 @@ function withTransaction(work) {
 module.exports = {
   clearCreatedBy,
   countSubmittedAttempts,
+  countQuestionAssignments,
   createAttempt,
   deleteAttemptAnswers,
   deleteAttemptsByUserId,

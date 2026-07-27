@@ -314,6 +314,37 @@ function commitGenerationResult(runId, resultData) {
     `).run(resultData.courseId, resultData.createdBy, draftJson);
     const draftId = Number(draftInsert.lastInsertRowid);
 
+    let linkedQuiz = null;
+    if (typeof resultData.materializeDraft === 'function') {
+      const draftRecord = deserializeCommittedDraft(db.prepare(`
+        SELECT * FROM ai_quiz_drafts WHERE id = ?
+      `).get(draftId));
+      linkedQuiz = resultData.materializeDraft(draftRecord);
+      const quizId = Number(linkedQuiz?.id);
+      if (!Number.isSafeInteger(quizId) || quizId < 1) {
+        throw new Error('The generated LMS quiz draft has an invalid ID.');
+      }
+      const quiz = db.prepare(`
+        SELECT id, courseId, status, createdBy FROM quizzes WHERE id = ?
+      `).get(quizId);
+      if (
+        !quiz ||
+        Number(quiz.courseId) !== Number(resultData.courseId) ||
+        Number(quiz.createdBy) !== Number(resultData.createdBy) ||
+        quiz.status !== 'draft'
+      ) {
+        throw new Error('The generated LMS quiz draft does not match the AI draft.');
+      }
+      const linked = db.prepare(`
+        UPDATE ai_quiz_drafts
+        SET quizId = ?, updatedAt = datetime('now')
+        WHERE id = ? AND status = 'draft' AND quizId IS NULL
+      `).run(quizId, draftId);
+      if (!linked.changes) {
+        throw new Error('The generated LMS quiz draft could not be linked safely.');
+      }
+    }
+
     db.prepare('DELETE FROM ai_generation_sources WHERE generationRunId = ?').run(runId);
     insertGenerationSources(db, runId, sources);
 
@@ -370,7 +401,8 @@ function commitGenerationResult(runId, resultData) {
       revision: deserializeCommittedRevision(db.prepare(`
         SELECT * FROM ai_draft_revisions WHERE id = ?
       `).get(revisionId)),
-      sources: listGenerationSources(runId)
+      sources: listGenerationSources(runId),
+      quiz: linkedQuiz
     };
   } catch (error) {
     db.exec('ROLLBACK');

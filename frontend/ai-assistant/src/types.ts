@@ -90,6 +90,7 @@ export interface DraftQuestion {
 
 export interface QuizDraft {
   id: number | null;
+  quizId: number | null;
   title: string;
   description: string;
   difficulty: 'easy' | 'medium' | 'hard';
@@ -198,7 +199,7 @@ export interface LegacyAiApi {
   deleteAiConversation(id: number): Promise<unknown>;
   sendAiConversationMessage(id: number, content: string): Promise<unknown>;
   updateAiConversationPlan(id: number, patch: Partial<QuizPlan>): Promise<unknown>;
-  generateAiConversationDraft(id: number, idempotencyKey: string): Promise<unknown>;
+  generateAiConversationDraft(id: number, idempotencyKey: string, draftTitle?: string): Promise<unknown>;
   getAiConversationGenerationStatus(id: number): Promise<unknown>;
   cancelAiConversationGeneration(id: number): Promise<unknown>;
   reviseAiConversationDraft(id: number, instruction: string): Promise<unknown>;

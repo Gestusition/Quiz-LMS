@@ -259,6 +259,9 @@ function validateGenerationRequest(input = {}, quizPlan = null) {
     conversationId: nullablePositiveInt(input.conversationId, 'conversationId'),
     idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
     expectedPlanVersion: nullablePositiveInt(input.expectedPlanVersion, 'expectedPlanVersion'),
+    draftTitle: cleanText(input.draftTitle || '', 'draftTitle', AI_LIMITS.quizTitleMax, {
+      allowEmpty: true
+    }),
     plan
   };
 }

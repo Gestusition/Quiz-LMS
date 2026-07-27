@@ -79,13 +79,26 @@ function listConversations(query, user) {
 }
 
 function getConversation(conversationId, user) {
-  const conversation = requireOwnedConversation(conversationId, user);
+  let conversation = requireOwnedConversation(conversationId, user);
   const messages = aiConversationRepository.listOwnedMessages(conversation.id, user.id, {
     limit: AI_LIMITS.messagesPerConversationMax
   }) || [];
-  const draft = conversation.draftId
+  let draft = conversation.draftId
     ? getOwnedDraft(conversation.draftId, user)
     : null;
+  if (
+    draft?.status === 'draft' &&
+    (draft.quizId || !draft.draft?.generation?.lmsQuizDeletedAt)
+  ) {
+    draft = aiQuizService.ensureLmsQuizDraft(
+      draft.id,
+      user,
+      { reconcileLinkedStatus: true }
+    );
+    if (draft.status !== 'draft') {
+      conversation = requireOwnedConversation(conversationId, user);
+    }
+  }
   const authorizedCourses = manageableCourses(user);
   const suggestedReplies = aiSuggestionService.buildSuggestedReplies({
     conversation,
@@ -224,7 +237,10 @@ async function generateDraft(conversationId, input, user) {
   }, conversation.quizPlan);
   assertPlanCourseAccess(user, request.plan);
   assertSelectedMaterials(request.plan);
-  const inputHash = hashPlan(request.plan);
+  const inputHash = hashPlan({
+    plan: request.plan,
+    draftTitle: request.draftTitle
+  });
   const active = recoverAbandonedGeneration(conversation, user);
 
   const existing = aiGenerationRepository.getGenerationRunByIdempotencyKey(
@@ -279,7 +295,10 @@ async function generateDraft(conversationId, input, user) {
       created.run.id,
       AI_GENERATION_STAGE.validatingOutput
     );
-    const sources = buildGenerationSources(generated.draft, generated.contextChunks);
+    const generatedDraft = request.draftTitle
+      ? { ...generated.draft, title: request.draftTitle }
+      : generated.draft;
+    const sources = buildGenerationSources(generatedDraft, generated.contextChunks);
     aiGenerationManager.updateStage(conversation.id, AI_GENERATION_STAGE.savingDraft);
     aiGenerationRepository.updateGenerationProgress(
       created.run.id,
@@ -288,7 +307,7 @@ async function generateDraft(conversationId, input, user) {
     const committed = aiGenerationRepository.commitGenerationResult(created.run.id, {
       courseId: request.plan.courseId,
       createdBy: user.id,
-      draft: generated.draft,
+      draft: generatedDraft,
       sources,
       conversationId: conversation.id,
       revisionType: AI_REVISION_TYPE.wholeQuizRevision,
@@ -296,12 +315,14 @@ async function generateDraft(conversationId, input, user) {
       metadata: {
         planVersion: conversation.planVersion,
         validationStatus: 'valid',
-        draftOnly: true
-      }
+        draftOnly: true,
+        requestedDraftTitle: request.draftTitle
+      },
+      materializeDraft: draftRecord => aiQuizService.materializeDraft(draftRecord, user)
     });
     resultCommitted = true;
     safeAddAssistantMessage(conversation.id, user.id, {
-      content: 'Your quiz draft is ready for review. Nothing has been published.',
+      content: 'Your quiz draft is ready for review and is now available in Quizzes. Nothing has been published.',
       messageType: AI_MESSAGE_TYPE.status,
       metadata: {
         generationRunId: created.run.id,
@@ -633,17 +654,19 @@ function saveReviewedDraft(conversationId, input, user) {
     if (!existing) throw notFoundError('AI quiz draft not found.');
     if (existing.status !== 'draft') throw conflictError('draft', 'Only draft AI quizzes can be edited.');
     const updated = aiQuizService.updateQuizDraft(existing.id, input, user);
-    aiRevisionRepository.createDraftRevision({
-      draftId: existing.id,
-      conversationId: conversation.id,
-      requestedBy: user.id,
-      revisionType: AI_REVISION_TYPE.manualEdit,
-      requestText: 'Manual review workspace save',
-      beforeData: existing.draft,
-      afterData: updated.draft,
-      metadata: { savedAsDraft: true },
-      applied: true
-    });
+    if (!isDeepStrictEqual(existing.draft, updated.draft)) {
+      aiRevisionRepository.createDraftRevision({
+        draftId: existing.id,
+        conversationId: conversation.id,
+        requestedBy: user.id,
+        revisionType: AI_REVISION_TYPE.manualEdit,
+        requestText: 'Manual review workspace save',
+        beforeData: existing.draft,
+        afterData: updated.draft,
+        metadata: { savedAsDraft: true },
+        applied: true
+      });
+    }
     aiConversationRepository.setOwnedConversationStatus(
       conversation.id,
       user.id,
@@ -942,6 +965,7 @@ function generationResult(conversationId, run, user, repeated) {
 function serializeDraft(record) {
   if (!record) return null;
   return {
+    ...record.draft,
     id: record.id,
     courseId: record.courseId,
     createdBy: record.createdBy,
@@ -949,7 +973,6 @@ function serializeDraft(record) {
     quizId: record.quizId,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
-    ...record.draft,
     draft: record.draft
   };
 }

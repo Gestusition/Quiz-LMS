@@ -30,7 +30,7 @@ export interface AiClient {
   deleteConversation(id: number): Promise<Record<string, unknown>>;
   sendMessage(id: number, content: string): Promise<AiMutationResult>;
   updatePlan(id: number, patch: Partial<QuizPlan>): Promise<AiMutationResult>;
-  generateDraft(id: number, idempotencyKey: string): Promise<AiMutationResult>;
+  generateDraft(id: number, idempotencyKey: string, draftTitle?: string): Promise<AiMutationResult>;
   getGenerationStatus(id: number): Promise<GenerationState>;
   cancelGeneration(id: number): Promise<AiMutationResult>;
   reviseDraft(id: number, instruction: string): Promise<AiMutationResult>;
@@ -73,8 +73,8 @@ export function createAiClient(api: LegacyAiApi): AiClient {
       }
       return parseMutationResult(await api.updateAiConversationPlan(id, payload as Partial<QuizPlan>));
     },
-    async generateDraft(id, idempotencyKey) {
-      return parseMutationResult(await api.generateAiConversationDraft(id, idempotencyKey));
+    async generateDraft(id, idempotencyKey, draftTitle) {
+      return parseMutationResult(await api.generateAiConversationDraft(id, idempotencyKey, draftTitle));
     },
     async getGenerationStatus(id) {
       return parseGeneration(await api.getAiConversationGenerationStatus(id));

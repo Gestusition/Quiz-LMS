@@ -78,6 +78,7 @@ const rawQuestionSchema = z.object({
 const rawDraftSchema = z.object({
   id: nullableNumber.optional(),
   draftId: nullableNumber.optional(),
+  quizId: nullableNumber.optional(),
   title: z.string().optional(),
   description: z.string().optional(),
   difficulty: z.string().optional(),
@@ -85,6 +86,7 @@ const rawDraftSchema = z.object({
   questions: z.array(rawQuestionSchema).optional(),
   updatedAt: z.string().optional(),
   draft: z.object({
+    quizId: nullableNumber.optional(),
     title: z.string().optional(),
     description: z.string().optional(),
     difficulty: z.string().optional(),
@@ -269,7 +271,7 @@ export function normalizeQuestion(input: unknown): DraftQuestion {
 
 export function normalizeDraft(input: unknown): QuizDraft | null {
   if (input === null || input === undefined) return null;
-  const raw = rawDraftSchema.parse(unwrapRecord(input, ['draft']));
+  const raw = rawDraftSchema.parse(input);
   const nested = raw.draft || {};
   const difficultyValue = String(raw.difficulty || nested.difficulty || 'medium').trim().toLowerCase();
   const difficulty = ['easy', 'medium', 'hard'].includes(difficultyValue)
@@ -277,6 +279,7 @@ export function normalizeDraft(input: unknown): QuizDraft | null {
     : 'medium';
   return {
     id: raw.id ?? raw.draftId ?? null,
+    quizId: raw.quizId ?? nested.quizId ?? null,
     title: raw.title || nested.title || 'Untitled quiz draft',
     description: raw.description || nested.description || '',
     difficulty,

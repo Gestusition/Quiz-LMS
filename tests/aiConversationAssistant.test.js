@@ -683,25 +683,26 @@ describe('quiz-plan extraction, readiness, and input hardening', () => {
 });
 
 describe('draft generation, idempotency, failure handling, and redaction', () => {
-  test('same idempotency key creates one review draft and never publishes a quiz', async () => {
+  test('uses a teacher-selected title while idempotent generation creates one private editable LMS draft', async () => {
     mockAzureSuccess({ questionCount: 2 });
     const { conversation } = await createConversation();
     await patchReadyPlan(conversation.id);
     const publishedBefore = countRows('quizzes', "status = 'published'");
     const draftCountBefore = countRows('ai_quiz_drafts');
     const key = `generation-${conversation.id}-stable-key`;
+    const draftTitle = 'Teacher-selected Data Structures Quiz';
 
     const first = await request(app)
       .post(`/api/ai/conversations/${conversation.id}/generate`)
       .set('Cookie', teacherCookie)
       .set('Idempotency-Key', key)
-      .send({ confirmPlan: true })
+      .send({ confirmPlan: true, draftTitle })
       .expect(response => expect([200, 201, 202]).toContain(response.status));
     const second = await request(app)
       .post(`/api/ai/conversations/${conversation.id}/generate`)
       .set('Cookie', teacherCookie)
       .set('Idempotency-Key', key)
-      .send({ confirmPlan: true })
+      .send({ confirmPlan: true, draftTitle })
       .expect(response => expect([200, 201, 202]).toContain(response.status));
 
     const firstGeneration = generationFrom(first.body);
@@ -724,15 +725,98 @@ describe('draft generation, idempotency, failure handling, and redaction', () =>
       .set('Cookie', teacherCookie)
       .expect(200);
     const persistedDraft = draftFrom(detail.body) || firstDraft;
-    expect(persistedDraft).toEqual(expect.objectContaining({ status: 'draft' }));
+    expect(persistedDraft).toEqual(expect.objectContaining({
+      title: draftTitle,
+      status: 'draft',
+      quizId: expect.any(Number)
+    }));
     expect(persistedDraft.questions).toHaveLength(2);
     expect(conversationFrom(detail.body).status).toMatch(/review_required|draft_saved/i);
     expect(countRows('quizzes', "status = 'published'")).toBe(publishedBefore);
+    const linkedQuiz = database.getDatabase().prepare(`
+      SELECT id, courseId, title, status, createdBy
+      FROM quizzes WHERE id = ?
+    `).get(persistedDraft.quizId);
+    expect(linkedQuiz).toEqual(expect.objectContaining({
+      id: persistedDraft.quizId,
+      courseId: demoCourseId,
+      title: draftTitle,
+      status: 'draft',
+      createdBy: teacherId
+    }));
+    expect(countRows('quiz_questions', 'quizId = ?', [persistedDraft.quizId])).toBe(2);
+    const quizzesResponse = await request(app)
+      .get(`/api/quizzes?courseId=${demoCourseId}`)
+      .set('Cookie', teacherCookie)
+      .expect(200);
+    const visibleQuizzes = unwrapData(quizzesResponse.body);
+    expect(visibleQuizzes.map(quiz => Number(quiz.id))).toContain(Number(persistedDraft.quizId));
+    expect(countRows('quizzes', 'id = ?', [persistedDraft.quizId])).toBe(1);
     if (draftCountBefore !== null) {
       expect(countRows('ai_quiz_drafts')).toBe(draftCountBefore + 1);
     }
     const runCount = countRows('ai_generation_runs', 'conversationId = ?', [conversation.id]);
     if (runCount !== null) expect(runCount).toBe(1);
+
+    await request(app)
+      .put(`/api/quizzes/${persistedDraft.quizId}`)
+      .set('Cookie', teacherCookie)
+      .send({ title: 'Edited from the Quizzes workspace' })
+      .expect(200);
+    const editedFromQuizzes = await request(app)
+      .get(`/api/ai/conversations/${conversation.id}`)
+      .set('Cookie', teacherCookie)
+      .expect(200);
+    expect(draftFrom(editedFromQuizzes.body).title).toBe('Edited from the Quizzes workspace');
+
+    await request(app)
+      .put(`/api/quizzes/${persistedDraft.quizId}`)
+      .set('Cookie', teacherCookie)
+      .send({ status: 'published' })
+      .expect(200);
+    const publishedFromQuizzes = await request(app)
+      .get(`/api/ai/conversations/${conversation.id}`)
+      .set('Cookie', teacherCookie)
+      .expect(200);
+    expect(conversationFrom(publishedFromQuizzes.body).status).toBe('published');
+    expect(draftFrom(publishedFromQuizzes.body).status).toBe('published');
+
+    await request(app)
+      .put(`/api/quizzes/${persistedDraft.quizId}`)
+      .set('Cookie', teacherCookie)
+      .send({ status: 'draft' })
+      .expect(200);
+    const reopenedFromQuizzes = await request(app)
+      .get(`/api/ai/conversations/${conversation.id}`)
+      .set('Cookie', teacherCookie)
+      .expect(200);
+    expect(conversationFrom(reopenedFromQuizzes.body).status).toBe('draft_saved');
+    expect(draftFrom(reopenedFromQuizzes.body).status).toBe('draft');
+
+    await request(app)
+      .delete(`/api/quizzes/${persistedDraft.quizId}`)
+      .set('Cookie', teacherCookie)
+      .expect(200);
+    const afterQuizDelete = await request(app)
+      .get(`/api/ai/conversations/${conversation.id}`)
+      .set('Cookie', teacherCookie)
+      .expect(200);
+    const detachedDraft = draftFrom(afterQuizDelete.body);
+    expect(detachedDraft.quizId).toBeNull();
+    expect(countRows('quizzes', 'id = ?', [persistedDraft.quizId])).toBe(0);
+
+    await request(app)
+      .put(`/api/ai/conversations/${conversation.id}/draft`)
+      .set('Cookie', teacherCookie)
+      .send(detachedDraft)
+      .expect(200);
+    const restoredLink = await request(app)
+      .get(`/api/ai/conversations/${conversation.id}`)
+      .set('Cookie', teacherCookie)
+      .expect(200);
+    expect(draftFrom(restoredLink.body).quizId).toEqual(expect.any(Number));
+    expect(draftFrom(restoredLink.body).quizId).not.toBe(persistedDraft.quizId);
+    expect(countRows('quiz_questions', 'quizId = ?', [draftFrom(restoredLink.body).quizId])).toBe(2);
   });
 
   test('preferred material retrieval and grading preferences reach generation', async () => {
@@ -942,6 +1026,21 @@ describe('course material isolation and controlled draft revisions', () => {
     const generatedDraft = draftFrom(generated.body) || generationFrom(generated.body)?.draft;
     expect(generatedDraft?.questions).toHaveLength(2);
     const originalPrompt = generatedDraft.questions[0].prompt || generatedDraft.questions[0].text;
+    const originalLinkedQuestion = database.getDatabase().prepare(`
+      SELECT qq.questionId, q.text
+      FROM quiz_questions qq
+      JOIN questions q ON q.id = qq.questionId
+      WHERE qq.quizId = ?
+      ORDER BY qq.position ASC LIMIT 1
+    `).get(generatedDraft.quizId);
+    const reuseQuizId = Number(database.getDatabase().prepare(`
+      INSERT INTO quizzes (courseId, title, status, createdBy)
+      VALUES (?, 'Question reuse guard', 'draft', ?)
+    `).run(demoCourseId, teacherId).lastInsertRowid);
+    database.getDatabase().prepare(`
+      INSERT INTO quiz_questions (quizId, questionId, points, position)
+      VALUES (?, ?, 1, 1)
+    `).run(reuseQuizId, originalLinkedQuestion.questionId);
 
     const previewResponse = await request(app)
       .post(`/api/ai/conversations/${conversation.id}/revise`)
@@ -974,6 +1073,13 @@ describe('course material isolation and controlled draft revisions', () => {
       .expect(200);
     const appliedDraft = draftFrom(appliedDetail.body);
     expect(appliedDraft.questions[0].prompt || appliedDraft.questions[0].text).not.toBe(originalPrompt);
+    expect(database.getDatabase().prepare(
+      'SELECT text FROM questions WHERE id = ?'
+    ).get(originalLinkedQuestion.questionId).text).toBe(originalLinkedQuestion.text);
+    expect(database.getDatabase().prepare(`
+      SELECT questionId FROM quiz_questions
+      WHERE quizId = ? ORDER BY position ASC LIMIT 1
+    `).get(generatedDraft.quizId).questionId).not.toBe(originalLinkedQuestion.questionId);
 
     await request(app)
       .post(`/api/ai/conversations/${conversation.id}/regenerate-questions`)
@@ -999,6 +1105,18 @@ describe('course material isolation and controlled draft revisions', () => {
       title: 'Teacher-reviewed tree quiz',
       status: 'draft'
     }));
+    const linkedQuiz = database.getDatabase().prepare(`
+      SELECT id, title, status FROM quizzes WHERE id = ?
+    `).get(generatedDraft.quizId);
+    expect(linkedQuiz).toEqual(expect.objectContaining({
+      id: generatedDraft.quizId,
+      title: 'Teacher-reviewed tree quiz',
+      status: 'draft'
+    }));
+    expect(database.getDatabase().prepare(`
+      SELECT points FROM quiz_questions
+      WHERE quizId = ? ORDER BY position ASC LIMIT 1 OFFSET 1
+    `).get(generatedDraft.quizId).points).toBe(2);
 
     const finalDetail = await request(app)
       .get(`/api/ai/conversations/${conversation.id}`)
@@ -1195,6 +1313,8 @@ describe('course material isolation and controlled draft revisions', () => {
       .send({ confirmPlan: true })
       .expect(201);
     const draft = draftFrom(generated.body);
+    const linkedQuizId = draft.quizId;
+    const quizCountBeforePublish = countRows('quizzes');
 
     await request(app)
       .patch(`/api/ai/conversations/${conversation.id}/plan`)
@@ -1320,5 +1440,9 @@ describe('course material isolation and controlled draft revisions', () => {
       .set('Cookie', adminCookie)
       .expect(200);
     expect(conversationFrom(publishedConversation.body).status).toBe('published');
+    expect(database.getDatabase().prepare(
+      'SELECT status FROM quizzes WHERE id = ?'
+    ).get(linkedQuizId).status).toBe('published');
+    expect(countRows('quizzes')).toBe(quizCountBeforePublish);
   });
 });

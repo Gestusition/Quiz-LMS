@@ -90,6 +90,7 @@ const AI_REVISION_TYPE = Object.freeze({
 const AI_LIMITS = Object.freeze({
   conversationTitleMax: 160,
   conversationSearchMax: 160,
+  quizTitleMax: 120,
   conversationsPageSizeDefault: 20,
   conversationsPageSizeMax: 100,
   messagesPerConversationMax: 500,

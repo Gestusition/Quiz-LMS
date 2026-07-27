@@ -70,7 +70,7 @@ function parseAndValidateAIQuiz(aiResponse, options = {}) {
   const parsed = parseJsonObject(aiResponse);
   if (containsUnsafeKeys(parsed)) throw validationError('aiResponse', 'AI output contains unsupported object keys.');
 
-  const title = cleanSafeContent(parsed.title, 'title', 120, true);
+  const title = cleanSafeContent(parsed.title, 'title', AI_LIMITS.quizTitleMax, true);
   const description = cleanSafeContent(parsed.description || '', 'description', 4000, false);
   const difficulty = String(parsed.difficulty || options.difficulty || '').trim().toLowerCase();
   if (!AI_DIFFICULTIES.includes(difficulty)) throw validationError('difficulty', 'AI output has an invalid difficulty.');

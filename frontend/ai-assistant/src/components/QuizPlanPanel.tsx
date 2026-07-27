@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Course, GenerationState, QuizPlan } from '../types';
 import { fieldLabel, getMissingPlanFields, isPlanReady, statusLabel } from '../utils';
 
@@ -18,7 +19,7 @@ interface QuizPlanPanelProps {
   onRetryCourses: () => void;
   onOpenCourses: () => void;
   onPatch: (patch: Partial<QuizPlan>) => void;
-  onGenerate: () => void;
+  onGenerate: (draftTitle?: string) => void;
 }
 
 const TYPE_FIELDS: Array<[keyof QuizPlan['questionTypeDistribution'], string]> = [
@@ -52,11 +53,16 @@ export function QuizPlanPanel({
   onPatch,
   onGenerate
 }: QuizPlanPanelProps) {
+  const [draftTitle, setDraftTitle] = useState('');
   const missing = getMissingPlanFields(plan);
   const ready = Boolean(conversationId) && isPlanReady(plan);
   const selectedCourse = courses.find(course => course.id === plan.courseId);
   const distributionTotal = Object.values(plan.questionTypeDistribution)
     .reduce((sum, value) => sum + Number(value || 0), 0);
+
+  useEffect(() => {
+    setDraftTitle('');
+  }, [conversationId]);
 
   const patchDistribution = (
     key: keyof QuizPlan['questionTypeDistribution'],
@@ -178,6 +184,17 @@ export function QuizPlanPanel({
         </div>
       </section>
 
+      <label className="aiw-field aiw-draft-title">
+        <span>Draft title <small>optional</small></span>
+        <input
+          value={draftTitle}
+          maxLength={120}
+          disabled={!conversationId || generating}
+          onChange={event => setDraftTitle(event.target.value)}
+          placeholder="AI will suggest one if left blank"
+        />
+      </label>
+
       {!conversationId || !plan.courseId ? (
         <div className="aiw-plan-note" role="status">
           Choose a course above to start a saved quiz plan.
@@ -203,7 +220,7 @@ export function QuizPlanPanel({
       <button
         className="aiw-button aiw-button--primary aiw-button--full aiw-generate-button"
         type="button"
-        onClick={onGenerate}
+        onClick={() => onGenerate(draftTitle.trim() || undefined)}
         disabled={!ready || generating || !generationAvailable}
       >
         {generating ? 'Generating draft…' : conversationStatus === 'generation_failed' ? 'Retry generation' : 'Generate Draft'}
