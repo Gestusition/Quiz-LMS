@@ -109,6 +109,23 @@ function renderAssistant(
 }
 
 describe('AI Assistant island', () => {
+  test('shows separate backend chat and embedding connection results', async () => {
+    const user = userEvent.setup();
+    const api = mockApi();
+    vi.mocked(api.testAiSettings).mockResolvedValue({
+      chat: { ok: true, message: 'Chat deployment connected successfully.' },
+      embeddings: { ok: true, skipped: false, message: 'Embedding deployment connected successfully.' }
+    });
+    renderAssistant(api);
+
+    await user.click(await screen.findByRole('button', { name: 'Azure settings' }));
+    await user.click(screen.getByRole('button', { name: 'Test connection' }));
+
+    expect(await screen.findByText(
+      'Chat deployment connected successfully. Embedding deployment connected successfully.'
+    )).toBeVisible();
+  });
+
   test('shows course-aware suggestions only after selecting a course first', async () => {
     const selectedDetail = conversation({
       courseId: 22,

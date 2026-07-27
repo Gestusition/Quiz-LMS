@@ -18,6 +18,24 @@ const EMPTY_SETTINGS: AiSettingsInput = {
   apiVersion: ''
 };
 
+function connectionMessage(value: unknown, deployment: 'Chat' | 'Embedding'): string {
+  if (typeof value === 'boolean') {
+    return value
+      ? `${deployment} deployment connected.`
+      : `${deployment} deployment failed.`;
+  }
+  if (!value || typeof value !== 'object') return '';
+
+  const result = value as { ok?: unknown; skipped?: unknown; message?: unknown };
+  if (typeof result.message === 'string' && result.message.trim()) {
+    return result.message.trim();
+  }
+  if (result.skipped === true) return `${deployment} deployment was skipped.`;
+  return result.ok === true
+    ? `${deployment} deployment connected.`
+    : `${deployment} deployment failed.`;
+}
+
 export function AzureSettingsDialog({ client, onClose, onToast }: AzureSettingsDialogProps) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AiSettingsInput>(EMPTY_SETTINGS);
@@ -52,13 +70,9 @@ export function AzureSettingsDialog({ client, onClose, onToast }: AzureSettingsD
   const testMutation = useMutation({
     mutationFn: () => client.testSettings(form),
     onSuccess: result => {
-      const chat = result.chat === false ? 'Chat deployment failed.' : 'Chat deployment connected.';
-      const embeddings = result.embeddings === false
-        ? ' Embedding deployment failed.'
-        : result.embeddings === true
-          ? ' Embedding deployment connected.'
-          : '';
-      setTestResult(`${chat}${embeddings}`);
+      const chat = connectionMessage(result.chat, 'Chat');
+      const embeddings = connectionMessage(result.embeddings, 'Embedding');
+      setTestResult([chat, embeddings].filter(Boolean).join(' '));
     },
     onError: error => setTestResult(error instanceof Error ? error.message : 'Connection test failed.')
   });

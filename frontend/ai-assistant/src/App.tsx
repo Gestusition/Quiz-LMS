@@ -353,6 +353,10 @@ function Workspace({
     onSuccess: async result => {
       if (result.conversation && selectedId) {
         queryClient.setQueryData(['ai', 'conversation', selectedId], result.conversation);
+        queryClient.setQueryData(
+          ['ai', 'generation', selectedId],
+          result.conversation.generation || null
+        );
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['ai', 'conversation', selectedId] }),
@@ -371,10 +375,11 @@ function Workspace({
       ? 1400
       : false
   });
-  const effectiveGeneration: GenerationState | null = generationStatusQuery.data ||
-    detail?.generation ||
-    (generateMutation.isPending
-      ? {
+  const effectiveGeneration: GenerationState | null =
+    detailGenerating || generateMutation.isPending
+      ? generationStatusQuery.data ||
+        detail?.generation ||
+        {
           status: 'generating',
           stage: 'validating_quiz_plan',
           message: '',
@@ -382,7 +387,7 @@ function Workspace({
           startedAt: '',
           updatedAt: ''
         }
-      : null);
+      : detail?.generation || null;
 
   const lastGenerationStatus = useRef<string>('');
   useEffect(() => {
