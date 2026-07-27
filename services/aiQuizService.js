@@ -441,9 +441,16 @@ function updateQuizDraft(draftId, data, actor = null) {
   if (!existing) throw notFoundError('AI quiz draft not found.');
   assertDraftOwner(existing, actor);
   if (existing.status !== 'draft') throw conflictError('draft', 'Only draft AI quizzes can be edited.');
-  const expectedCount = Array.isArray(data?.questions) ? data.questions.length : undefined;
-  const sourceValidation = validateDraftSourceScope(data, existing.courseId);
-  const validated = parseAndValidateAIQuiz(data, {
+  const draftData = {
+    ...data,
+    difficulty: data?.difficulty ||
+      existing.draft.difficulty ||
+      existing.draft.questions?.[0]?.difficulty ||
+      'medium'
+  };
+  const expectedCount = Array.isArray(draftData.questions) ? draftData.questions.length : undefined;
+  const sourceValidation = validateDraftSourceScope(draftData, existing.courseId);
+  const validated = parseAndValidateAIQuiz(draftData, {
     questionCount: expectedCount,
     questionType: 'mixed',
     includeExplanations: false,

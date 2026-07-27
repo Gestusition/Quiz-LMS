@@ -92,6 +92,7 @@ export interface QuizDraft {
   id: number | null;
   title: string;
   description: string;
+  difficulty: 'easy' | 'medium' | 'hard';
   status: string;
   questions: DraftQuestion[];
   updatedAt: string;

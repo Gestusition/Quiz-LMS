@@ -988,10 +988,12 @@ describe('course material isolation and controlled draft revisions', () => {
         index === 1 ? { ...question, points: 2 } : question
       ))
     };
+    const { difficulty: omittedDifficulty, ...editedWithoutDifficulty } = edited;
+    expect(omittedDifficulty).toBeTruthy();
     const saved = await request(app)
       .put(`/api/ai/conversations/${conversation.id}/draft`)
       .set('Cookie', teacherCookie)
-      .send(edited)
+      .send(editedWithoutDifficulty)
       .expect(200);
     expect(draftFrom(saved.body)).toEqual(expect.objectContaining({
       title: 'Teacher-reviewed tree quiz',

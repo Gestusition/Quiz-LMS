@@ -549,6 +549,7 @@ function Workspace({
   const review = detail?.draft ? (
     <QuizReviewEditor
       draft={detail.draft}
+      draftSaved={detail.status === 'draft_saved'}
       saving={saveDraftMutation.isPending}
       regenerating={regenerateMutation.isPending}
       onSave={saveDraft}

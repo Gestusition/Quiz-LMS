@@ -3,6 +3,7 @@ import { DraftQuestion, QuizDraft, SourceReference } from '../types';
 
 interface QuizReviewEditorProps {
   draft: QuizDraft;
+  draftSaved: boolean;
   saving: boolean;
   regenerating: boolean;
   onSave: (draft: QuizDraft, showToast?: boolean) => Promise<boolean>;
@@ -262,6 +263,7 @@ function QuestionEditorCard({
 
 export function QuizReviewEditor({
   draft,
+  draftSaved,
   saving,
   regenerating,
   onSave,
@@ -270,14 +272,16 @@ export function QuizReviewEditor({
 }: QuizReviewEditorProps) {
   const [editable, setEditable] = useState(() => cloneDraft(draft));
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(draft));
+  const [saveConfirmed, setSaveConfirmed] = useState(draftSaved);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const busy = saving || regenerating;
 
   useEffect(() => {
     setEditable(cloneDraft(draft));
     setSavedSnapshot(JSON.stringify(draft));
+    setSaveConfirmed(draftSaved);
     setSelected(new Set());
-  }, [draft]);
+  }, [draft, draftSaved]);
 
   const dirty = useMemo(() => JSON.stringify(editable) !== savedSnapshot, [editable, savedSnapshot]);
 
@@ -327,7 +331,10 @@ export function QuizReviewEditor({
 
   const save = async (showToast = true) => {
     const saved = await onSave(editable, showToast);
-    if (saved) setSavedSnapshot(JSON.stringify(editable));
+    if (saved) {
+      setSavedSnapshot(JSON.stringify(editable));
+      setSaveConfirmed(true);
+    }
     return saved;
   };
 
@@ -438,7 +445,7 @@ export function QuizReviewEditor({
           className="aiw-button aiw-button--primary"
           type="button"
           onClick={() => save(true)}
-          disabled={!dirty || busy || !editable.title.trim() || !editable.questions.length}
+          disabled={(!dirty && saveConfirmed) || busy || !editable.title.trim() || !editable.questions.length}
         >
           {saving ? 'Saving…' : 'Save as draft'}
         </button>
