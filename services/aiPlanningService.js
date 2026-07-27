@@ -1,5 +1,6 @@
 const aiQuizService = require('./aiQuizService');
 const {
+  AI_LIMITS,
   AI_MATERIAL_MODE,
   AI_QUESTION_DISTRIBUTION_KEYS
 } = require('../constants/ai');
@@ -91,7 +92,16 @@ async function planConversation({ content, currentPlan, courses, userId }) {
         config
       });
       const proposed = restrictCourse(aiResult.proposedPlan, courses);
-      result = validateQuizPlanPatch(proposed, result.plan);
+      const preserved = preserveCollectedPlanValues(proposed, result.plan);
+      const authoritativeLocalUpdates = { ...localUpdates };
+      // Structured output can resolve compound type-count phrases more
+      // accurately than the lightweight local parser. The local distribution
+      // remains the fallback when the provider returns an empty one.
+      delete authoritativeLocalUpdates.questionTypeDistribution;
+      result = validateQuizPlanPatch(
+        { ...preserved, ...authoritativeLocalUpdates },
+        result.plan
+      );
       assistantResponse = validateAssistantText(aiResult.assistantResponse);
       quickReplies = validateQuickReplies(aiResult.quickReplies);
     } catch (error) {
@@ -101,10 +111,12 @@ async function planConversation({ content, currentPlan, courses, userId }) {
   }
 
   const fallback = buildClarification(result.plan, courses);
+  const useModelResponse = assistantResponse &&
+    isAssistantResponseConsistent(assistantResponse, result.plan);
   return {
     plan: result.plan,
-    assistantResponse: assistantResponse || fallback.assistantResponse,
-    quickReplies: quickReplies.length ? quickReplies : fallback.quickReplies,
+    assistantResponse: useModelResponse ? assistantResponse : fallback.assistantResponse,
+    quickReplies: useModelResponse && quickReplies.length ? quickReplies : fallback.quickReplies,
     missingRequiredFields: result.plan.missingRequiredFields,
     readinessStatus: result.plan.readinessStatus,
     ready: result.plan.missingRequiredFields.length === 0
@@ -159,12 +171,34 @@ function extractLocalPlanUpdates(content, currentPlan, courses) {
   });
   if (course) updates.courseId = Number(course.id);
 
-  const countMatch = text.match(/\b(\d{1,3})\s*(?:questions?|sorular?|soru)\b/i);
+  const countMatch = text.match(/\b(\d{1,3})\s*(?:questions?|sorular?|soru)\b/i) ||
+    (!currentPlan.questionCount ? text.match(/^\s*(\d{1,3})\s*$/) : null);
   if (countMatch) updates.questionCount = Number(countMatch[1]);
 
-  if (/\b(?:easy|beginner|kolay)\b/i.test(text)) updates.difficulty = 'easy';
-  if (/\b(?:medium|intermediate|orta)\b/i.test(text)) updates.difficulty = 'medium';
-  if (/\b(?:hard|advanced|zor)\b/i.test(text)) updates.difficulty = 'hard';
+  const asksForMixedDifficulty =
+    /\b(?:mixed|mix|karışık)\b.{0,50}\b(?:difficulty|difficulties|level|zorluk)\b/i.test(text) ||
+    /\b(?:difficulty|difficulties|level|zorluk)\b.{0,50}\b(?:mixed|mix|karışık)\b/i.test(text) ||
+    (
+      /\b(?:easy|beginner|kolay)\b/i.test(text) &&
+      /\b(?:medium|intermediate|orta)\b/i.test(text) &&
+      /\b(?:hard|advanced|zor)\b/i.test(text)
+    );
+  if (asksForMixedDifficulty) {
+    // The persisted quiz has one overall difficulty, while generated questions
+    // may each use easy, medium, or hard. Use medium as the representative
+    // value and preserve the requested per-question mix as an instruction.
+    updates.difficulty = 'medium';
+    updates.specialInstructions = appendInstruction(
+      currentPlan.specialInstructions,
+      'Use a mix of easy, medium, and hard question difficulties.'
+    );
+  } else if (/\b(?:easy|beginner|kolay)\b/i.test(text)) {
+    updates.difficulty = 'easy';
+  } else if (/\b(?:medium|intermediate|orta)\b/i.test(text)) {
+    updates.difficulty = 'medium';
+  } else if (/\b(?:hard|advanced|zor)\b/i.test(text)) {
+    updates.difficulty = 'hard';
+  }
 
   const topicMatch = text.match(
     /\b(?:about|on|covering|topic(?:\s+is)?|konu(?:su)?|hakkında)\s+(.+?)(?=[.!?]\s|,\s*(?:with|using|include)|\s+(?:i want|use the|include|difficulty|zorluk)|$)/i
@@ -308,6 +342,68 @@ function restrictCourse(plan, courses) {
     return { ...plan, courseId: null };
   }
   return plan;
+}
+
+function preserveCollectedPlanValues(proposedPlan, collectedPlan) {
+  const proposed = { ...proposedPlan };
+  const requiredFields = ['courseId', 'topic', 'difficulty', 'questionCount', 'language'];
+  requiredFields.forEach(field => {
+    if (isEmptyPlanValue(proposed[field]) && !isEmptyPlanValue(collectedPlan[field])) {
+      proposed[field] = collectedPlan[field];
+    }
+  });
+  if (
+    distributionTotal(proposed.questionTypeDistribution) === 0 &&
+    distributionTotal(collectedPlan.questionTypeDistribution) > 0
+  ) {
+    proposed.questionTypeDistribution = collectedPlan.questionTypeDistribution;
+  }
+  if (!String(proposed.specialInstructions || '').trim() && collectedPlan.specialInstructions) {
+    proposed.specialInstructions = collectedPlan.specialInstructions;
+  }
+  return proposed;
+}
+
+function isAssistantResponseConsistent(response, plan) {
+  const requestedField = clarificationField(response);
+  if (!requestedField) return true;
+  return requestedField === (plan.missingRequiredFields || [])[0];
+}
+
+function clarificationField(response) {
+  const text = String(response || '');
+  if (/\bwhich course\b|\bwhat course\b/i.test(text)) return 'courseId';
+  if (/\bwhat (?:topic|unit)\b|\bwhich (?:topic|unit)\b/i.test(text)) return 'topic';
+  if (
+    /\bwhat difficulty\b|\bwhich difficulty\b|\bdifficulty level should\b|\b(?:easy|medium|hard)\s+(?:difficulty|level)\b/i.test(text)
+  ) return 'difficulty';
+  if (/\bhow many(?: total)? questions\b|\bnumber of questions\b/i.test(text)) return 'questionCount';
+  if (/\bwhat language\b|\bwhich language\b/i.test(text)) return 'language';
+  if (/\bdistributed by type\b|\bquestion type(?:s| distribution)?\b/i.test(text)) {
+    return 'questionTypeDistribution';
+  }
+  return '';
+}
+
+function isEmptyPlanValue(value) {
+  return value === null || value === undefined || value === '';
+}
+
+function distributionTotal(distribution) {
+  if (!distribution || typeof distribution !== 'object' || Array.isArray(distribution)) return 0;
+  return AI_QUESTION_DISTRIBUTION_KEYS.reduce(
+    (total, key) => total + Number(distribution[key] || 0),
+    0
+  );
+}
+
+function appendInstruction(existing, instruction) {
+  const current = String(existing || '').trim();
+  if (current.toLowerCase().includes(instruction.toLowerCase())) return current;
+  return [current, instruction]
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, AI_LIMITS.specialInstructionsMax);
 }
 
 function optionalConfig(userId) {
