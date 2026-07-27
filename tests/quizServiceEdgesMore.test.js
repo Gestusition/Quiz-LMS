@@ -110,6 +110,35 @@ afterAll(() => {
 });
 
 describe('quiz service CRUD and setQuestions edges', () => {
+  test('adds Windows-style numeric suffixes to duplicate quiz titles within a course', () => {
+    const title = `QE Duplicate ${stamp('quiz')}`;
+    const first = quizService.create(quizPayload(ctx.course.id, title), ctx.teacher);
+    const second = quizService.create(quizPayload(ctx.course.id, title), ctx.teacher);
+    const third = quizService.create(quizPayload(ctx.course.id, title), ctx.teacher);
+    const otherCourse = quizService.create(quizPayload(ctx.otherCourse.id, title), ctx.otherTeacher);
+    const renameTarget = quizService.create(
+      quizPayload(ctx.course.id, `QE Rename ${stamp('quiz')}`),
+      ctx.teacher
+    );
+
+    expect(first.title).toBe(title);
+    expect(second.title).toBe(`${title} (1)`);
+    expect(third.title).toBe(`${title} (2)`);
+    expect(otherCourse.title).toBe(title);
+    expect(quizService.update(renameTarget.id, { title }, ctx.teacher).title).toBe(`${title} (3)`);
+    expect(quizService.update(renameTarget.id, { description: 'Only the description changed' }, ctx.teacher).title)
+      .toBe(`${title} (3)`);
+
+    const maximumLengthTitle = 'L'.repeat(LIMITS.quizzes.titleMax);
+    quizService.create(quizPayload(ctx.course.id, maximumLengthTitle), ctx.teacher);
+    const suffixedMaximum = quizService.create(
+      quizPayload(ctx.course.id, maximumLengthTitle),
+      ctx.teacher
+    );
+    expect(suffixedMaximum.title).toBe(`${'L'.repeat(LIMITS.quizzes.titleMax - 4)} (1)`);
+    expect(suffixedMaximum.title).toHaveLength(LIMITS.quizzes.titleMax);
+  });
+
   test('covers missing records, delete permissions, includeTemplates, and question assignment validation', () => {
     const question = makeQuestion(ctx.course, ctx.teacher);
     const otherQuestion = makeQuestion(ctx.otherCourse, ctx.otherTeacher);

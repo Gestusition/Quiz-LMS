@@ -65,8 +65,11 @@ class QuizService {
       throw validationError('questions', 'Create the quiz as a draft, assign at least one valid question, then publish it.');
     }
 
-    const result = quizRepository.insert(payload, user.id);
-    const quiz = this.getById(result.lastInsertRowid, { includeQuestions: true, includeCorrect: true, user });
+    const quizId = quizRepository.withTransaction(() => {
+      payload.title = this.resolveAvailableTitle(payload.courseId, payload.title);
+      return Number(quizRepository.insert(payload, user.id).lastInsertRowid);
+    });
+    const quiz = this.getById(quizId, { includeQuestions: true, includeCorrect: true, user });
     auditService.log({
       actorUserId: user.id,
       action: 'QUIZ_CREATED',
@@ -115,6 +118,9 @@ class QuizService {
     }
 
     quizRepository.withTransaction(() => {
+      if (data.title !== undefined || data.courseId !== undefined) {
+        payload.title = this.resolveAvailableTitle(payload.courseId, payload.title, id);
+      }
       quizRepository.update(id, payload, nowIso(), user ? user.id : null);
       this.syncLinkedAiDraftLifecycle(existing, quizRepository.findById(id));
     });
@@ -131,6 +137,24 @@ class QuizService {
     }
 
     return quiz;
+  }
+
+  resolveAvailableTitle(courseId, requestedTitle, excludeQuizId = null) {
+    const title = String(requestedTitle || '').trim();
+    if (!quizRepository.titleExists(courseId, title, excludeQuizId)) return title;
+
+    for (let index = 1; index <= 9999; index += 1) {
+      const suffix = ` (${index})`;
+      const base = title
+        .slice(0, LIMITS.quizzes.titleMax - suffix.length)
+        .trimEnd();
+      const candidate = `${base}${suffix}`;
+      if (!quizRepository.titleExists(courseId, candidate, excludeQuizId)) {
+        return candidate;
+      }
+    }
+
+    throw validationError('title', 'A unique quiz title could not be generated.');
   }
 
   delete(id, user = null) {

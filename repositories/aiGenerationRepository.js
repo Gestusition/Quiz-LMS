@@ -307,7 +307,7 @@ function commitGenerationResult(runId, resultData) {
 
   db.exec('BEGIN TRANSACTION');
   try {
-    const draftJson = JSON.stringify(resultData.draft);
+    let draftJson = JSON.stringify(resultData.draft);
     const draftInsert = db.prepare(`
       INSERT INTO ai_quiz_drafts (courseId, createdBy, dataJson, status)
       VALUES (?, ?, ?, 'draft')
@@ -343,6 +343,9 @@ function commitGenerationResult(runId, resultData) {
       if (!linked.changes) {
         throw new Error('The generated LMS quiz draft could not be linked safely.');
       }
+      draftJson = db.prepare(`
+        SELECT dataJson FROM ai_quiz_drafts WHERE id = ?
+      `).get(draftId).dataJson;
     }
 
     db.prepare('DELETE FROM ai_generation_sources WHERE generationRunId = ?').run(runId);

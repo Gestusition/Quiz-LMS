@@ -466,7 +466,7 @@ function updateQuizDraft(draftId, data, actor = null) {
       ? aiQuizDraftRepository.updateDraftForOwner(draftId, actor.id, payload)
       : aiQuizDraftRepository.updateDraft(draftId, payload);
     syncLinkedLmsDraft(updated, effectiveActor);
-    return updated;
+    return aiQuizDraftRepository.getById(updated.id);
   });
 }
 
@@ -566,7 +566,14 @@ function materializeDraft(draftRecord, actor) {
     maxAttempts: 1,
     showCorrectAnswers: true
   }, actor);
-  return syncLmsQuizQuestions(draftRecord, quiz.id, actor);
+  let synchronizedDraft = draftRecord;
+  if (quiz.title !== draftRecord.draft.title) {
+    synchronizedDraft = aiQuizDraftRepository.updateDraft(draftRecord.id, {
+      ...draftRecord.draft,
+      title: quiz.title
+    });
+  }
+  return syncLmsQuizQuestions(synchronizedDraft, quiz.id, actor);
 }
 
 function ensureLmsQuizDraft(draftId, actor, options = {}) {

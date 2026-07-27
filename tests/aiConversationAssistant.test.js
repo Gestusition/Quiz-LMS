@@ -691,6 +691,21 @@ describe('draft generation, idempotency, failure handling, and redaction', () =>
     const draftCountBefore = countRows('ai_quiz_drafts');
     const key = `generation-${conversation.id}-stable-key`;
     const draftTitle = 'Teacher-selected Data Structures Quiz';
+    const expectedDraftTitle = `${draftTitle} (1)`;
+
+    await request(app)
+      .post('/api/quizzes')
+      .set('Cookie', teacherCookie)
+      .send({
+        courseId: demoCourseId,
+        title: draftTitle,
+        status: 'draft',
+        durationMinutes: 10
+      })
+      .expect(201)
+      .expect(response => {
+        expect(unwrapData(response.body).title).toBe(draftTitle);
+      });
 
     const first = await request(app)
       .post(`/api/ai/conversations/${conversation.id}/generate`)
@@ -726,7 +741,7 @@ describe('draft generation, idempotency, failure handling, and redaction', () =>
       .expect(200);
     const persistedDraft = draftFrom(detail.body) || firstDraft;
     expect(persistedDraft).toEqual(expect.objectContaining({
-      title: draftTitle,
+      title: expectedDraftTitle,
       status: 'draft',
       quizId: expect.any(Number)
     }));
@@ -740,10 +755,16 @@ describe('draft generation, idempotency, failure handling, and redaction', () =>
     expect(linkedQuiz).toEqual(expect.objectContaining({
       id: persistedDraft.quizId,
       courseId: demoCourseId,
-      title: draftTitle,
+      title: expectedDraftTitle,
       status: 'draft',
       createdBy: teacherId
     }));
+    const initialRevision = database.getDatabase().prepare(`
+      SELECT afterDataJson
+      FROM ai_draft_revisions
+      WHERE draftId = ? AND revisionNumber = 1
+    `).get(persistedDraft.id);
+    expect(JSON.parse(initialRevision.afterDataJson).title).toBe(expectedDraftTitle);
     expect(countRows('quiz_questions', 'quizId = ?', [persistedDraft.quizId])).toBe(2);
     const quizzesResponse = await request(app)
       .get(`/api/quizzes?courseId=${demoCourseId}`)

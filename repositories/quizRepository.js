@@ -64,6 +64,23 @@ function findById(id) {
   return getDatabase().prepare('SELECT * FROM quizzes WHERE id = ?').get(id) || null;
 }
 
+function titleExists(courseId, title, excludeQuizId = null) {
+  const params = [courseId, title];
+  let excludeClause = '';
+  if (excludeQuizId !== null && excludeQuizId !== undefined) {
+    excludeClause = ' AND id != ?';
+    params.push(excludeQuizId);
+  }
+  return Boolean(getDatabase().prepare(`
+    SELECT 1
+    FROM quizzes
+    WHERE courseId = ?
+      AND LOWER(TRIM(title)) = LOWER(TRIM(?))
+      ${excludeClause}
+    LIMIT 1
+  `).get(...params));
+}
+
 function getById(id, user = null) {
   const isTeacher = user && user.role === 'teacher';
   const params = isTeacher ? [user.id, id] : [id];
@@ -472,6 +489,7 @@ module.exports = {
   findExamTemplateById,
   findExamTemplateByName,
   findById,
+  titleExists,
   getAttempt,
   getAttemptAnswers,
   getAttemptsForQuiz,
