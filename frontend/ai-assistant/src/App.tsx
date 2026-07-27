@@ -36,7 +36,7 @@ import {
   RevisionPreview,
   SourceReference
 } from './types';
-import { createIdempotencyKey } from './utils';
+import { createIdempotencyKey, isExplicitGenerationRequest, isPlanReady } from './utils';
 
 interface AiAssistantAppProps extends AssistantCallbacks {
   api: LegacyAiApi;
@@ -740,7 +740,13 @@ function Workspace({
             }}
             onOpenCourses={openCourses}
             onCourseSelect={selectCourse}
-            onSend={content => sendMutation.mutate(content)}
+            onSend={content => {
+              if (!detail?.draft && isPlanReady(plan) && isExplicitGenerationRequest(content)) {
+                generateMutation.mutate(undefined);
+                return;
+              }
+              sendMutation.mutate(content);
+            }}
             onRetryMessage={message => sendMutation.mutate(message.content)}
             onAttach={openUpload}
             onPasteMaterial={openPaste}

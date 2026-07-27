@@ -90,6 +90,20 @@ export function isPlanReady(plan: QuizPlan): boolean {
   return getMissingPlanFields(plan).length === 0;
 }
 
+export function isExplicitGenerationRequest(value: string): boolean {
+  const request = value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[.!?]+$/g, '')
+    .replace(/\s+/g, ' ');
+  if (!request) return false;
+
+  return /^(?:please )?(?:generate|create|build|produce)(?: (?:it|the quiz|quiz|the draft|draft))?(?: now)?(?: please)?$/.test(request) ||
+    /^(?:please )?(?:go ahead and |start )(?:generating|generation|generate)(?: (?:it|the quiz|quiz|the draft|draft))?(?: now)?$/.test(request) ||
+    /^(?:lütfen )?(?:oluştur|üret|hazırla)(?: (?:onu|quizi|sınavı|taslağı))?(?: şimdi)?(?: lütfen)?$/.test(request) ||
+    /^(?:lütfen )?(?:quizi|sınavı|taslağı) (?:oluştur|üret|hazırla)(?: şimdi)?(?: lütfen)?$/.test(request);
+}
+
 export function fieldLabel(field: string): string {
   const labels: Record<string, string> = {
     courseId: 'course',

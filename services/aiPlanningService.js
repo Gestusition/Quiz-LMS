@@ -362,9 +362,13 @@ function preserveCollectedPlanValues(proposedPlan, collectedPlan) {
 }
 
 function isAssistantResponseConsistent(response, plan) {
+  const expectedField = (plan.missingRequiredFields || [])[0];
   const requestedField = clarificationField(response);
-  if (!requestedField) return true;
-  return requestedField === (plan.missingRequiredFields || [])[0];
+  // Once every required field is present, planning must end. Provider wording
+  // must not turn optional implementation details into an endless sequence of
+  // clarification questions.
+  if (!expectedField) return false;
+  return requestedField === expectedField;
 }
 
 function clarificationField(response) {

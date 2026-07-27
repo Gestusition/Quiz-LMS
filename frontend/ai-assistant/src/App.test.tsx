@@ -662,6 +662,46 @@ describe('AI Assistant island', () => {
       .toBe('Teacher-selected Data Structures Quiz');
   });
 
+  test('starts generation when a ready plan receives an explicit generate chat command', async () => {
+    const detail = conversation({
+      courseId: 7,
+      status: 'ready_to_generate',
+      plan: {
+        ...DEFAULT_PLAN,
+        courseId: 7,
+        topic: 'Assembly cats',
+        difficulty: 'mixed',
+        questionCount: 7,
+        questionTypeDistribution: {
+          multipleChoice: 0,
+          trueFalse: 0,
+          shortAnswer: 0,
+          essay: 0,
+          coding: 7
+        },
+        missingRequiredFields: [],
+        readinessStatus: 'ready_to_generate'
+      }
+    });
+    const api = mockApi({
+      conversations: [summary({ courseId: 7, status: 'ready_to_generate' })],
+      detail
+    });
+    const user = userEvent.setup();
+    renderAssistant(api);
+
+    const composer = await screen.findByLabelText(/Describe the quiz you want to create/i);
+    await user.type(composer, 'generate');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(api.generateAiConversationDraft).toHaveBeenCalledWith(
+      41,
+      expect.any(String),
+      undefined
+    ));
+    expect(api.sendAiConversationMessage).not.toHaveBeenCalled();
+  });
+
   test('supports review editing, save-before-regenerate, and semantic question controls', async () => {
     const detail = conversation({
       title: 'Loops quiz',

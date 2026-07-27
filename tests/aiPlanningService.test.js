@@ -93,4 +93,75 @@ describe('AI planning turn state preservation', () => {
     expect(countTurn.assistantResponse).toMatch(/distributed by type/i);
     expect(countTurn.quickReplies).toContain('Mixed');
   });
+
+  test('ends planning instead of accepting extra provider questions after the plan is complete', async () => {
+    jest.spyOn(aiQuizService, 'getConfigForUser').mockReturnValue({ enabled: true });
+    jest.spyOn(aiQuizService, 'callAzureOpenAI').mockResolvedValue(providerResponse(
+      'Which target architecture and assembler syntax should we use?',
+      providerPlan({
+        courseId: 1,
+        topic: 'cats',
+        difficulty: 'mixed',
+        questionCount: 7,
+        language: 'English',
+        questionTypeDistribution: {
+          ...EMPTY_DISTRIBUTION,
+          coding: 7
+        }
+      })
+    ));
+
+    const turn = await aiPlanningService.planConversation({
+      content: 'generate',
+      currentPlan: createEmptyQuizPlan({
+        courseId: 1,
+        topic: 'cats',
+        difficulty: 'mixed',
+        questionCount: 7,
+        questionTypeDistribution: {
+          ...EMPTY_DISTRIBUTION,
+          coding: 7
+        }
+      }),
+      courses: [{ id: 1, code: 'CATS101', title: 'Cats' }],
+      userId: 42
+    });
+
+    expect(turn.ready).toBe(true);
+    expect(turn.plan.missingRequiredFields).toEqual([]);
+    expect(turn.assistantResponse).toMatch(/quiz plan is ready/i);
+    expect(turn.assistantResponse).not.toMatch(/architecture|assembler syntax/i);
+    expect(turn.quickReplies).toContain('Generate draft');
+  });
+
+  test('asks only for the first required field when the provider asks for an optional detail', async () => {
+    jest.spyOn(aiQuizService, 'getConfigForUser').mockReturnValue({ enabled: true });
+    jest.spyOn(aiQuizService, 'callAzureOpenAI').mockResolvedValue(providerResponse(
+      'Which target architecture and assembler syntax should we use?',
+      providerPlan({
+        courseId: 1,
+        topic: 'cats',
+        difficulty: 'mixed',
+        questionCount: 7,
+        language: 'English'
+      })
+    ));
+
+    const turn = await aiPlanningService.planConversation({
+      content: 'assembly',
+      currentPlan: createEmptyQuizPlan({
+        courseId: 1,
+        topic: 'cats',
+        difficulty: 'mixed',
+        questionCount: 7
+      }),
+      courses: [{ id: 1, code: 'CATS101', title: 'Cats' }],
+      userId: 42
+    });
+
+    expect(turn.ready).toBe(false);
+    expect(turn.plan.missingRequiredFields[0]).toBe('questionTypeDistribution');
+    expect(turn.assistantResponse).toMatch(/distributed by type/i);
+    expect(turn.assistantResponse).not.toMatch(/architecture|assembler syntax/i);
+  });
 });
