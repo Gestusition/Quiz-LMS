@@ -1,6 +1,7 @@
 import { ReactNode, useMemo, useState } from 'react';
 import { ConversationSummary } from '../types';
 import { statusLabel } from '../utils';
+import { Modal } from './Modal';
 
 interface ConversationSidebarProps {
   conversations: ConversationSummary[];
@@ -8,8 +9,10 @@ interface ConversationSidebarProps {
   isLoading: boolean;
   isError: boolean;
   isCreating: boolean;
+  deletingId: number | null;
   onNew: () => void;
   onSelect: (id: number) => void;
+  onDelete: (id: number) => void;
   onRetry: () => void;
   materials: ReactNode;
 }
@@ -20,13 +23,16 @@ export function ConversationSidebar({
   isLoading,
   isError,
   isCreating,
+  deletingId,
   onNew,
   onSelect,
+  onDelete,
   onRetry,
   materials
 }: ConversationSidebarProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [deleteTarget, setDeleteTarget] = useState<ConversationSummary | null>(null);
   const filtered = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase();
     return conversations.filter(conversation => {
@@ -86,18 +92,34 @@ export function ConversationSidebar({
             </div>
           ) : null}
           {filtered.map(conversation => (
-            <button
-              className={`aiw-conversation ${selectedId === conversation.id ? 'is-active' : ''}`}
-              type="button"
+            <div
+              className={`aiw-conversation-row ${selectedId === conversation.id ? 'is-active' : ''}`}
               key={conversation.id}
-              onClick={() => onSelect(conversation.id)}
-              aria-current={selectedId === conversation.id ? 'page' : undefined}
             >
-              <span className="aiw-conversation__title">{conversation.title}</span>
-              <span className={`aiw-status aiw-status--${conversation.status}`}>
-                {statusLabel(conversation.status)}
-              </span>
-            </button>
+              <button
+                className="aiw-conversation"
+                type="button"
+                onClick={() => onSelect(conversation.id)}
+                aria-current={selectedId === conversation.id ? 'page' : undefined}
+              >
+                <span className="aiw-conversation__title">{conversation.title}</span>
+                <span className={`aiw-status aiw-status--${conversation.status}`}>
+                  {statusLabel(conversation.status)}
+                </span>
+              </button>
+              <button
+                className="aiw-conversation__delete"
+                type="button"
+                aria-label={`Delete conversation: ${conversation.title}`}
+                title={conversation.status === 'generating'
+                  ? 'Stop quiz generation before deleting this conversation'
+                  : 'Delete conversation'}
+                disabled={deletingId === conversation.id || conversation.status === 'generating'}
+                onClick={() => setDeleteTarget(conversation)}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
           ))}
         </div>
       </section>
@@ -119,6 +141,38 @@ export function ConversationSidebar({
       ) : null}
 
       {materials}
+
+      {deleteTarget ? (
+        <Modal
+          title="Delete conversation?"
+          description="This permanently removes the conversation and all of its chat messages."
+          onClose={() => setDeleteTarget(null)}
+        >
+          <p className="aiw-delete-conversation-copy">
+            <strong>{deleteTarget.title}</strong> cannot be recovered after deletion.
+          </p>
+          <div className="aiw-dialog-actions">
+            <button
+              className="aiw-button aiw-button--quiet"
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </button>
+            <button
+              className="aiw-button aiw-button--danger"
+              type="button"
+              disabled={deletingId === deleteTarget.id}
+              onClick={() => {
+                onDelete(deleteTarget.id);
+                setDeleteTarget(null);
+              }}
+            >
+              {deletingId === deleteTarget.id ? 'Deleting…' : 'Delete conversation'}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
     </aside>
   );
 }

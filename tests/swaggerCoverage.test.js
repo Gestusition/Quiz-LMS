@@ -28,6 +28,7 @@ const REQUIRED_CONVERSATIONAL_AI_OPERATIONS = new Set([
   'POST /api/ai/conversations',
   'GET /api/ai/conversations',
   'GET /api/ai/conversations/{id}',
+  'DELETE /api/ai/conversations/{id}',
   'POST /api/ai/conversations/{id}/messages',
   'PATCH /api/ai/conversations/{id}/plan',
   'POST /api/ai/conversations/{id}/generate',

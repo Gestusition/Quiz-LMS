@@ -27,6 +27,7 @@ import {
   AiAssistantUser,
   AssistantCallbacks,
   ConversationDetail,
+  ConversationSummary,
   DEFAULT_PLAN,
   GenerationState,
   LegacyAiApi,
@@ -316,6 +317,26 @@ function Workspace({
       await queryClient.invalidateQueries({ queryKey: ['ai', 'conversations'] });
     },
     onError: error => toast(actionError(error, 'The course could not be selected.'), 'error')
+  });
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: (conversationId: number) => client.deleteConversation(conversationId),
+    onSuccess: async (_, conversationId) => {
+      const conversations = queryClient.getQueryData<ConversationSummary[]>(['ai', 'conversations']) || [];
+      const remaining = conversations.filter(conversation => conversation.id !== conversationId);
+      queryClient.setQueryData(['ai', 'conversations'], remaining);
+      queryClient.removeQueries({ queryKey: ['ai', 'conversation', conversationId], exact: true });
+      queryClient.removeQueries({ queryKey: ['ai', 'generation', conversationId], exact: true });
+      if (selectedId === conversationId) {
+        setSelectedId(remaining[0]?.id || null);
+        setIsComposingNew(!remaining.length);
+        setRevision(null);
+        setDismissedRevisionId(null);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['ai', 'conversations'] });
+      toast('Conversation deleted.', 'success');
+    },
+    onError: error => toast(actionError(error, 'The conversation could not be deleted.'), 'error')
   });
 
   const sendMutation = useMutation({
@@ -615,6 +636,9 @@ function Workspace({
             isLoading={conversationsQuery.isLoading}
             isError={conversationsQuery.isError}
             isCreating={courseMutation.isPending}
+            deletingId={deleteConversationMutation.isPending
+              ? deleteConversationMutation.variables
+              : null}
             onNew={beginNewConversation}
             onRetry={() => {
               void conversationsQuery.refetch();
@@ -626,6 +650,14 @@ function Workspace({
               setRevision(null);
               setDismissedRevisionId(null);
               setMobilePanel('chat');
+            }}
+            onDelete={id => {
+              if (queuedPlanPatch.current?.id === id) {
+                queuedPlanPatch.current = null;
+                if (planSaveTimer.current) window.clearTimeout(planSaveTimer.current);
+                planSaveTimer.current = null;
+              }
+              deleteConversationMutation.mutate(id);
             }}
             materials={(
               <MaterialsPanel

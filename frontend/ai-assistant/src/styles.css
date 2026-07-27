@@ -266,27 +266,68 @@
   gap: 6px;
 }
 
+.aiw-conversation-row {
+  border: 1px solid transparent;
+  border-radius: 9px;
+  position: relative;
+}
+
 .aiw-conversation {
   background: transparent;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 9px;
   color: var(--aiw-text);
   cursor: pointer;
   display: grid;
   gap: 6px;
-  padding: 10px;
+  padding: 10px 38px 10px 10px;
   text-align: left;
   width: 100%;
 }
 
-.aiw-conversation:hover {
+.aiw-conversation-row:hover {
   background: var(--aiw-surface-subtle);
   border-color: var(--aiw-line);
 }
 
-.aiw-conversation.is-active {
+.aiw-conversation-row.is-active {
   background: var(--aiw-primary-soft);
   border-color: #c7d2fe;
+}
+
+.aiw-conversation__delete {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--aiw-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 1.15rem;
+  height: 28px;
+  justify-content: center;
+  opacity: 0;
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
+  width: 28px;
+}
+
+.aiw-conversation-row:hover .aiw-conversation__delete,
+.aiw-conversation-row:focus-within .aiw-conversation__delete,
+.aiw-conversation-row.is-active .aiw-conversation__delete {
+  opacity: 1;
+}
+
+.aiw-conversation__delete:hover:not(:disabled) {
+  background: var(--aiw-danger-soft);
+  color: var(--aiw-danger);
+}
+
+.aiw-conversation__delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .aiw-conversation__title {
@@ -295,6 +336,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.aiw-delete-conversation-copy {
+  color: var(--aiw-muted);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  margin: 0 0 18px;
+}
+
+.aiw-delete-conversation-copy strong {
+  color: var(--aiw-text);
 }
 
 .aiw-status {

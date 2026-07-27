@@ -100,6 +100,22 @@ function getConversation(conversationId, user) {
   });
 }
 
+function deleteConversation(conversationId, user) {
+  const conversation = requireOwnedConversation(conversationId, user);
+  if (aiGenerationManager.get(conversation.id, user.id)) {
+    throw conflictError(
+      'generation',
+      'Stop the active quiz generation before deleting this conversation.'
+    );
+  }
+  const result = aiConversationRepository.deleteOwnedConversation(conversation.id, user.id);
+  if (!result.changes) throw notFoundError('AI conversation not found.');
+  return {
+    conversationId: conversation.id,
+    message: 'Conversation deleted successfully.'
+  };
+}
+
 async function addMessage(conversationId, input, user) {
   const conversation = requireOwnedConversation(conversationId, user);
   const validated = validateMessageInput(input);
@@ -1101,6 +1117,7 @@ module.exports = {
   applyDraftRevision,
   cancelGeneration,
   createConversation,
+  deleteConversation,
   generateDraft,
   getGenerationStatus,
   getConversation,

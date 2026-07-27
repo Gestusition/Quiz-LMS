@@ -406,6 +406,36 @@ describe('conversational AI authorization and persistence', () => {
       .set('Cookie', adminCookie)
       .expect(404);
   });
+
+  test('owners can delete a conversation and its chat data while other users cannot', async () => {
+    const { conversation } = await createConversation();
+    const conversationId = Number(conversation.id);
+
+    expect(countRows('ai_messages', 'conversationId = ?', [conversationId])).toBeGreaterThan(0);
+    expect(countRows('ai_quiz_plans', 'conversationId = ?', [conversationId])).toBe(1);
+
+    await request(app)
+      .delete(`/api/ai/conversations/${conversationId}`)
+      .set('Cookie', secondTeacherCookie)
+      .expect(404);
+
+    await request(app)
+      .delete(`/api/ai/conversations/${conversationId}`)
+      .set('Cookie', teacherCookie)
+      .expect(200)
+      .expect(response => {
+        expect(Number(response.body.conversationId)).toBe(conversationId);
+        expect(response.body.message).toMatch(/deleted/i);
+      });
+
+    await request(app)
+      .get(`/api/ai/conversations/${conversationId}`)
+      .set('Cookie', teacherCookie)
+      .expect(404);
+    expect(countRows('ai_conversations', 'id = ?', [conversationId])).toBe(0);
+    expect(countRows('ai_messages', 'conversationId = ?', [conversationId])).toBe(0);
+    expect(countRows('ai_quiz_plans', 'conversationId = ?', [conversationId])).toBe(0);
+  });
 });
 
 describe('live context-aware suggested replies', () => {

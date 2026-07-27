@@ -210,6 +210,7 @@ export const API = {
   getAiConversations() { return this.request('/ai/conversations'); },
   createAiConversation(data = {}) { return this.request('/ai/conversations', { method: 'POST', body: data }); },
   getAiConversation(id) { return this.request(`/ai/conversations/${id}`); },
+  deleteAiConversation(id) { return this.request(`/ai/conversations/${id}`, { method: 'DELETE' }); },
   sendAiConversationMessage(id, content) {
     return this.request(`/ai/conversations/${id}/messages`, { method: 'POST', body: { content } });
   },

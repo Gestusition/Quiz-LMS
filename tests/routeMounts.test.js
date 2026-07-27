@@ -267,6 +267,7 @@ describe('API route mounts', () => {
           ['post', '/api/ai/conversations'],
           ['get', '/api/ai/conversations'],
           ['get', '/api/ai/conversations/{id}'],
+          ['delete', '/api/ai/conversations/{id}'],
           ['post', '/api/ai/conversations/{id}/messages'],
           ['patch', '/api/ai/conversations/{id}/plan'],
           ['post', '/api/ai/conversations/{id}/generate'],

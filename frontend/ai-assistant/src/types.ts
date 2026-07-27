@@ -194,6 +194,7 @@ export interface LegacyAiApi {
   getAiConversations(): Promise<unknown>;
   createAiConversation(data?: Record<string, unknown>): Promise<unknown>;
   getAiConversation(id: number): Promise<unknown>;
+  deleteAiConversation(id: number): Promise<unknown>;
   sendAiConversationMessage(id: number, content: string): Promise<unknown>;
   updateAiConversationPlan(id: number, patch: Partial<QuizPlan>): Promise<unknown>;
   generateAiConversationDraft(id: number, idempotencyKey: string): Promise<unknown>;

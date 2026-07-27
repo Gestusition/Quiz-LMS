@@ -9,7 +9,7 @@ import {
   RevisionPreview
 } from '../types';
 import { buildContextualReplies } from '../suggestions';
-import { fieldLabel, formatTimestamp, getMissingPlanFields } from '../utils';
+import { fieldLabel, formatTimestamp, getMissingPlanFields, normalizeTimestamp } from '../utils';
 import { ChatComposer } from './ChatComposer';
 import { GenerationProgress } from './GenerationProgress';
 import { RevisionPreviewCard } from './RevisionPreviewCard';
@@ -188,7 +188,11 @@ export function ChatWorkspace({
             <div className="aiw-message__bubble">
               <div className="aiw-message__meta">
                 <span className="aiw-message__author">{message.sender === 'user' ? 'You' : 'Quiz Assistant'}</span>
-                {message.createdAt ? <time dateTime={message.createdAt}>{formatTimestamp(message.createdAt)}</time> : null}
+                {message.createdAt ? (
+                  <time dateTime={normalizeTimestamp(message.createdAt)}>
+                    {formatTimestamp(message.createdAt)}
+                  </time>
+                ) : null}
               </div>
               <p>{message.content}</p>
               {message.status === 'failed' ? (

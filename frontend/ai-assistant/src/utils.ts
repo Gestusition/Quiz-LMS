@@ -32,12 +32,24 @@ export function stageLabel(stage: string | undefined): string {
 
 export function formatTimestamp(value: string): string {
   if (!value) return '';
-  const date = new Date(value);
+  const date = new Date(normalizeTimestamp(value));
   if (Number.isNaN(date.getTime())) return '';
   return new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
     minute: '2-digit'
   }).format(date);
+}
+
+export function normalizeTimestamp(value: string): string {
+  const timestamp = value.trim();
+  if (!timestamp) return '';
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
+  const isDatabaseTimestamp =
+    /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(timestamp);
+  if (isDatabaseTimestamp && !hasTimezone) {
+    return `${timestamp.replace(' ', 'T')}Z`;
+  }
+  return timestamp;
 }
 
 export function formatBytes(bytes: number): string {

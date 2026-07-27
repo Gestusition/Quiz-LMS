@@ -177,6 +177,30 @@ settingsRouter.get('/conversations/:id', (req, res) => {
 
 /**
  * @swagger
+ * /api/ai/conversations/{id}:
+ *   delete:
+ *     summary: Permanently delete one owned AI conversation and its chat history
+ *     tags: [AI Assistant]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Conversation deleted
+ *       404:
+ *         $ref: '#/components/responses/404NotFound'
+ *       409:
+ *         $ref: '#/components/responses/409Conflict'
+ */
+settingsRouter.delete('/conversations/:id', (req, res) => {
+  try {
+    res.json(aiConversationService.deleteConversation(conversationId(req), req.user));
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+/**
+ * @swagger
  * /api/ai/conversations/{id}/messages:
  *   post:
  *     summary: Add a teacher message and receive a structured planning response

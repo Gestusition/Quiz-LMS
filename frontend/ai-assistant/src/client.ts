@@ -27,6 +27,7 @@ export interface AiClient {
   listConversations(): Promise<ConversationSummary[]>;
   createConversation(data?: Record<string, unknown>): Promise<ConversationDetail>;
   getConversation(id: number): Promise<ConversationDetail>;
+  deleteConversation(id: number): Promise<Record<string, unknown>>;
   sendMessage(id: number, content: string): Promise<AiMutationResult>;
   updatePlan(id: number, patch: Partial<QuizPlan>): Promise<AiMutationResult>;
   generateDraft(id: number, idempotencyKey: string): Promise<AiMutationResult>;
@@ -57,6 +58,9 @@ export function createAiClient(api: LegacyAiApi): AiClient {
     },
     async getConversation(id) {
       return parseConversationDetail(await api.getAiConversation(id));
+    },
+    async deleteConversation(id) {
+      return assertObjectResponse(await api.deleteAiConversation(id));
     },
     async sendMessage(id, content) {
       return parseMutationResult(await api.sendAiConversationMessage(id, content));

@@ -51,6 +51,10 @@ function mockApi(options: {
     getAiConversations: vi.fn().mockResolvedValue(options.conversations ?? []),
     createAiConversation: vi.fn().mockResolvedValue(detail),
     getAiConversation: vi.fn().mockResolvedValue(detail),
+    deleteAiConversation: vi.fn().mockResolvedValue({
+      conversationId: 41,
+      message: 'Conversation deleted successfully.'
+    }),
     sendAiConversationMessage: vi.fn().mockResolvedValue({}),
     updateAiConversationPlan: vi.fn().mockResolvedValue({}),
     generateAiConversationDraft: vi.fn().mockResolvedValue({}),
@@ -213,6 +217,41 @@ describe('AI Assistant island', () => {
     }));
     expect(api.createAiConversation).not.toHaveBeenCalled();
     expect(api.sendAiConversationMessage).not.toHaveBeenCalled();
+  });
+
+  test('asks for confirmation and permanently removes an owned conversation from the list', async () => {
+    const api = mockApi({
+      conversations: [
+        summary({ id: 41, title: 'Loops quiz' }),
+        summary({ id: 42, title: 'Trees quiz' })
+      ],
+      detail: conversation({ id: 41, title: 'Loops quiz' })
+    });
+    vi.mocked(api.getAiConversations)
+      .mockResolvedValueOnce([
+        summary({ id: 41, title: 'Loops quiz' }),
+        summary({ id: 42, title: 'Trees quiz' })
+      ])
+      .mockResolvedValue([
+        summary({ id: 42, title: 'Trees quiz' })
+      ]);
+    const user = userEvent.setup();
+    renderAssistant(api);
+
+    await waitFor(() => expect(api.getAiConversation).toHaveBeenCalledWith(41));
+    await user.click(screen.getByRole('button', { name: 'Delete conversation: Loops quiz' }));
+
+    expect(screen.getByRole('dialog', { name: 'Delete conversation?' })).toBeVisible();
+    expect(screen.getByText(/permanently removes the conversation and all of its chat messages/i))
+      .toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Delete conversation' }));
+
+    await waitFor(() => expect(api.deleteAiConversation).toHaveBeenCalledWith(41));
+    await waitFor(() => expect(
+      screen.queryByRole('button', { name: 'Delete conversation: Loops quiz' })
+    ).not.toBeInTheDocument());
+    expect(await screen.findByText('Trees quiz')).toBeVisible();
   });
 
   test('shows a retryable course error and recovers without treating it as an empty course list', async () => {
