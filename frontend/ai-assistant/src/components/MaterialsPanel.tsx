@@ -17,7 +17,6 @@ interface MaterialsPanelProps {
   onCourseSelect: (courseId: number) => void;
   onRetryCourses: () => void;
   onOpenCourses: () => void;
-  onOpenPaste: () => void;
   onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
 }
 
@@ -34,7 +33,6 @@ export function MaterialsPanel({
   onCourseSelect,
   onRetryCourses,
   onOpenCourses,
-  onOpenPaste,
   onToast
 }: MaterialsPanelProps) {
   const queryClient = useQueryClient();
@@ -150,28 +148,15 @@ export function MaterialsPanel({
           )}
         </div>
       ) : null}
-      <div className="aiw-material-actions">
-        <label className={`aiw-button aiw-button--quiet aiw-button--small ${!courseId || courseSelectionPending ? 'is-disabled' : ''}`}>
-          <span aria-hidden="true">↑</span>
-          {uploadMutation.isPending ? 'Indexing…' : 'Upload'}
-          <input
-            id="aiw-material-upload"
-            className="aiw-sr-only"
-            type="file"
-            accept=".pdf,.txt,.md,.docx"
-            onChange={uploadFile}
-            disabled={!courseId || courseSelectionPending || uploadMutation.isPending}
-          />
-        </label>
-        <button
-          className="aiw-button aiw-button--quiet aiw-button--small"
-          type="button"
-          onClick={onOpenPaste}
-          disabled={!courseId || courseSelectionPending}
-        >
-          Paste notes
-        </button>
-      </div>
+      <input
+        id="aiw-material-upload"
+        className="aiw-sr-only"
+        type="file"
+        accept=".pdf,.txt,.md,.docx"
+        onChange={uploadFile}
+        disabled={!courseId || courseSelectionPending || uploadMutation.isPending}
+      />
+      {uploadMutation.isPending ? <p className="aiw-muted" role="status">Indexing material…</p> : null}
       {materials.length > 4 ? (
         <label className="aiw-search aiw-search--small">
           <span className="aiw-sr-only">Filter course materials</span>

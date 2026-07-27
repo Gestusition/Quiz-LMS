@@ -675,7 +675,6 @@ function Workspace({
                   void coursesQuery.refetch();
                 }}
                 onOpenCourses={openCourses}
-                onOpenPaste={openPaste}
                 onToast={toast}
               />
             )}
