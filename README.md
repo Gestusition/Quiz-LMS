@@ -37,6 +37,12 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 - Teacher office hours: teachers set them from Profile, and enrolled students see them on course participant lists.
 - User restrictions, scoped access blocking, audit logging, real CSV import batches, and admin analytics.
 
+## Demo Video
+
+The comprehensive browser walkthrough covers the teacher quiz-creation and publishing workflow, the student learning experience, and the administrator's institutional controls, analytics, maintenance status, AI tools, and API documentation.
+
+[Watch or download the comprehensive Quiz LMS demo (MP4, 1:55)](output/video/quiz-lms-comprehensive-demo.mp4)
+
 ## Screenshots
 
 | Admin dashboard | Teacher dashboard |

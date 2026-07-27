@@ -147,3 +147,10 @@ test_output.txt
 
 # Scratch
 scratch/
+
+# Local demo recording and rendering artifacts
+tmp/
+demo-recording-frames/
+demo-role-recording-frames/
+output/video/*
+!output/video/quiz-lms-comprehensive-demo.mp4
