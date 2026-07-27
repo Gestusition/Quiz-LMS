@@ -16041,7 +16041,7 @@ function Az(n) {
 }
 function Oz(n) {
   if (n == null) return null;
-  const i = uv.parse(n), s = i.draft || {}, r = String(i.difficulty || s.difficulty || "medium").trim().toLowerCase(), c = ["easy", "medium", "hard"].includes(r) ? r : "medium";
+  const i = uv.parse(n), s = i.draft || {}, r = String(i.difficulty || s.difficulty || "medium").trim().toLowerCase(), c = ["easy", "medium", "hard", "mixed"].includes(r) ? r : "medium";
   return {
     id: i.id ?? i.draftId ?? null,
     quizId: i.quizId ?? s.quizId ?? null,
@@ -16060,7 +16060,7 @@ function Cz(n) {
     courseId: i.courseId ?? ra.courseId,
     topic: i.topic ?? ra.topic,
     learningObjectives: i.learningObjectives ?? [],
-    difficulty: ["easy", "medium", "hard"].includes(String(i.difficulty)) ? i.difficulty : ra.difficulty,
+    difficulty: ["easy", "medium", "hard", "mixed"].includes(String(i.difficulty)) ? i.difficulty : ra.difficulty,
     questionCount: i.questionCount ?? ra.questionCount,
     language: i.language ?? ra.language,
     questionTypeDistribution: {
@@ -16789,7 +16789,7 @@ function nw({
       value: `Help me choose a focused topic from ${Oi(v)}.`
     });
   else if (y.includes("difficulty"))
-    ["easy", "medium", "hard"].forEach((z) => h({
+    ["easy", "medium", "hard", "mixed"].forEach((z) => h({
       label: `${z[0].toUpperCase()}${z.slice(1)} ${g}`,
       value: `Make the ${g} quiz ${z}.`
     }));
@@ -17778,7 +17778,8 @@ function dw({
                   /* @__PURE__ */ f.jsx("option", { value: "", children: "Select difficulty" }),
                   /* @__PURE__ */ f.jsx("option", { value: "easy", children: "Easy" }),
                   /* @__PURE__ */ f.jsx("option", { value: "medium", children: "Medium" }),
-                  /* @__PURE__ */ f.jsx("option", { value: "hard", children: "Hard" })
+                  /* @__PURE__ */ f.jsx("option", { value: "hard", children: "Hard" }),
+                  /* @__PURE__ */ f.jsx("option", { value: "mixed", children: "Mixed" })
                 ]
               }
             )

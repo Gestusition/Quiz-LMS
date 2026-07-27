@@ -63,6 +63,29 @@ test('preserves and normalizes the generated draft difficulty for review saves',
   expect(detail.draft?.status).toBe('draft');
 });
 
+test('preserves mixed difficulty in both the live plan and generated draft', () => {
+  const detail = parseConversationDetail({
+    id: 42,
+    title: 'Mixed cats quiz',
+    status: 'review_required',
+    plan: {
+      courseId: 1,
+      topic: 'Cats',
+      difficulty: 'mixed',
+      questionCount: 3
+    },
+    draft: {
+      id: 10,
+      title: 'Mixed cats quiz',
+      difficulty: 'Mixed',
+      questions: []
+    }
+  });
+
+  expect(detail.plan.difficulty).toBe('mixed');
+  expect(detail.draft?.difficulty).toBe('mixed');
+});
+
 test('normalizes live suggestion labels and values separately from persisted messages', () => {
   const detail = parseConversationDetail({
     id: 41,

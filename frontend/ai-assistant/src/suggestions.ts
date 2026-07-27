@@ -163,7 +163,7 @@ export function buildContextualReplies({
       value: `Help me choose a focused topic from ${courseLabel(course)}.`
     });
   } else if (missing.includes('difficulty')) {
-    (['easy', 'medium', 'hard'] as const).forEach(difficulty => add({
+    (['easy', 'medium', 'hard', 'mixed'] as const).forEach(difficulty => add({
       label: `${difficulty[0].toUpperCase()}${difficulty.slice(1)} ${topic}`,
       value: `Make the ${topic} quiz ${difficulty}.`
     }));

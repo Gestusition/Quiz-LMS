@@ -514,7 +514,7 @@ function positiveNumber(value) {
 
 function safeDifficulty(value) {
   const normalized = String(value || '').toLocaleLowerCase();
-  return ['easy', 'medium', 'hard'].includes(normalized) ? normalized : '';
+  return ['easy', 'medium', 'hard', 'mixed'].includes(normalized) ? normalized : '';
 }
 
 module.exports = {

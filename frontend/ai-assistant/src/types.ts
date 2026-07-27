@@ -24,7 +24,7 @@ export interface QuizPlan {
   courseId: number | null;
   topic: string;
   learningObjectives: string[];
-  difficulty: 'easy' | 'medium' | 'hard' | '';
+  difficulty: 'easy' | 'medium' | 'hard' | 'mixed' | '';
   questionCount: number | null;
   language: string;
   questionTypeDistribution: Record<QuestionTypeKey, number>;
@@ -93,7 +93,7 @@ export interface QuizDraft {
   quizId: number | null;
   title: string;
   description: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: 'easy' | 'medium' | 'hard' | 'mixed';
   status: string;
   questions: DraftQuestion[];
   updatedAt: string;

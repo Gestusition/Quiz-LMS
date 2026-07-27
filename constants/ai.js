@@ -74,7 +74,8 @@ const AI_QUESTION_TYPE = Object.freeze({
 const AI_DIFFICULTY = Object.freeze({
   easy: 'easy',
   medium: 'medium',
-  hard: 'hard'
+  hard: 'hard',
+  mixed: 'mixed'
 });
 
 const AI_REVISION_TYPE = Object.freeze({
@@ -149,6 +150,11 @@ const AI_MESSAGE_SENDERS = Object.freeze(Object.values(AI_MESSAGE_SENDER));
 const AI_MESSAGE_TYPES = Object.freeze(Object.values(AI_MESSAGE_TYPE));
 const AI_QUESTION_TYPES = Object.freeze(Object.values(AI_QUESTION_TYPE));
 const AI_DIFFICULTIES = Object.freeze(Object.values(AI_DIFFICULTY));
+const AI_QUESTION_DIFFICULTIES = Object.freeze([
+  AI_DIFFICULTY.easy,
+  AI_DIFFICULTY.medium,
+  AI_DIFFICULTY.hard
+]);
 const AI_REVISION_TYPES = Object.freeze(Object.values(AI_REVISION_TYPE));
 
 const AI_QUESTION_DISTRIBUTION_KEYS = Object.freeze([
@@ -181,6 +187,7 @@ module.exports = {
   AI_MESSAGE_TYPE,
   AI_MESSAGE_TYPES,
   AI_QUESTION_DISTRIBUTION_KEYS,
+  AI_QUESTION_DIFFICULTIES,
   AI_QUESTION_TYPE,
   AI_QUESTION_TYPES,
   AI_REVISION_TYPE,

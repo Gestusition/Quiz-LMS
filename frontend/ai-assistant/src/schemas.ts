@@ -274,7 +274,7 @@ export function normalizeDraft(input: unknown): QuizDraft | null {
   const raw = rawDraftSchema.parse(input);
   const nested = raw.draft || {};
   const difficultyValue = String(raw.difficulty || nested.difficulty || 'medium').trim().toLowerCase();
-  const difficulty = ['easy', 'medium', 'hard'].includes(difficultyValue)
+  const difficulty = ['easy', 'medium', 'hard', 'mixed'].includes(difficultyValue)
     ? difficultyValue as QuizDraft['difficulty']
     : 'medium';
   return {
@@ -311,7 +311,7 @@ export function normalizePlan(input: unknown): QuizPlan {
     courseId: raw.courseId ?? DEFAULT_PLAN.courseId,
     topic: raw.topic ?? DEFAULT_PLAN.topic,
     learningObjectives: raw.learningObjectives ?? [],
-    difficulty: ['easy', 'medium', 'hard'].includes(String(raw.difficulty))
+    difficulty: ['easy', 'medium', 'hard', 'mixed'].includes(String(raw.difficulty))
       ? raw.difficulty as QuizPlan['difficulty']
       : DEFAULT_PLAN.difficulty,
     questionCount: raw.questionCount ?? DEFAULT_PLAN.questionCount,

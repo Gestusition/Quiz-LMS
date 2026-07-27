@@ -39,7 +39,7 @@ const PLANNING_SCHEMA = {
         courseId: { type: ['integer', 'null'] },
         topic: { type: 'string' },
         learningObjectives: { type: 'array', items: { type: 'string' } },
-        difficulty: { type: 'string', enum: ['', 'easy', 'medium', 'hard'] },
+        difficulty: { type: 'string', enum: ['', 'easy', 'medium', 'hard', 'mixed'] },
         questionCount: { type: ['integer', 'null'] },
         language: { type: 'string' },
         questionTypeDistribution: {
@@ -184,10 +184,7 @@ function extractLocalPlanUpdates(content, currentPlan, courses) {
       /\b(?:hard|advanced|zor)\b/i.test(text)
     );
   if (asksForMixedDifficulty) {
-    // The persisted quiz has one overall difficulty, while generated questions
-    // may each use easy, medium, or hard. Use medium as the representative
-    // value and preserve the requested per-question mix as an instruction.
-    updates.difficulty = 'medium';
+    updates.difficulty = 'mixed';
     updates.specialInstructions = appendInstruction(
       currentPlan.specialInstructions,
       'Use a mix of easy, medium, and hard question difficulties.'
@@ -309,7 +306,7 @@ function buildClarification(plan, courses) {
   if (first === 'difficulty') {
     return {
       assistantResponse: 'What difficulty level should I use?',
-      quickReplies: ['Easy', 'Medium', 'Hard']
+      quickReplies: ['Easy', 'Medium', 'Hard', 'Mixed']
     };
   }
   if (first === 'questionCount') {
@@ -375,7 +372,7 @@ function clarificationField(response) {
   if (/\bwhich course\b|\bwhat course\b/i.test(text)) return 'courseId';
   if (/\bwhat (?:topic|unit)\b|\bwhich (?:topic|unit)\b/i.test(text)) return 'topic';
   if (
-    /\bwhat difficulty\b|\bwhich difficulty\b|\bdifficulty level should\b|\b(?:easy|medium|hard)\s+(?:difficulty|level)\b/i.test(text)
+    /\bwhat difficulty\b|\bwhich difficulty\b|\bdifficulty level should\b|\b(?:easy|medium|hard|mixed)\s+(?:difficulty|level)\b/i.test(text)
   ) return 'difficulty';
   if (/\bhow many(?: total)? questions\b|\bnumber of questions\b/i.test(text)) return 'questionCount';
   if (/\bwhat language\b|\bwhich language\b/i.test(text)) return 'language';

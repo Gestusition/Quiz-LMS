@@ -3,6 +3,7 @@ const { parseRequiredPositiveInt } = require('../utils/validation');
 const {
   AI_DIFFICULTIES,
   AI_LIMITS,
+  AI_QUESTION_DIFFICULTIES,
   AI_QUESTION_TYPES
 } = require('../constants/ai');
 
@@ -18,7 +19,7 @@ function validateGenerationInput(input = {}) {
   const questionCount = Number(input.questionCount);
 
   if (!AI_DIFFICULTIES.includes(difficulty)) {
-    throw validationError('difficulty', 'Difficulty must be easy, medium, or hard.');
+    throw validationError('difficulty', 'Difficulty must be easy, medium, hard, or mixed.');
   }
   if (![...AI_QUESTION_TYPES, 'mixed'].includes(questionType)) {
     throw validationError('questionType', 'Unsupported question type.');
@@ -72,7 +73,10 @@ function parseAndValidateAIQuiz(aiResponse, options = {}) {
 
   const title = cleanSafeContent(parsed.title, 'title', AI_LIMITS.quizTitleMax, true);
   const description = cleanSafeContent(parsed.description || '', 'description', 4000, false);
-  const difficulty = String(parsed.difficulty || options.difficulty || '').trim().toLowerCase();
+  const requestedDifficulty = String(options.difficulty || '').trim().toLowerCase();
+  const difficulty = requestedDifficulty === 'mixed'
+    ? 'mixed'
+    : String(parsed.difficulty || requestedDifficulty).trim().toLowerCase();
   if (!AI_DIFFICULTIES.includes(difficulty)) throw validationError('difficulty', 'AI output has an invalid difficulty.');
   if (!Array.isArray(parsed.questions) || parsed.questions.length === 0) {
     throw validationError('questions', 'AI output must contain a non-empty questions array.');
@@ -97,6 +101,7 @@ function parseAndValidateAIQuiz(aiResponse, options = {}) {
     }
   }
   validateQuestionTypeDistribution(questions, options.questionTypeDistribution);
+  validateQuestionDifficultyDistribution(questions, requestedDifficulty);
   return { title, description, difficulty, questions };
 }
 
@@ -115,7 +120,7 @@ function validateQuestion(question, index, options) {
   const explanation = cleanSafeContent(question.explanation || '', `questions[${index}].explanation`, 5000, false);
   const sourceHint = cleanText(question.sourceHint || '', `questions[${index}].sourceHint`, 500, false);
   const questionDifficulty = String(question.difficulty || options.difficulty || 'medium').trim().toLowerCase();
-  if (!AI_DIFFICULTIES.includes(questionDifficulty)) {
+  if (!AI_QUESTION_DIFFICULTIES.includes(questionDifficulty)) {
     throw validationError(`questions[${index}].difficulty`, 'Question difficulty must be easy, medium, or hard.');
   }
   const learningObjective = cleanSafeContent(
@@ -200,6 +205,20 @@ function validateQuestion(question, index, options) {
     sourceReferences,
     validationStatus: 'valid'
   };
+}
+
+function validateQuestionDifficultyDistribution(questions, requestedDifficulty) {
+  if (requestedDifficulty !== 'mixed' || questions.length < 2) return;
+  const levels = new Set(questions.map(question => question.difficulty));
+  const requiredLevelCount = Math.min(3, questions.length);
+  if (levels.size < requiredLevelCount) {
+    throw validationError(
+      'questions',
+      questions.length >= 3
+        ? 'A mixed-difficulty quiz must include easy, medium, and hard questions.'
+        : 'A mixed-difficulty quiz must use different difficulty levels.'
+    );
+  }
 }
 
 function validateSourceReferences(question, index, options) {

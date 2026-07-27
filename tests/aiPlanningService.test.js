@@ -67,7 +67,7 @@ describe('AI planning turn state preservation', () => {
     expect(difficultyTurn.plan).toEqual(expect.objectContaining({
       courseId: 1,
       topic: 'cats',
-      difficulty: 'medium',
+      difficulty: 'mixed',
       questionCount: null
     }));
     expect(difficultyTurn.plan.specialInstructions)
@@ -84,7 +84,7 @@ describe('AI planning turn state preservation', () => {
     expect(countTurn.plan).toEqual(expect.objectContaining({
       courseId: 1,
       topic: 'cats',
-      difficulty: 'medium',
+      difficulty: 'mixed',
       questionCount: 7
     }));
     expect(countTurn.plan.missingRequiredFields).not.toContain('difficulty');

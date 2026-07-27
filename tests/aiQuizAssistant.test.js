@@ -99,6 +99,42 @@ describe('AI quiz validation', () => {
     expect(() => validateGenerationInput({ topic: 'Trees', questionCount: 21 })).toThrow(/between 1 and 20/i);
   });
 
+  test('preserves mixed difficulty and requires easy, medium, and hard questions', () => {
+    expect(validateGenerationInput({
+      topic: 'Cats',
+      difficulty: 'mixed',
+      questionCount: 3
+    }).difficulty).toBe('mixed');
+
+    const mixed = quizResponse(3);
+    ['easy', 'medium', 'hard'].forEach((difficulty, index) => {
+      mixed.questions[index].difficulty = difficulty;
+    });
+    const parsed = parseAndValidateAIQuiz(mixed, {
+      difficulty: 'mixed',
+      questionCount: 3
+    });
+    expect(parsed.difficulty).toBe('mixed');
+    expect(parsed.questions.map(question => question.difficulty))
+      .toEqual(['easy', 'medium', 'hard']);
+
+    mixed.questions.forEach(question => {
+      question.difficulty = 'hard';
+    });
+    expect(() => parseAndValidateAIQuiz(mixed, {
+      difficulty: 'mixed',
+      questionCount: 3
+    })).toThrow(/must include easy, medium, and hard/i);
+
+    expect(aiQuizService.buildQuizPrompt({
+      topic: 'Cats',
+      difficulty: 'mixed',
+      language: 'English',
+      questionCount: 3,
+      questionType: 'mixed'
+    })).toMatch(/distribute question difficulty across easy, medium, and hard/i);
+  });
+
   test('rejects source references whose material does not own the cited chunk', () => {
     const grounded = quizResponse(1);
     grounded.questions[0].sourceReferences = [{

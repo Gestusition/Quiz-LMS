@@ -139,7 +139,7 @@ function validateQuizPlanPatch(input = {}, existingPlan = {}) {
   if (hasOwn(input, 'difficulty')) {
     const difficulty = cleanText(input.difficulty, 'difficulty', 32, { allowEmpty: true }).toLowerCase();
     if (difficulty && !AI_DIFFICULTIES.includes(difficulty)) {
-      throw validationError('difficulty', 'Difficulty must be easy, medium, or hard.');
+      throw validationError('difficulty', 'Difficulty must be easy, medium, hard, or mixed.');
     }
     patch.difficulty = difficulty;
   }
@@ -451,7 +451,7 @@ function normalizeQuizPlan(source = {}) {
     : (indexedOnly ? AI_MATERIAL_MODE.courseMaterialOnly : AI_MATERIAL_MODE.generalModelKnowledgeAllowed);
   const difficulty = String(source.difficulty || '').trim().toLowerCase();
   if (difficulty && !AI_DIFFICULTIES.includes(difficulty)) {
-    throw validationError('difficulty', 'Difficulty must be easy, medium, or hard.');
+    throw validationError('difficulty', 'Difficulty must be easy, medium, hard, or mixed.');
   }
   return {
     courseId: nullablePositiveInt(source.courseId, 'courseId'),

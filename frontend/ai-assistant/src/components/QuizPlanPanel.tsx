@@ -264,6 +264,7 @@ export function QuizPlanPanel({
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
+                <option value="mixed">Mixed</option>
               </select>
             </label>
             <label className="aiw-field">

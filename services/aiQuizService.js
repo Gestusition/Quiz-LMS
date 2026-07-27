@@ -28,7 +28,7 @@ const QUIZ_OUTPUT_SCHEMA = {
   properties: {
     title: { type: 'string' },
     description: { type: 'string' },
-    difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+    difficulty: { type: 'string', enum: ['easy', 'medium', 'hard', 'mixed'] },
     questions: {
       type: 'array',
       items: {
@@ -136,8 +136,11 @@ function buildQuizPrompt(input, contextChunks = []) {
       `[SOURCE chunkId=${chunk.id} materialId=${chunk.materialId} label="${chunk.sourceLabel || `material-${chunk.materialId}`}"]\n${chunk.content}`
     ).join('\n\n')}\nEND COURSE MATERIAL`
     : '';
+  const difficultyRule = input.difficulty === 'mixed'
+    ? 'Difficulty: mixed. Distribute question difficulty across easy, medium, and hard; when there are at least 3 questions, include every level. Set the overall quiz difficulty to mixed.'
+    : `Difficulty: ${input.difficulty}`;
   return `Create a quiz draft about: ${input.topic}
-Difficulty: ${input.difficulty}
+${difficultyRule}
 Language: ${input.language}
 Exact question count: ${input.questionCount}
 ${typeRule}
