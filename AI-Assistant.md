@@ -2,7 +2,7 @@
 
 ## Purpose and boundaries
 
-The AI Assistant is a teacher/admin workspace for planning, generating, reviewing, and revising quiz drafts. It is intentionally separated into two stages:
+The AI Assistant is a teacher/admin workspace for planning, generating, reviewing, and revising quiz drafts. Currently works as intended on English for other languages performance is not guaranteed. It is intentionally separated into two stages:
 
 1. **Planning** turns teacher messages and advanced controls into one validated `quizPlan`.
 2. **Generation** runs only after an explicit Generate Draft action and always creates a draft.
