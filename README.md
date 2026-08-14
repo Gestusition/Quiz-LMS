@@ -37,11 +37,13 @@ The project is intentionally backend-heavy: routes stay thin, business rules liv
 - Teacher office hours: teachers set them from Profile, and enrolled students see them on course participant lists.
 - User restrictions, scoped access blocking, audit logging, real CSV import batches, and admin analytics.
 
-## Demo Video
+## Demo Videos
 
-The comprehensive browser walkthrough covers the teacher quiz-creation and publishing workflow, the student learning experience, and the administrator's institutional controls, analytics, maintenance status, AI tools, and API documentation.
+- **Comprehensive LMS Walkthrough (MP4, 1:55):** Covers the teacher quiz-creation and publishing workflow, the student learning experience, and the administrator's institutional controls, analytics, maintenance status, AI tools, and API documentation.
+  - [Watch or download the comprehensive Quiz LMS demo (MP4, 1:55)](output/video/quiz-lms-comprehensive-demo.mp4)
 
-[Watch or download the comprehensive Quiz LMS demo (MP4, 1:55)](output/video/quiz-lms-comprehensive-demo.mp4)
+- **Conversational AI Quiz Assistant Walkthrough (MP4, 4:10):** Covers course-scoped AI chat, RAG material ingestion and grounded source references, conversational quiz-plan configuration, automated generation, question review/editing, and saving private drafts.
+  - [Watch or download the AI Chat Generation demo (MP4, 4:10)](output/video/quiz-lms-ai-chat-generation.mp4)
 
 ## Screenshots
 
