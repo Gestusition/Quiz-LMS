@@ -47,12 +47,6 @@ const App = {
   ...AiQuizReactPage,
 
   async init() {
-    const versionElement = document.getElementById('app-version');
-    if (versionElement && globalThis.__QUIZ_LMS_VERSION__) {
-      versionElement.textContent = `v${globalThis.__QUIZ_LMS_VERSION__}`;
-      versionElement.hidden = false;
-    }
-
     document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
     document.getElementById('modal-overlay').addEventListener('click', event => {
       if (event.target === event.currentTarget) this.closeModal();
