@@ -5,6 +5,7 @@ const app = require('../server');
 const database = require('../database/db');
 const { initDatabase, seedDatabase, closeDatabase, resolveDatabaseFiles, getDatabase } = database;
 const authService = require('../services/authService');
+const { APP_VERSION } = require('../utils/appVersion');
 
 const TEST_DB = path.join(__dirname, 'test_route_mounts.db');
 
@@ -57,6 +58,7 @@ describe('API route mounts', () => {
       .expect(response => {
         expect(response.body).toEqual(expect.objectContaining({
           name: 'Quiz LMS API',
+          version: APP_VERSION,
           status: 'ok',
           database: 'ok',
           docs: '/api-docs',
@@ -116,7 +118,19 @@ describe('API route mounts', () => {
       .expect(response => {
         expect(response.body.status).toBe('ok');
         expect(response.body.database).toBe('ok');
+        expect(response.body.version).toBe(APP_VERSION);
         expect(new Date(response.body.timestamp).toString()).not.toBe('Invalid Date');
+      });
+  });
+
+  test('public application version script exposes the detected release version', async () => {
+    await request(app)
+      .get('/app-version.js')
+      .expect(200)
+      .expect('Content-Type', /javascript/)
+      .expect('Cache-Control', 'no-store')
+      .expect(response => {
+        expect(response.text).toContain(APP_VERSION);
       });
   });
 
@@ -256,6 +270,7 @@ describe('API route mounts', () => {
       .set('Cookie', authCookie)
       .expect(200)
       .expect(response => {
+        expect(response.body.info.version).toBe(APP_VERSION);
         const paths = response.body.paths || {};
         expect(paths['/api']?.get).toBeDefined();
         expect(paths['/api/health']?.get).toBeDefined();

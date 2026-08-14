@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const database = require('./database/db');
+const { APP_VERSION } = require('./utils/appVersion');
 const { setupSwagger } = require('./swagger/swagger');
 const { requireAuth, requireRole } = require('./middleware/auth');
 const authRoutes = require('./routes/authRoutes');
@@ -54,6 +55,12 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
+app.get('/app-version.js', (req, res) => {
+  res.type('application/javascript');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(`globalThis.__QUIZ_LMS_VERSION__ = ${JSON.stringify(APP_VERSION)};`);
+});
+
 // Serve static frontend files
 app.use(['/uploads/resources', '/uploads/submissions'], (req, res) => {
   res.status(404).json({ error: 'Use the protected download endpoint for course files.' });
@@ -91,9 +98,9 @@ function checkApiHealth() {
       .prepare("SELECT name FROM users.sqlite_master WHERE type = 'table' AND name = 'users'")
       .get();
     if (!usersTable) throw new Error('users table missing');
-    return { status: 'ok', database: 'ok', timestamp };
+    return { status: 'ok', database: 'ok', version: APP_VERSION, timestamp };
   } catch (err) {
-    return { status: 'not_ok', database: 'not_ok', timestamp };
+    return { status: 'not_ok', database: 'not_ok', version: APP_VERSION, timestamp };
   }
 }
 
@@ -157,6 +164,7 @@ app.get('/api', requireAuth, requireRole('admin'), (req, res) => {
   const health = checkApiHealth();
   res.status(healthStatusCode(health)).json({
     name: 'Quiz LMS API',
+    version: APP_VERSION,
     status: health.status,
     database: health.database,
     timestamp: health.timestamp,
@@ -218,7 +226,7 @@ function startServer(port = PORT) {
   database.initDatabase();
   database.seedDatabase();
   return app.listen(port, () => {
-    console.log(`\n🚀 Quiz LMS is running!`);
+    console.log(`\n🚀 Quiz LMS is running! (version ${APP_VERSION})`);
     console.log(`   App:     http://localhost:${port}`);
     console.log(`   API:     http://localhost:${port}/api`);
     console.log(`   Swagger: http://localhost:${port}/api-docs\n`);

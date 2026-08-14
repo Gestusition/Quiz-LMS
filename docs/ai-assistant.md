@@ -146,21 +146,36 @@ The Generate Draft operation requires an `Idempotency-Key` containing 8–128 UR
 ## Lifecycle
 
 ```mermaid
-stateDiagram-v2
-    [*] --> gathering_requirements: create conversation
-    gathering_requirements --> gathering_requirements: message or plan patch
-    gathering_requirements --> ready_to_generate: required plan fields complete
-    ready_to_generate --> gathering_requirements: required field removed
-    ready_to_generate --> generating: explicit Generate Draft
-    generating --> review_required: validated draft saved
-    generating --> generation_failed: provider or validation failure
-    generating --> cancelled: cancellation completed
-    generation_failed --> ready_to_generate: retry without losing plan
-    review_required --> review_required: edit or revision preview
-    review_required --> draft_saved: save reviewed draft
-    draft_saved --> review_required: continue editing
-    draft_saved --> published: separate manual LMS publish action
+flowchart TD
+    START((Start))
+    GATHERING["gathering_requirements"]
+    READY["ready_to_generate"]
+    GENERATING["generating"]
+    REVIEW["review_required"]
+    SAVED["draft_saved"]
+    PUBLISHED["published"]
+    FAILED["generation_failed"]
+    CANCELLED["cancelled"]
+
+    START -->|Create conversation| GATHERING
+    GATHERING -->|Plan complete| READY
+    READY -->|Generate draft| GENERATING
+    GENERATING -->|Validated draft| REVIEW
+    REVIEW -->|Save review| SAVED
+    SAVED -->|Publish manually| PUBLISHED
+    GENERATING -->|Failure| FAILED
+    GENERATING -->|Cancellation| CANCELLED
 ```
+
+Retry and backward transitions are listed separately to keep the diagram readable:
+
+| Current state | Event | Next state |
+| --- | --- | --- |
+| `ready_to_generate` | A required field is removed | `gathering_requirements` |
+| `generation_failed` | Retry without losing the plan | `ready_to_generate` |
+| `draft_saved` | Continue editing | `review_required` |
+
+Messages and plan patches can leave a conversation in `gathering_requirements`. Edits and revision previews can likewise leave a draft in `review_required` until it is explicitly saved.
 
 Generation progress uses named stages rather than fabricated percentages:
 

@@ -1,13 +1,14 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { APP_VERSION } = require('../utils/appVersion');
 
 const options = {
   definition: {
     openapi: '3.0.0',
     info: {
       title: 'Quiz LMS API',
-      version: '1.0.0',
+      version: APP_VERSION,
       description: 'RESTful API for a role-based quiz LMS. Supports secure auth, users, courses, enrollments, question bank CRUD, quiz publishing, attempts, grading, and course content.',
       contact: {
         name: 'Quiz LMS'
@@ -86,7 +87,7 @@ const options = {
         },
         HealthStatus: {
           type: 'object',
-          required: ['status', 'database', 'timestamp'],
+          required: ['status', 'database', 'version', 'timestamp'],
           properties: {
             status: {
               type: 'string',
@@ -95,6 +96,10 @@ const options = {
             database: {
               type: 'string',
               enum: ['ok', 'not_ok']
+            },
+            version: {
+              type: 'string',
+              example: APP_VERSION
             },
             timestamp: {
               type: 'string',

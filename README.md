@@ -121,6 +121,21 @@ The API index and Swagger are admin-only, so sign in as an admin first.
 The public health check returns `status: "not_ok"` with HTTP `503` if the database check fails.
 Admins can open the API index and API docs from the navbar; the Maintenance page also shows the current `/api/health` result.
 
+### Application version
+
+The navbar, startup log, health response, API index, and Swagger document all use one detected application version. Do not edit those surfaces separately.
+
+The resolver uses `APP_VERSION` when supplied by a deployment, an exact four-part Git release tag such as `1.1.0.3`, or the next revision after the latest tag while developing. The root package version is only a no-Git fallback; npm's valid SemVer equivalent of `1.1.0.3` is `1.1.0+3`.
+
+For a normal release, create and push the release tag. No source file needs a version edit:
+
+```bash
+git tag 1.1.0.3
+git push origin 1.1.0.3
+```
+
+If the production artifact does not contain `.git`, set `APP_VERSION` from the same release tag in the deployment environment.
+
 ## Quick Reproduction Walkthrough
 
 Use these steps to reproduce the running program from a fresh local checkout:

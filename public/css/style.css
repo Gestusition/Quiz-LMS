@@ -98,6 +98,15 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 .brand-text { font-size: 0.95rem; }
+.brand-version {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 6px;
+}
 .nav-links {
   display: flex;
   align-items: center;
